@@ -69,24 +69,6 @@ A **🐾** button shows up at the bottom-right of the page — click it to show/
 
 ---
 
-## 🎨 Art
-
-Yasia's frames live in `src/heroes/catgirl/<state>/*.png` (transparent background):
-`idle`, `walk`, `jump`, `climb`, `wave`. Swap the PNG frames to change how she looks.
-
-## 🗂️ Structure
-
-```
-manifest.json              — extension manifest (MV3) + web_accessible_resources for sprites
-src/pet.js                 — engine: behavior, movement, like-by-ID, video download UI, i18n
-src/pet.css                — pet styles, state animations, overlay effects
-src/popup.html/js          — popup: on/off, status (XP, hunger, feed), EN/RU toggle
-src/core/*.js              — config / storage / events
-src/heroes/catgirl/<st>/   — pet frames per state (transparent PNG)
-src/items/*.png            — items (meat for feeding)
-vendor/mp4box.*.js         — mp4 parser (YouTube HD muxing)
-```
-
 ## 🔒 Safety principle
 
 Real actions on X happen **only** as a direct response to your click on the pet
