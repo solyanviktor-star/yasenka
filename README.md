@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="Yasenka — Browser Pet" width="320">
+</p>
+
 # 🐾 Yasenka — Browser Pet
 
 A tiny catgirl named **Yasia** lives right on top of any web page. She walks and
