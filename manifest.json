@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "Browser Pet",
+  "version": "1.9.7",
+  "description": "A pet lives on your X feed, walks up to posts and asks for a like. Only you place the like — by clicking the pet. No auto-actions.",
+  "permissions": ["storage", "scripting", "downloads", "declarativeNetRequest", "clipboardRead"],
+  "host_permissions": ["https://*/*", "http://*/*"],
+  "background": {
+    "service_worker": "src/background.js",
+    "scripts": ["src/background.js"]
+  },
+  "browser_specific_settings": {
+    "gecko": { "id": "yasia@twitter-pet", "strict_min_version": "128.0" }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Browser Pet",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://*/*"],
+      "js": ["src/core/config.js", "src/core/storage.js", "src/core/events.js", "src/pet.js"],
+      "css": ["src/pet.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.tiktok.com/*", "*://*.twitter.com/*", "*://x.com/*", "*://*.instagram.com/*"],
+      "js": ["src/injected.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["vendor/mp4box.all.min.js", "src/yt-page.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/heroes/*.png", "src/heroes/catgirl/*.png", "src/heroes/catgirl/*/*.png", "src/items/*.png"],
+      "matches": ["https://*/*", "http://*/*"]
+    },
+    {
+      "resources": ["vendor/mp4box.all.min.js"],
+      "matches": ["https://*.youtube.com/*"]
+    }
+  ]
+}
