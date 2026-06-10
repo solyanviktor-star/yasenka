@@ -1736,12 +1736,24 @@
     if (wrap && !wrap.classList.contains('open')) toggleSkill(which);   // toggleSkill — переключатель: открываем только если ещё закрыт
   }); } catch (_) {}
   // сработала напоминалка (фон, chrome.alarms) -> Яся произносит её прямо на странице
-  try { chrome.runtime.onMessage.addListener((m) => {
-    if (!m || m.type !== 'YASIA_REMIND_FIRE') return;
-    const tx = String(m.text || '').slice(0, 200).trim(); if (!tx) return;
+  function showReminder(text) {
+    const tx = String(text || '').slice(0, 200).trim(); if (!tx) return false;
     setMode('happy'); happyKind = 'wave'; happyUntil = now() + 1800;
     say('⏰ ' + tx, 6500); playEmote('happy', 1800);
+    return true;
+  }
+  try { chrome.runtime.onMessage.addListener((m, _s, sendResponse) => {
+    if (!m || m.type !== 'YASIA_REMIND_FIRE') return;
+    const ok = showReminder(m.text);
+    try { sendResponse({ ok }); } catch (_) {}   // подтверждение доставки: фон удалит напоминалку только после него
   }); } catch (_) {}
+  // при загрузке страницы забираем пропущенные напоминалки (браузер был закрыт/не было вкладок) — показываем по очереди
+  try { setTimeout(() => {
+    chrome.runtime.sendMessage({ type: 'YASIA_REMIND_PULL' }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.ok || !Array.isArray(r.due)) return;
+      r.due.slice(0, 5).forEach((d, i) => setTimeout(() => showReminder(d.text), i * 7500));
+    });
+  }, 4000); } catch (_) {}
   const askEl = root.querySelector('#twtr-dlg-ask');
   if (askEl) {
     askEl.addEventListener('input', (e) => { e.stopPropagation(); filterCaps(askEl.value); });           // печатаешь -> фильтр возможностей сверху

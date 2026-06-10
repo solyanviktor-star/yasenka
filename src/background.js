@@ -483,22 +483,34 @@ async function remDel(msg) {
   try { await remSet((await remGet()).filter((r) => r.id !== msg.id)); try { chrome.alarms.clear(msg.id); } catch (_) {} return { ok: true }; }
   catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
-async function remFire(id) {
-  const list = await remGet(); const r = list.find((x) => x.id === id); if (!r) return;
-  await remSet(list.filter((x) => x.id !== id));
-  const payload = { type: 'YASIA_REMIND_FIRE', text: r.text };   // показать через питомца: активная вкладка, иначе любая http-вкладка
-  try {
-    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-      const hit = (tabs || []).filter((t) => t.id && /^https?:/i.test(t.url || ''));
-      if (hit.length) { for (const t of hit) chrome.tabs.sendMessage(t.id, payload, () => void chrome.runtime.lastError); return; }
-      chrome.tabs.query({}, (all) => { for (const t of (all || [])) if (t.id && /^https?:/i.test(t.url || '')) chrome.tabs.sendMessage(t.id, payload, () => void chrome.runtime.lastError); });
-    });
-  } catch (_) {}
+function queryTabs(q) { return new Promise((res) => { try { chrome.tabs.query(q, (t) => res(t || [])); } catch (_) { res([]); } }); }
+function sendToTab(tabId, payload) {   // доставка подтверждается ответом контент-скрипта ({ok:true}); нет получателя/нет ответа -> false
+  return new Promise((res) => { try { chrome.tabs.sendMessage(tabId, payload, (resp) => { void chrome.runtime.lastError; res(!!(resp && resp.ok)); }); } catch (_) { res(false); } });
 }
-async function remRearm() {   // расширение перезагрузили -> alarms сброшены: пере-ставим будущие, просроченные покажем сразу
-  const list = await remGet(); const now = Date.now(); const overdue = [];
-  for (const r of list) { if (r.fireAt > now + 500) { try { chrome.alarms.create(r.id, { when: r.fireAt }); } catch (_) {} } else overdue.push(r); }
-  for (const r of overdue) await remFire(r.id);
+async function remDeliver(r) {         // активная вкладка приоритетно, иначе любая http-вкладка; true = кто-то реально показал
+  const payload = { type: 'YASIA_REMIND_FIRE', text: r.text };
+  for (const t of await queryTabs({ active: true, lastFocusedWindow: true })) { if (t.id && /^https?:/i.test(t.url || '') && await sendToTab(t.id, payload)) return true; }
+  for (const t of await queryTabs({})) { if (t.id && /^https?:/i.test(t.url || '') && await sendToTab(t.id, payload)) return true; }
+  return false;
+}
+async function remFire(id) {           // удаляем ТОЛЬКО после подтверждённой доставки; иначе помечаем missed (отдадим при следующем YASIA_REMIND_PULL)
+  const list = await remGet(); const r = list.find((x) => x.id === id); if (!r) return;
+  if (await remDeliver(r)) await remSet((await remGet()).filter((x) => x.id !== id));
+  else await remSet((await remGet()).map((x) => x.id === id ? Object.assign({}, x, { missed: true }) : x));
+}
+async function remPull() {             // контент-скрипт загрузился и спрашивает пропущенное: отдаём missed/просроченные и удаляем (доставка = этот ответ)
+  const list = await remGet(); const now = Date.now();
+  const due = list.filter((x) => x.missed || x.fireAt <= now);
+  if (due.length) await remSet(list.filter((x) => !(x.missed || x.fireAt <= now)));
+  return { ok: true, due: due.map((x) => ({ text: x.text, fireAt: x.fireAt })) };
+}
+async function remRearm() {   // расширение перезагрузили -> alarms сброшены: будущие пере-ставим, просроченные пометим missed (вкладок может ещё не быть)
+  const list = await remGet(); const now = Date.now(); let dirty = false;
+  for (const r of list) {
+    if (r.fireAt > now + 500) { try { chrome.alarms.create(r.id, { when: r.fireAt }); } catch (_) {} }
+    else if (!r.missed) { r.missed = true; dirty = true; }
+  }
+  if (dirty) await remSet(list);
 }
 remRearm();
 
@@ -515,6 +527,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'YASIA_REMIND_ADD') { remAdd(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_REMIND_LIST') { remList().then(sendResponse); return true; }
   if (msg.type === 'YASIA_REMIND_DEL') { remDel(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_REMIND_PULL') { remPull().then(sendResponse); return true; }
   if (msg.type === 'YASIA_DOWNLOAD') { downloadVideo(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_FETCH') { fetchText(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_AI') { aiChat(msg).then(sendResponse); return true; }
