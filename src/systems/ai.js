@@ -122,16 +122,20 @@
     ask: { ru: 'Ответь на запрос пользователя. Если нужно — используй инструменты Hermes.', en: "Answer the user's request. Use Hermes tools if needed." },
   };
 
+  // персона каждого запроса = ДУША (core/soul.js, неизменяемое ядро личности) + операционные правила агента (что она умеет в браузере)
   function sysPersona(lang) {
-    return lang === 'en'
-      ? "You are Yasya — a witty, friendly cat-girl who lives INSIDE the user's web browser as a pet-assistant sitting on top of whatever page they're viewing (X/Twitter, GitHub, YouTube, any site). "
+    const soul = (Yasia.soul && Yasia.soul.persona) ? Yasia.soul.persona(lang)
+      : (lang === 'en' ? "You are Yasya — a witty, friendly cat-girl pet-assistant." : 'Ты — Яся, остроумная дружелюбная кошка-девочка, питомец-помощник.');   // фолбэк, если soul.js не загрузился
+    const ops = lang === 'en'
+      ? " You live INSIDE the user's web browser on top of whatever page they're viewing (X/Twitter, GitHub, YouTube, any site). "
         + "You are a BROWSER AGENT: you can see the current page whenever its context (URL, title, visible text, and sometimes a list of on-page controls) is included in the message — rely on that to answer about the page, find things on it, and tell the user exactly where to click. "
         + "You act THROUGH the browser, not the OS: you cannot run programs or touch files, and you never click or perform actions yourself — you guide and the user clicks. "
-        + "If a request needs page context that wasn't provided, briefly say what you'd need. Stay in character but be genuinely useful: concise, direct, plain text, no markdown headings."
-      : 'Ты — Яся, остроумная дружелюбная кошка-девочка, которая живёт ПРЯМО В БРАУЗЕРЕ пользователя как питомец-помощник поверх той страницы, что он смотрит (X/Twitter, GitHub, YouTube, любой сайт). '
+        + "If a request needs page context that wasn't provided, briefly say what you'd need. Stay in character but be genuinely useful: concise and direct."
+      : ' Ты живёшь ПРЯМО В БРАУЗЕРЕ пользователя поверх той страницы, что он смотрит (X/Twitter, GitHub, YouTube, любой сайт). '
         + 'Ты — БРАУЗЕРНЫЙ АГЕНТ: ты видишь текущую страницу всегда, когда её контекст (адрес, заголовок, видимый текст, иногда список элементов) приложен к сообщению — опирайся на него, чтобы отвечать про страницу, искать на ней и точно подсказывать, куда нажать. '
         + 'Ты действуешь ЧЕРЕЗ браузер, а не через ОС: не запускаешь программы и не трогаешь файлы, и сама ничего не нажимаешь — ты подсказываешь, а кликает пользователь. '
-        + 'Если для запроса нужен контекст страницы, а его не приложили — коротко скажи, что нужно. Оставайся в образе, но будь по-настоящему полезной: кратко, по делу, простым текстом без markdown-заголовков.';
+        + 'Если для запроса нужен контекст страницы, а его не приложили — коротко скажи, что нужно. Оставайся в образе, но будь по-настоящему полезной: кратко и по делу.';
+    return soul + ops;
   }
 
   Yasia.systems.register({
@@ -304,6 +308,15 @@
         if (actionId === 'ask' || actionId === 'find' || actionId === 'advice') {   // свободный вопрос -> добавляем контекст страницы, чтобы Яся «видела», где она
           system += lang === 'en' ? ' You CAN see the current page — its context (URL, title, text) is provided below; use it.' : ' Ты ВИДИШЬ текущую страницу — её контекст (адрес, заголовок, текст) дан ниже, опирайся на него.';
           user = (lang === 'en' ? 'Current page context:\n' : 'Контекст текущей страницы:\n') + pageCtx() + '\n\n---\n' + (lang === 'en' ? 'User request: ' : 'Запрос: ') + (text || '');
+        }
+        if (actionId === 'reply' || actionId === 'comment') {   // ТВОРЧЕСТВО ОТ ИМЕНИ ПОЛЬЗОВАТЕЛЯ: тексты пишутся под ЕГО голос — подмешиваем профиль/предпочтения из памяти (душа Яси при этом не меняется)
+          let prefs = [];
+          try { if (Yasia.memory && flags.enabled('memory')) prefs = Yasia.memory.profile().slice(-12).map((p) => p.text); } catch (_) {}
+          if (prefs.length) {
+            system += (lang === 'en'
+              ? '\n\nThe drafts are posted BY THE USER, in their name. Match THEIR voice, interests and preferences (from your memory of them):\n- '
+              : '\n\nВарианты публикуются ОТ ИМЕНИ ПОЛЬЗОВАТЕЛЯ. Пиши под ЕГО голос, интересы и предпочтения (из твоей памяти о нём):\n- ') + prefs.join('\n- ');
+          }
         }
         return { system: system, user: user, variants: !!task.variants };
       }
