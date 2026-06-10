@@ -31,7 +31,7 @@
   "content_scripts": [
     {
       "matches": ["https://*/*", "http://*/*"],
-      "js": ["src/core/config.js", "src/core/storage.js", "src/core/events.js", "src/core/flags.js", "src/core/registry.js", "src/core/heroes.js", "src/core/physics.js", "src/core/i18n.js", "src/systems/notes.js", "src/systems/games.js", "src/systems/memory.js", "src/systems/ai.js", "src/pet.js"],
+      "js": ["src/core/config.js", "src/core/storage.js", "src/core/events.js", "src/core/flags.js", "src/core/registry.js", "src/core/heroes.js", "src/core/physics.js", "src/core/platformer.js", "src/core/i18n.js", "src/systems/notes.js", "src/systems/games.js", "src/systems/memory.js", "src/systems/ai.js", "src/pet.js"],
       "css": ["src/pet.css"],
       "run_at": "document_idle"
     },

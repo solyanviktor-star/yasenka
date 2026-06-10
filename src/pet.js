@@ -44,7 +44,7 @@
   let thrown = false, dragVx = 0, dragVy = 0, lastDragX = 0, lastDragY = 0, peakVx = 0, peakVy = 0;   // бросок по инерции (+ пик скорости кисти)
   // платформер
   let ledges = [], standLedge = null, lastLedgeScan = 0, vy = 0, vx = 0, lastLeftEl = null;   // lastLeftEl — блок, с которого только что спрыгнула (анти-пинг-понг в свободном платформере)
-  let jumping = false, jumpT = 0, jumpFromX = 0, jumpFromY = 0, jumpToX = 0, jumpToY = 0, jumpPeak = 0, jumpDest = null, jumpDrop = false;   // jumpDrop — спуск на блок заметно НИЖЕ: падение под гравитацией (а не дуга прыжка)
+  let jumping = false;   // в прыжке; внутренности прыжка (откуда/куда/горб/дроп) — в движке core/platformer.js (engine.jumpPhase/isDrop)
   let walkTargetX = 0, nextJumpDecide = 0, sayUntil = 0, nextChatter = 0, climbing = false, falling = false;
   let testKind = null, testUntil = 0, testDir = 1, testEmo = null;   // ручная проверка действий/эмоций из настроек
   // игровые параметры
@@ -1697,88 +1697,37 @@
 
   // ---------- платформер: жизнь по структуре страницы ----------
   function petW() { return PET_W * sizeMul * userScale; }   // эффективная ширина с учётом размера = ХИТБОКС (растёт/уменьшается)
-  function collectLedges() {
-    const vw = window.innerWidth, vh = window.innerHeight, out = [], seen = new Set();
-    const SEL = 'article,[data-testid="tweet"],[data-testid="tweetText"],h1,h2,h3,[role="heading"],img,button,p,li';
-    const els = document.querySelectorAll(SEL);
-    for (const el of els) {
-      if (root.contains(el)) continue;
-      const r = el.getBoundingClientRect();
-      // все фильтры «годится ли прямоугольник в полку» — в core/physics.js (там же тесты); querySelector зовётся лениво
-      const lg = Yasia.physics.ledgeFromRect(r, vw, vh, petW(), () => !!el.querySelector(SEL));
-      if (!lg) continue;
-      const key = Math.round(lg.y / 6) + ':' + Math.round(lg.x1 / 24);
-      if (seen.has(key)) continue; seen.add(key);
-      out.push({ el, x1: lg.x1, x2: lg.x2, y: lg.y });
-      if (out.length > 70) break;
-    }
-    out.push({ el: null, floor: true, x1: 0, x2: vw, y: vh - PLAT_FLOOR });   // пол внизу: падает до него, если в её колонке нет элемента, потом запрыгивает наверх
-    out.sort((a, b) => a.y - b.y);
-    return out;
-  }
-  function reacquireFloor() {                          // после пересканирования вернуть опору без el (пол)
-    if (!standLedge || standLedge.el) return;
-    const cx = px + PET_W / 2, foot = py + PET_H;
-    for (const L of ledges) if (cx >= L.x1 && cx <= L.x2 && Math.abs(L.y - foot) < 6) { standLedge = L; return; }
-  }
-  function startJump(L, tgtCenterX, t) {
-    jumping = true; climbing = false; jumpT = t; jumpDest = L;
-    jumpFromX = px; jumpFromY = py;
-    jumpToX = clamp(tgtCenterX - PET_W / 2, L.x1, L.x2 - PET_W);
-    jumpToY = L.y - PET_H;
-    jumpDrop = Yasia.physics.isDropJump(jumpFromY, jumpToY, PLAT_JUMP_UP);   // блок заметно ниже -> СПУСК падением (гравитация), а не медленный глайд дугой
-    if (jumpDrop) vy = 0;                                    // чистое падение от текущей высоты
-    jumpPeak = Yasia.physics.jumpPeakFor(jumpFromY, jumpToY);   // дуга всегда выше обеих точек (для прыжков вверх/вбок)
-    if (jumpToX !== px) face = jumpToX > px ? 1 : -1;
-    pet.classList.add('is-jump');
-    if (Math.random() < 0.35) say(pick(SP('jump')), 1100);
-  }
-  function updateJump(t) {
-    if (jumpDrop) {                                 // СПУСК НИЖЕ: толчок вбок к цели + падение под гравитацией (кадры fall), не медленный глайд
-      vy = Math.min(vy + PLAT_GRAVITY, 26);
-      py += vy;
-      const adx = jumpToX - px;
-      if (Math.abs(adx) > 1) { px += clamp(adx, -7, 7); face = adx > 0 ? 1 : -1; }   // плавно доводим по горизонтали к нижнему блоку
-      if (py >= jumpToY) {                          // долетела до уровня блока -> приземление
-        jumping = false; jumpDrop = false; pet.classList.remove('is-jump');
-        standLedge = jumpDest; px = jumpToX; py = jumpToY; vy = 0;
-        walkTargetX = px; nextJumpDecide = (watchClimbing || gameClimb) ? t : (t + 1600 + Math.random() * 2000);
-      }
-      return;
-    }
-    const k = clamp((t - jumpT) / PLAT_JUMP_MS, 0, 1);
-    const ap = Yasia.physics.jumpArcPos(jumpFromX, jumpFromY, jumpToX, jumpToY, jumpPeak, k);   // дуга — в core/physics.js
-    px = ap.x; py = ap.y;
-    const minTop = PET_H * Math.max(0, sizeMul * userScale - 1);
-    if (py < minTop) py = minTop;                 // не выше верхнего края экрана
-    if (k >= 1) {
-      jumping = false; jumpDrop = false; pet.classList.remove('is-jump');
-      standLedge = jumpDest; px = jumpToX; py = jumpToY; vy = 0;
-      walkTargetX = px; nextJumpDecide = (watchClimbing || gameClimb) ? t : (t + 1600 + Math.random() * 2000);   // лезет к видео/игровой цели -> сразу пере-проба; обычное гуляние -> пауза
-    }
-  }
-  function tryClimb(t) {   // СВОБОДНЫЙ ПЛАТФОРМЕР: в обычном гулянии живо перескакивает с блока на блок в ЛЮБУЮ сторону (вверх/вниз/вбок через разрывы) — по той же физике, что и поход к видео (ledgeJumpable)
-    const cx = px + PET_W / 2;
-    climbing = false;
-    // отбор и взвешивание достижимых полок — в core/physics.js climbCandidates (там же тесты)
-    const cand = Yasia.physics.climbCandidates(ledges, standLedge, cx, {
-      W: PET_W, dx: PLAT_JUMP_DX, up: PLAT_JUMP_UP,
-      minY: PET_H * Math.max(1, sizeMul * userScale),              // полки выше — за верхом экрана, игнор
-      lastLeftEl,                                                  // анти-пинг-понг: не скакать сразу обратно
-    });
-    if (cand.length && Math.random() < 0.78) {                    // свободный платформер: чаще прыгает по блокам, иногда просто гуляет по текущему
-      let sum = 0; for (const c of cand) sum += c.w;
-      let r = Math.random() * sum, chosen = cand[cand.length - 1];
-      for (const c of cand) { r -= c.w; if (r <= 0) { chosen = c; break; } }
-      lastLeftEl = standLedge.el || null;                         // запоминаем покинутый блок (анти-пинг-понг)
-      startJump(chosen.L, chosen.tgtX, t);
-      return;
-    }
-    // не прыгает в этот раз -> гуляет по текущему блоку (иногда цель чуть за краем -> шагнёт с края и упадёт, платформер)
-    const m = 45;
-    walkTargetX = standLedge.x1 - m + Math.random() * (standLedge.x2 - standLedge.x1 + 2 * m);
-    if (Math.random() < 0.12) say(pick(SP('top')), 1600);
-  }
+  // ДВИЖОК ПЛАТФОРМЕРА вынесен в core/platformer.js: полки/прыжок/падение/свободное лазание.
+  // S — мост к локальным переменным (pet.js остаётся их хозяином: drag, игры, отрисовка работают как раньше).
+  const S = {
+    get px() { return px; }, set px(v) { px = v; },
+    get py() { return py; }, set py(v) { py = v; },
+    get vx() { return vx; }, set vx(v) { vx = v; },
+    get vy() { return vy; }, set vy(v) { vy = v; },
+    get face() { return face; }, set face(v) { face = v; },
+    get jumping() { return jumping; }, set jumping(v) { jumping = v; },
+    get falling() { return falling; }, set falling(v) { falling = v; },
+    get thrown() { return thrown; }, set thrown(v) { thrown = v; },
+    get climbing() { return climbing; }, set climbing(v) { climbing = v; },
+    get standLedge() { return standLedge; }, set standLedge(v) { standLedge = v; },
+    get walkTargetX() { return walkTargetX; }, set walkTargetX(v) { walkTargetX = v; },
+    get nextJumpDecide() { return nextJumpDecide; }, set nextJumpDecide(v) { nextJumpDecide = v; },
+    get lastLeftEl() { return lastLeftEl; }, set lastLeftEl(v) { lastLeftEl = v; },
+  };
+  const engine = Yasia.platformer.createEngine(S, {
+    params: () => ({ W: PET_W, H: PET_H, dx: PLAT_JUMP_DX, up: PLAT_JUMP_UP, gravity: PLAT_GRAVITY, jumpMs: PLAT_JUMP_MS, floorPad: PLAT_FLOOR, scaleK: sizeMul * userScale }),
+    petW,
+    rootContains: (el) => root.contains(el),
+    goalClimbing: () => (watchClimbing || gameClimb),
+    onJumpStart: () => pet.classList.add('is-jump'),
+    onJumpEnd: () => pet.classList.remove('is-jump'),
+    sayJump: () => say(pick(SP('jump')), 1100),
+    sayTop: () => say(pick(SP('top')), 1600),
+  });
+  // делегаты с прежними именами — все вызовы по файлу (watch/игры/petApi/тесты) работают без правок
+  function startJump(L, tgtCenterX, t) { engine.startJump(L, tgtCenterX, t); }
+  function updateJump(t) { engine.updateJump(t); }
+  function tryClimb(t) { engine.tryClimb(t); }
   function walkAlong(t) {
     if (resting) { running = false; return; }            // спит/без сил — стоит на месте
     if (t > nextRunDecide) {
@@ -1835,7 +1784,7 @@
     startJump(step, landC, t);                                              // прыжок к следующей полке маршрута (вверх/вбок/вниз)
   }
   function platformerTick(t, dt) {
-    if (t - lastLedgeScan > 140) { lastLedgeScan = t; ledges = collectLedges(); reacquireFloor(); }
+    if (t - lastLedgeScan > 140) { lastLedgeScan = t; ledges = engine.scan(); engine.reacquireFloor(); }   // снимок полок ведёт движок; ledges — та же ссылка (маршруты к видео/игре читают её)
     if (standLedge && standLedge.el) {                 // едем вместе с прокруткой, пока стоим на элементе
       const r = standLedge.el.getBoundingClientRect();
       if (!r || r.width < 30 || r.top < 0 || r.top > window.innerHeight) standLedge = null;
@@ -1854,28 +1803,8 @@
       else if (!watchHelp && t > nextJumpDecide) { nextJumpDecide = t + 1000 + Math.random() * 1800; if (!resting) tryClimb(t); }   // живой темп прыжков по блокам (свободный платформер); resting (сон/без сил) -> не скачет
       const cxf = px + PET_W / 2;
       if (cxf < standLedge.x1 - 2 || cxf > standLedge.x2 + 2) standLedge = null;   // сошла с края опоры -> падает
-    } else {                                            // падаем/летим, ловим ближайшую полку под ногами
-      falling = true;                                   // -> показываем кадры падения (fall): руки/волосы вверх
-      const f = Math.min(dt / 16, 3);
-      if (Math.abs(vx) > 0.05) {                         // ИНЕРЦИЯ броска: летит вбок, тормозит воздухом
-        px += vx * f;
-        vx *= Math.pow(0.90, f);                         // трение
-        if (Math.abs(vx) > 1) face = vx < 0 ? -1 : 1;    // смотрит туда, куда летит
-        if (px <= 0) { px = 0; vx = -vx * 0.35; }                                   // мягкий отскок от краёв
-        else if (px >= window.innerWidth - PET_W) { px = window.innerWidth - PET_W; vx = -vx * 0.35; }
-        if (Math.abs(vx) < 0.3) vx = 0;
-      }
-      vy = Math.min(vy + PLAT_GRAVITY * f, 26);
-      const prevFoot = py + PET_H;
-      py += vy * f;
-      const foot = py + PET_H, cx = px + PET_W / 2;
-      let landed = null;
-      for (const L of ledges) {
-        if (cx < L.x1 || cx > L.x2) continue;
-        if (L.y >= prevFoot - 1 && L.y <= foot + 1) { if (!landed || L.y < landed.y) landed = L; }
-      }
-      if (landed) { falling = false; thrown = false; vx = 0; standLedge = landed; py = landed.y - PET_H; vy = 0; walkTargetX = px; nextJumpDecide = t + 1200; }
-      // если в колонке ничего нет — продолжает лететь/падать до пола, потом сама запрыгнет наверх
+    } else {                                            // падаем/летим: инерция броска + гравитация + ловля полки — в движке (core/platformer.js fallStep)
+      engine.fallStep(t, dt);
     }
     py = clamp(py, PET_H * Math.max(0, sizeMul * userScale - 1), window.innerHeight - PET_H);   // держим в пределах экрана
   }
@@ -1901,9 +1830,8 @@
       say(tr().sCinema, 1800); return;
     }
     if (kind === 'jump') {                       // прыжок на месте
-      jumping = true; climbing = false; jumpT = now(); jumpDest = standLedge;
-      jumpFromX = px; jumpFromY = py; jumpToX = px; jumpToY = py; jumpPeak = 95;
-      pet.classList.add('is-jump'); testKind = 'jump'; testUntil = now() + PLAT_JUMP_MS + 60; return;
+      engine.testHop(now(), 95);   // дуга на месте — внутренности прыжка ведёт движок
+      testKind = 'jump'; testUntil = now() + PLAT_JUMP_MS + 60; return;
     }
     testKind = kind; testUntil = now() + 2600;
     if (kind === 'wave') { setMode('happy'); happyUntil = testUntil; say(pick(SP('idle')), 1600); }
@@ -2044,7 +1972,7 @@
       if (downloading) { const hasFire = !!CAT_SETS.fire; setName = hasFire ? 'fire' : 'angry'; ms = hasFire ? CAT_FIRE_MS : emoMs('angry'); }   // качается видео -> огненная форма у героя с fire в манифесте, иначе злость
       else if (testKind === 'emo' && t < testUntil) { setName = testEmo; ms = emoMs(testEmo) / userSpeed; }   // тест/действие эмоции (скорость — общий ползунок)
       else if (watching && watchAnim() && watchArrived) { setName = watchAnim(); ms = emoMs(setName); }   // села под видео -> попкорн (выше mv: не мигает ходьбой при езде за скроллом)
-      else if (jumping && !jumpDrop) { setName = 'jump'; ms = CAT_JUMP_MS; }   // дуга прыжка вверх/вбок (ВЫШЕ happy: иначе «помочь» не покажет прыжок)
+      else if (jumping && !engine.isDrop()) { setName = 'jump'; ms = CAT_JUMP_MS; }   // дуга прыжка вверх/вбок (ВЫШЕ happy: иначе «помочь» не покажет прыжок)
       else if (falling || jumping) { setName = 'fall'; ms = CAT_FALL_MS; }     // падение ИЛИ спуск-дроп (jumpDrop): кадры падения. У Яси fall=1 кадр (поза climb), у Noema 5
       else if (mode === 'happy') { setName = happyKind; ms = happyKind === 'wave' ? CAT_WAVE_MS : emoMs('happy'); }  // радость: подпрыг (happy) или приветствие (wave)
       else if (climbing && mv) { setName = 'climb'; ms = CAT_CLIMB_MS; }   // лезет вверх
@@ -2057,7 +1985,7 @@
         sprite.classList.toggle('xf', !!EMO_XFADE[setName]);       // кросс-фейд кадров — только для эмоций-поз
         if (catAct !== setName) { catAct = setName; catIdx = 0; catStep = 0; showFrame(frames[0]); lastFrameT = t; }
         else if (setName === 'jump' && jumping && frames.length > 1) {        // прыжок: кадр привязан к ФАЗЕ дуги, а не к таймеру
-          const jk = clamp((t - jumpT) / PLAT_JUMP_MS, 0, 1);                 // присед -> взлёт -> апекс -> спуск
+          const jk = engine.jumpPhase(t);                                     // присед -> взлёт -> апекс -> спуск (фаза дуги — у движка)
           const ji = Math.min(frames.length - 1, jk < 0.18 ? 0 : jk < 0.5 ? 1 : jk < 0.82 ? 2 : 3);
           if (ji !== catIdx) { catIdx = ji; showFrame(frames[ji]); }
         }
