@@ -1830,7 +1830,7 @@
       say(tr().sCinema, 1800); return;
     }
     if (kind === 'jump') {                       // прыжок на месте
-      engine.testHop(now(), 95);   // дуга на месте — внутренности прыжка ведёт движок
+      if (!engine.jumpUp(now())) engine.testHop(now(), 95);   // как в живом платформере: на достижимую полку ВЫШЕ; некуда -> подпрыг на месте
       testKind = 'jump'; testUntil = now() + PLAT_JUMP_MS + 60; return;
     }
     testKind = kind; testUntil = now() + 2600;

@@ -89,6 +89,20 @@
       env.onJumpStart();
     }
 
+    function jumpUp(t) {   // ручная кнопка «Прыжок»: запрыгнуть на ближайшую достижимую полку СТРОГО ВЫШЕ опоры; некуда -> false (вызывающий сделает подпрыг на месте)
+      if (!S.standLedge) return false;
+      scan();                                          // свежий снимок: кнопку жмут и при выключенном roam, когда тика-скана нет
+      const p = env.params();
+      const cx = S.px + p.W / 2;
+      const cand = Yasia.physics.climbCandidates(ledges, S.standLedge, cx, {
+        W: p.W, dx: p.dx, up: p.up, minY: p.H * Math.max(1, p.scaleK), lastLeftEl: null,   // анти-пинг-понг не мешает ручному прыжку
+      }).filter((c) => c.L.y < S.standLedge.y - 4);    // только полки выше текущей
+      if (!cand.length) return false;
+      let best = cand[0]; for (const c of cand) if (c.w > best.w) best = c;   // самая «удобная» (ближе по горизонтали)
+      startJump(best.L, best.tgtX, t);
+      return true;
+    }
+
     function tryClimb(t) {   // СВОБОДНЫЙ ПЛАТФОРМЕР: живо перескакивает с блока на блок в любую сторону
       const p = env.params();
       const cx = S.px + p.W / 2;
@@ -138,7 +152,7 @@
     }
 
     return {
-      scan, reacquireFloor, startJump, updateJump, testHop, tryClimb, fallStep,
+      scan, reacquireFloor, startJump, updateJump, testHop, jumpUp, tryClimb, fallStep,
       ledges: () => ledges,                                              // текущий снимок полок (для маршрутов к видео/игре в pet.js)
       jumpPhase: (t) => clamp((t - jumpT) / env.params().jumpMs, 0, 1),  // фаза дуги [0..1] — привязка кадра анимации
       isDrop: () => jumpDrop,                                            // спуск-дроп (кадры fall вместо jump)
