@@ -1897,16 +1897,8 @@
     } else { px += Math.sign(dx) * sp; face = dx > 0 ? 1 : -1; }
     px = clamp(px, 0, window.innerWidth - PET_W);   // по краю экрана; за край ОПОРЫ выходить можно -> упадёт
   }
-  // достижим ли прыжок с полки A на полку B (вверх/вбок/вниз, в пределах физики прыжка)
-  function ledgeJumpable(A, B) {
-    const W = PET_W;
-    const aMinC = A.x1 + W / 2, aMaxC = A.x2 - W / 2, bMinC = B.x1 + W / 2, bMaxC = B.x2 - W / 2;
-    if (aMaxC < aMinC || bMaxC < bMinC) return false;                       // слишком узкая, чтобы встать
-    const hgap = Math.max(0, Math.max(aMinC, bMinC) - Math.min(aMaxC, bMaxC));   // мин. горизонт. разрыв между «стоячими» зонами
-    if (hgap > PLAT_JUMP_DX) return false;                                  // не дотянуться вбок
-    const dy = A.y - B.y;                                                   // >0 — B выше
-    return dy <= PLAT_JUMP_UP && dy >= -PLAT_JUMP_UP * 4;                   // вверх/вниз — свободно (вниз далеко, падением); ограничена ГОРИЗОНТАЛЬ (hgap <= PLAT_JUMP_DX выше)
-  }
+  // достижим ли прыжок с полки A на полку B — чистая функция вынесена в core/physics.js (там же юнит-тесты, tests/physics.test.js)
+  function ledgeJumpable(A, B) { return Yasia.physics.ledgeJumpable(A, B, { W: PET_W, dx: PLAT_JUMP_DX, up: PLAT_JUMP_UP }); }
   function watchClimbDecide(t) {   // ПОИСК ПУТИ к видео (BFS по полкам): прыгает вверх/вбок/вниз через разрывы; идёт по кратчайшему маршруту к ближайшей к видео достижимой полке; если лучше не добраться -> watchStuck (просит подсадить)
     if (!standLedge) return;
     const W = PET_W, cx = px + W / 2, goalCx = watchClimbCx, goalY = watchClimbY;
