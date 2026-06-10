@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Browser Pet",
-  "version": "1.9.7",
-  "description": "A pet lives on your X feed, walks up to posts and asks for a like. Only you place the like — by clicking the pet. No auto-actions.",
-  "permissions": ["storage", "scripting", "downloads", "declarativeNetRequest", "clipboardRead"],
+  "name": "Твиттер-Питомец",
+  "version": "2.9.8",
+  "description": "Питомец живёт на ленте X и других сайтах: гуляет по странице, о нём нужно заботиться (кормить, гладить, играть) — он меняется от твоего отношения. Умеет скачивать видео. Никаких авто-действий.",
+  "permissions": ["storage", "scripting", "downloads", "declarativeNetRequest", "clipboardRead", "alarms"],
   "host_permissions": ["https://*/*", "http://*/*"],
   "background": {
     "service_worker": "src/background.js",
@@ -20,7 +20,7 @@
   },
   "action": {
     "default_popup": "src/popup.html",
-    "default_title": "Browser Pet",
+    "default_title": "Твиттер-Питомец",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -31,7 +31,7 @@
   "content_scripts": [
     {
       "matches": ["https://*/*", "http://*/*"],
-      "js": ["src/core/config.js", "src/core/storage.js", "src/core/events.js", "src/pet.js"],
+      "js": ["src/core/config.js", "src/core/storage.js", "src/core/events.js", "src/core/flags.js", "src/core/registry.js", "src/core/heroes.js", "src/systems/notes.js", "src/systems/games.js", "src/systems/memory.js", "src/systems/ai.js", "src/pet.js"],
       "css": ["src/pet.css"],
       "run_at": "document_idle"
     },
@@ -50,7 +50,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/heroes/*.png", "src/heroes/catgirl/*.png", "src/heroes/catgirl/*/*.png", "src/items/*.png"],
+      "resources": ["src/heroes/*.png", "src/heroes/*/*.png", "src/heroes/*/*/*.png", "src/heroes/*/manifest.json", "src/items/*.png"],
       "matches": ["https://*/*", "http://*/*"]
     },
     {

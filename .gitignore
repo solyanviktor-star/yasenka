@@ -1,22 +1,11 @@
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
+# рабочие материалы художника/генерация — не часть расширения
+art/
+frames/
+yasia_v02_*
+*.jpg
+fgspec.json
 
-# Editor
-.vscode/
-.idea/
-*.swp
-
-# Python (sprite generators, not needed in the repo)
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# Build artifacts / drafts
-*.zip
+# логи и временное
 *.log
-
-# Internal Russian design draft — kept locally, excluded from the English repo
-CONCEPT.md
+*.zip
+node_modules/

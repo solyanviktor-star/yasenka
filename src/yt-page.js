@@ -633,9 +633,10 @@
     const vT = bestTrack('video'), aT = bestTrack('audio');  // 2) лучшие захваченные mp4 video + audio
     if (!vT) {
       const any = mseTracks.filter((t) => t.init && t.frags.size).map((t) => t.mime.split(';')[0]).join(', ');
-      return { error: any ? ('плеер отдаёт не-H.264 (' + any + ') — захват пока умеет только H.264/AAC. Открой ⚙ и поставь другое качество, потом повтори') : 'не удалось захватить поток из плеера (дай ролику проиграться пару секунд и повтори)' };
+      if (any) return { error: 'плеер отдаёт не-H.264 (' + any + ') — захват пока умеет только H.264/AAC. Открой ⚙ и поставь другое качество, потом повтори' };   // другой ремонт (сменить качество), не буферизация
+      return { error: 'не удалось захватить поток из плеера (дай ролику проиграться пару секунд и повтори)', needBuffer: true };   // плеер не успел отдать сегменты -> питомец попросит дать видео поиграть
     }
-    if (!aT) return { error: 'захватил видео, но не звук — дай ролику проиграться со звуком пару секунд и повтори' };
+    if (!aT) return { error: 'захватил видео, но не звук — дай ролику проиграться со звуком пару секунд и повтори', needBuffer: true };
     await ensureMp4Box();
     const vBuf = buildTrackFile(vT), aBuf = buildTrackFile(aT);
     ytPost({ __yasiaYtProgress: true, reqId, phase: 'mux', loaded: 0, total: 1 });
@@ -722,13 +723,13 @@
       ytPost({ __yasiaYtProgress: true, reqId, phase: 'buffer', loaded: 0, total: 1 });
       const cap = await downloadFromCapture(pr, title, reqId);
       if (cap && cap.ok) return cap;
-      if (cap && cap.error) return { error: cap.error };
+      if (cap && cap.error) return cap;   // сохраняем needBuffer (раньше пересобирали только {error} и флаг терялся)
     } catch (e) {
       return { error: 'захват из плеера не удался: ' + String((e && e.message) || e) };
     }
     if (expired) return { error: 'ссылка устарела — обнови страницу видео и попробуй снова' };
     if (!fns || !fns.decipher) return { error: 'не разобрать плеер YouTube (обновился — извлекатель надо подтянуть из distube)' };
-    return { error: 'нет прямого потока (новый протокол SABR). Поставь качество в плеере и дай видео доиграться пару секунд, потом «Скачать».' };
+    return { error: 'нет прямого потока (новый протокол SABR). Поставь качество в плеере и дай видео доиграться пару секунд, потом «Скачать».', needBuffer: true };
   }
 
   window.addEventListener('message', (e) => {

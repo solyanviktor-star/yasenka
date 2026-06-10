@@ -1,76 +1,106 @@
-<p align="center">
-  <img src="assets/banner.png" alt="Yasenka — Browser Pet" width="320">
-</p>
+# 🐾 Твиттер-Питомец
 
-# 🐾 Yasenka — Browser Pet
+Маленький проказливый питомец, который живёт прямо на ленте X (Twitter): ходит,
+шалит и подбегает к постам, выпрашивая лайк. **Лайк ставится только когда ты сам
+кликаешь по питомцу** — никаких авто-действий, никакой накрутки.
 
-A tiny catgirl named **Yasia** lives right on top of any web page. She walks and
-runs along the page structure, can be dragged around and thrown, and you can pet
-and feed her. Two real superpowers under the hood:
+![героев четыре: бесёнок, блоб, гоблин-кот, дракончик](art/concepts/4_imp.jpg)
 
-- **📥 Download videos from the page** — YouTube, TikTok, Twitter / X and Instagram.
-- **📝 Notes & links** — jot down quick notes and links, saved locally in your browser.
+## Что умеет
 
-> The interface is **English by default**. Press the **RU** button (in Yasia's
-> speech bubble or in the popup) to switch to Russian — and back.
+### ❤️ Лайк по клику (безопасно)
+1. Питомец гуляет по экрану поверх ленты.
+2. Замечает пост, который ты ещё не лайкнул, подбегает к кнопке ❤ и канючит (`❤?`).
+3. Кликаешь по питомцу — ставится **настоящий лайк**. Питомец радуется и убегает.
+4. Не хочешь — проскролль; через пару секунд он отстанет и больше не пристанет к этому посту.
 
----
+Под капотом (после ревью селекторов X):
+- Цель привязана к **status ID поста** (Snowflake), а не к DOM-узлу → лайк уходит
+  именно на тот пост, у которого стоит питомец, даже при переиспользовании узлов виртуализацией.
+- Лайк **подтверждается** по факту мутации кнопки `like → unlike` — никакого ложного «❤!».
+- Блок лайка во время активного скролла, пауза при открытой модалке/композере и при наборе текста.
 
-## ✨ Features
+### 😈 Пакости (только визуальные, данные X не трогаем)
+- **Бьёт «стекло»** — на экране расползаются трещины, потом тают.
+- **Ворует букву** — выдёргивает букву из поста и носит её. Это **визуальная копия**:
+  реальный текст поста не меняется. Через пару секунд возвращает на место.
 
-### 📥 Video downloader
-Click Yasia → **Download video from the page**. She grabs the video from the
-current page:
+Пакости случаются нечасто («умеренная злость») и не мешают читать/печатать.
 
-| Platform | Notes |
-|----------|-------|
-| **YouTube** | Quality = whatever the player has loaded (set 1080p in the player, let it buffer a bit, then download). |
-| **TikTok** | The active clip from the feed, **without watermark**. |
-| **Twitter / X** | The video from the open post. |
-| **Instagram** | The active reel / post video. |
-| Other sites | Any direct video on the page (best-effort). |
+## Герои
 
-For TikTok / Instagram you can also paste a clip link into the field and download
-exactly that one.
+Четыре персонажа на выбор (переключаются в попапе расширения):
+**Бесёнок** (по умолчанию), **Блоб**, **Гоблин-кот**, **Дракончик**.
 
-### 📝 Notes & links
-Click Yasia → **Notes & links**. Type any text or link, hit **Save** — it stays
-in `chrome.storage.local`. Links become clickable.
+Питомец живёт **на любом сайте** (если включён), но взаимодействовать с контентом
+(лайки, кража буквы) пока умеет только на X — другие сервисы добавим позже. На
+остальных сайтах он просто гуляет и иногда бьёт «стекло».
 
-### 🐱 The pet itself
-- Lives on **any site**, walks and **runs** across the page by default.
-- **Drag & throw** her around — she flies with inertia and lands on page elements.
-- **Feed** her meat from the popup; she gains XP and **levels up** (bigger & livelier).
-- On **X (Twitter)** she walks up to posts and asks for a like — the like is placed
-  **only when you click the pet**. No auto-actions, no automation.
-- One setting: **Size** (default 180%). EN / RU language toggle.
+**Один питомец на все вкладки.** Переключаешься на другую вкладку — питомец
+«переходит» туда: появляется там же, где был, с короткой анимацией прихода
+(🐾). Позиция общая через `chrome.storage.local`. Видимая вкладка всегда одна,
+поэтому это ощущается как один зверёк, бегающий за тобой по вкладкам.
 
----
+## Установка (режим разработчика)
 
-## 🚀 Install (developer mode)
+1. Открой `chrome://extensions`.
+2. Включи **«Режим разработчика»** (правый верхний угол).
+3. **«Загрузить распакованное расширение»** → выбери эту папку.
+4. **Перезагрузи уже открытые вкладки** — расширение внедряется только при загрузке
+   страницы, в старые вкладки само не попадёт (частая причина «ничего не происходит»).
+5. На странице справа снизу появится кнопка **🐾** — нажми, чтобы показать/спрятать питомца.
+6. Иконка расширения на панели: вкл/выкл + выбор героя (синхронизировано с кнопкой 🐾).
 
-### Firefox (Mozilla)
-1. Type `about:debugging` in the address bar.
-2. Open **This Firefox**.
-3. Click **Load Temporary Add-on…**
-4. Select the **`manifest.json`** file in this folder.
+> После любой правки кода: на `chrome://extensions` жми **↻** на карточке расширения,
+> **затем перезагрузи вкладку** сайта.
 
-### Chrome
-1. Open **Manage extensions** (top-right menu → Extensions).
-2. Turn on **Developer mode** (top-left toggle).
-3. Click **Load unpacked**, open this folder and confirm.
-4. **Reload any already-open tabs** — the extension is injected on page load, so it
-   won't appear in old tabs until you refresh them.
+## Как поменять / добавить арт
 
-A **🐾** button shows up at the bottom-right of the page — click it to show/hide Yasia.
+Персонажи лежат в `src/heroes/<имя>.png` (прозрачный фон). Чтобы сделать своих:
 
-> After editing the code: on `chrome://extensions` hit **↻** on the extension card,
-> then **reload the website tab**.
+```bash
+# 1) сгенерировать концепты (nano-banana-2). Правь промпты в файле под себя.
+python art/gen_concepts.py        # -> art/concepts/*.jpg
 
----
+# 2) убрать фон заливкой от краёв (нужен Pillow: pip install Pillow)
+python art/process_sprites.py     # -> art/sprites/*.png
 
-## 🔒 Safety principle
+# 3) скопировать нужный спрайт в src/heroes/<имя>.png
+#    и при необходимости добавить <имя> в список HEROES в src/pet.js
+#    + кнопку в src/popup.html
+```
 
-Real actions on X happen **only** as a direct response to your click on the pet
-(one click = one deliberate like, at human speed). Everything else is a visual
-layer on top of the page — it never changes content and never sends anything out.
+## Структура
+
+```
+manifest.json         — манифест расширения (MV3) + web_accessible_resources для спрайтов
+src/pet.js            — движок: поведение, движение, лайк по ID поста, пакости
+src/pet.css           — стили героя, анимации состояний, оверлеи пакостей
+src/popup.html/js     — вкл/выкл + выбор героя
+src/heroes/*.png      — спрайты персонажей (прозрачный фон)
+art/gen_concepts.py   — генерация концептов через nano-banana-2
+art/process_sprites.py— удаление фона + обрезка
+art/concepts/*.jpg    — исходные концепты
+art/sprites/*.png     — обработанные спрайты
+```
+
+## Дорожная карта
+
+Полная концепция (core loop, настроение/связь, v1, анти-Clippy, открытые вопросы) —
+в **[CONCEPT.md](CONCEPT.md)**. Кратко, ближайшее:
+
+- [ ] **Шкала дикости**: связать пакости с сытостью/настроением (голодный → чаще пакостит, глаженый → смирный).
+- [ ] **Поглаживание-приручение** (возишь курсором по зверю → мурлык, +связь).
+- [ ] **Drag-and-throw** — хватать и швырять зверя (лайк выключен во время drag).
+- [ ] Богатые idle-ритуалы (сон в углу, умывание, крадётся за курсором, прячется за аватаркой).
+- [ ] Лестница доверия (bond) + ежедневное приветствие/стрик; эволюция и скины.
+- [ ] Новые пакости: угон иконки, каляки на аватарках, подмена цифр статистики.
+- [ ] Настоящий спрайт-лист (walk / jump / hit / happy / sleep) вместо CSS-трансформов.
+- [ ] Twitter-нативные обёртки (тот же human-initiated паттерн): Crack→reply, угон автора→follow.
+- [ ] Перед публичным релизом (из ревью): дневной лимит лайков + онбординг-дисклеймер.
+
+## Принцип безопасности
+
+Реальные действия в X — **только** прямой ответ на твой клик по питомцу (один клик = один
+осознанный лайк, в человеческом темпе). Пакости — визуальный слой поверх страницы, они не
+меняют контент и не отправляют ничего в X. Поэтому «палиться» тут нечему: бота нет.

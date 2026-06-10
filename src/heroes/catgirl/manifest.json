@@ -1,0 +1,23 @@
+{
+  "id": "catgirl",
+  "name": "Yasia",
+  "width": 278,
+  "height": 276,
+  "animations": {
+    "idle":   { "group": "movement", "fps": 2.083, "loop": true,  "frames": ["idle/idle0.png", "idle/idle1.png", "idle/idle2.png", "idle/idle3.png"] },
+    "walk":   { "group": "movement", "fps": 9.09,  "loop": true,  "frames": ["walk/walk0.png", "walk/walk1.png", "walk/walk2.png", "walk/walk3.png", "walk/walk4.png", "walk/walk5.png"] },
+    "run":    { "group": "movement", "fps": 14.29, "loop": true,  "frames": ["run/run0.png", "run/run1.png", "run/run2.png", "run/run3.png", "run/run4.png", "run/run5.png"] },
+    "jump":   { "group": "movement", "fps": 14.29, "loop": false, "arc": true, "frames": ["jump/jump0.png", "jump/jump1.png", "jump/jump2.png", "jump/jump3.png"] },
+    "climb":  { "group": "movement", "fps": 5.88,  "loop": true,  "frames": ["climb/climb.png"] },
+    "fall":   { "group": "movement", "fps": 5.88,  "loop": false, "frames": ["climb/climb.png"] },
+    "wave":   { "group": "actions",  "fps": 6.67,  "loop": true,  "frames": ["wave/wave0.png", "wave/wave1.png", "wave/wave2.png", "wave/wave3.png"] },
+    "happy":  { "group": "emotions", "icon": "😺", "label": "Радость", "fps": 7.69, "loop": true, "frames": ["happy/happy0.png", "happy/happy1.png", "happy/happy2.png", "happy/happy3.png"] },
+    "sad":    { "group": "emotions", "icon": "😿", "label": "Грусть",  "careState": "starving", "fps": 3.85, "loop": true, "pingpong": true, "frames": ["sad/sad0.png", "sad/sad1.png", "sad/sad2.png", "sad/sad3.png", "sad/sad4.png"] },
+    "angry":  { "group": "emotions", "icon": "😠", "label": "Злость",  "careState": "grumpy",   "fps": 8.33, "loop": true, "pingpong": true, "frames": ["angry/angry0.png", "angry/angry1.png", "angry/angry2.png", "angry/angry3.png", "angry/angry4.png"] },
+    "dizzy":  { "group": "emotions", "icon": "💫", "label": "Голова",  "fps": 5.88, "loop": true, "pingpong": true, "frames": ["dizzy/dizzy0.png", "dizzy/dizzy1.png", "dizzy/dizzy2.png", "dizzy/dizzy3.png", "dizzy/dizzy4.png"] },
+    "hungry": { "group": "emotions", "icon": "🍖", "label": "Голод",   "careState": "hungry",   "fps": 5.56, "loop": true, "pingpong": true, "frames": ["hungry/hungry0.png", "hungry/hungry1.png", "hungry/hungry2.png", "hungry/hungry3.png", "hungry/hungry4.png"] },
+    "sleep":  { "group": "emotions", "icon": "😴", "label": "Сон",     "careState": "sleep",    "fps": 2.083, "loop": true, "pingpong": true, "frames": ["sleep/sleep0.png", "sleep/sleep1.png", "sleep/sleep2.png", "sleep/sleep3.png", "sleep/sleep4.png"] },
+    "fire":   { "group": "actions",  "fps": 7.69,  "loop": true,  "frames": ["fire/fire0.png", "fire/fire1.png", "fire/fire2.png", "fire/fire3.png"] },
+    "popcorn": { "group": "actions", "appState": "watching", "fps": 7, "loop": true, "frames": ["popcorn/popcorn0.png", "popcorn/popcorn1.png", "popcorn/popcorn2.png", "popcorn/popcorn3.png", "popcorn/popcorn4.png", "popcorn/popcorn5.png", "popcorn/popcorn6.png", "popcorn/popcorn7.png"] }
+  }
+}
