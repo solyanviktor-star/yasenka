@@ -16,8 +16,8 @@ const levelFromXp = (x) => { let lv = 1; for (let i = 0; i < LEVEL_XP.length; i+
 
 // ---------- локализация (единый язык с окном Яси: storage.sync 'dlgLang') ----------
 const P = {
-  ru: { title: '🟩 Твиттер-Питомец', enabled: 'Питомец включён', hero: 'Герой:', lvl: 'Ур.', maxAb: 'макс. способности ✨', abHint: '+скорость +размер', max: '(макс.)', xp: 'Опыт', hunger: 'Голод', mood: 'Настроение', energy: 'Энергия', bond: 'Привязанность', feed: 'Покормить мясом', hint: 'Голод растёт со временем. Заботься о питомце — корми, гладь, играй: он меняется от твоего отношения. Клик по питомцу открывает меню «Забота».', ai: 'ИИ-мозг (Hermes / GPT)', aiOn: 'Подключено', aiOff: 'Не настроен', connect: '⚙ Подключить Hermes / GPT', cfgUrl: 'Адрес', cfgKey: 'Ключ', cfgModel: 'Модель', test: 'Проверить связь', save: 'Сохранить', testing: 'Проверяю…', ok: '🟢 Связь есть', fail: 'Не вышло', saved: '✓ Сохранено', hintHermes: 'Включи в Hermes канал «API server», задай API_SERVER_KEY, впиши адрес и ключ.', hintGpt: 'Прямое подключение к OpenAI: вставь ключ sk-…. Хранится локально, не синкается.', getKey: '🔑 Где взять ключ ↗', langBtn: 'EN', dev: '🛠 Разработчик', devLedges: 'Подсветка полок', devLedgesHint: 'Показывает на странице, как Яся видит полки: оранжевая — стоит тут, зелёные — допрыгнет отсюда, жёлтые — допрыгнет с края полки (маршрут), красные — видит, но не достать, синяя — пол.', amSub: 'Подписка ChatGPT', amKey: 'API-ключ', signinBtn: 'Войти через ChatGPT', signedReauth: 'Войти заново', signedIn: '🟢 Вход выполнен', signinStart: 'Запрашиваю код…', signinCode: 'Открой страницу и введи код:', signinFail: 'Не вышло войти', signinTimeout: 'Время вышло — попробуй ещё раз', hintSub: 'Вход твоим аккаунтом ChatGPT (подписка). Откроется страница OpenAI — введи код. ⚠️ Неофициальный путь: возможен отказ Cloudflare и риск для аккаунта. Если не работает — через Hermes.' },
-  en: { title: '🟩 Twitter-Pet', enabled: 'Pet enabled', hero: 'Character:', lvl: 'Lv.', maxAb: 'max abilities ✨', abHint: '+speed +size', max: '(max)', xp: 'XP', hunger: 'Hunger', mood: 'Mood', energy: 'Energy', bond: 'Bond', feed: 'Feed meat', hint: 'Hunger grows over time. Care for the pet — feed, pet, play: it changes with how you treat it. Click the pet to open the «Care» menu.', ai: 'AI brain (Hermes / GPT)', aiOn: 'Connected', aiOff: 'Not set up', connect: '⚙ Connect Hermes / GPT', cfgUrl: 'Address', cfgKey: 'Key', cfgModel: 'Model', test: 'Test connection', save: 'Save', testing: 'Testing…', ok: '🟢 Connection OK', fail: 'Failed', saved: '✓ Saved', hintHermes: 'In Hermes enable the «API server» channel, set API_SERVER_KEY, enter the address and key.', hintGpt: 'Direct OpenAI connection: paste sk-… key. Stored locally, never synced.', getKey: '🔑 Get a key ↗', langBtn: 'RU', dev: '🛠 Developer', devLedges: 'Ledge overlay', devLedgesHint: 'Shows how Yasya sees the page: orange — standing here, green — jumpable from her spot, yellow — jumpable from the ledge edge (route), red — visible but unreachable, blue — the floor.', amSub: 'ChatGPT subscription', amKey: 'API key', signinBtn: 'Sign in with ChatGPT', signedReauth: 'Sign in again', signedIn: '🟢 Signed in', signinStart: 'Requesting code…', signinCode: 'Open the page and enter the code:', signinFail: 'Sign-in failed', signinTimeout: 'Timed out — try again', hintSub: 'Sign in with your ChatGPT account (subscription). An OpenAI page opens — enter the code. ⚠️ Unofficial path: Cloudflare may refuse it and there is account risk. If it fails, use Hermes.' },
+  ru: { title: '🟩 Твиттер-Питомец', enabled: 'Питомец включён', hero: 'Герой:', lvl: 'Ур.', maxAb: 'макс. способности ✨', abHint: '+скорость +размер', max: '(макс.)', xp: 'Опыт', hunger: 'Голод', mood: 'Настроение', energy: 'Энергия', bond: 'Привязанность', feed: 'Покормить мясом', hint: 'Голод растёт со временем. Заботься о питомце — корми, гладь, играй: он меняется от твоего отношения. Клик по питомцу открывает меню «Забота».', ai: 'ИИ-мозг (Hermes / GPT)', aiOn: 'Подключено', aiOff: 'Не настроен', connect: '⚙ Подключить Hermes / GPT', cfgUrl: 'Адрес', cfgKey: 'Ключ', cfgModel: 'Модель', test: 'Проверить связь', save: 'Сохранить', testing: 'Проверяю…', ok: '🟢 Связь есть', fail: 'Не вышло', saved: '✓ Сохранено', hintHermes: 'Включи в Hermes канал «API server», задай API_SERVER_KEY, впиши адрес и ключ.', hintGpt: 'Прямое подключение к OpenAI: вставь ключ sk-…. Хранится локально, не синкается.', getKey: '🔑 Где взять ключ ↗', langBtn: 'EN', dev: '🛠 Разработчик', devLedges: 'Подсветка полок', devLedgesHint: 'Показывает на странице, как Яся видит полки: оранжевая — стоит тут, зелёные — допрыгнет отсюда, жёлтые — допрыгнет с края полки (маршрут), красные — видит, но не достать, синяя — пол.', amSub: 'Подписка ChatGPT', amKey: 'API-ключ', signinBtn: 'Войти через ChatGPT', signedReauth: 'Войти заново', signedIn: '🟢 Вход выполнен', signinStart: 'Запрашиваю код…', signinCode: 'Открой страницу и введи код:', signinFail: 'Не вышло войти', signinTimeout: 'Время вышло — попробуй ещё раз', hintSub: 'Вход твоим аккаунтом ChatGPT (подписка). Откроется страница OpenAI — введи код. ⚠️ Неофициальный путь: возможен отказ Cloudflare и риск для аккаунта. Если не работает — через Hermes.', paused: 'Пауза (замереть на месте)', flags: '🧩 Способности', flagsHint: 'Действует сразу: выключенная способность останавливается прямо на странице. Сломанная фича гаснет сама.', flagNames: { tamagotchi: 'Тамагочи (голод/энергия)', mediaDownload: 'Скачивание медиа', notes: 'Заметки', aiAssistant: 'ИИ-помощник', skills: 'Навыки', memory: 'Память', games: 'Мини-игры' }, backup: '💾 Резервная копия', exportBtn: 'Экспорт', importBtn: 'Импорт', backupHint: 'JSON со статами, заметками, памятью и настройками. Ключи ИИ (yasiaAI) не выгружаются.', expOk: '✓ Файл сохранён', impOk: '✓ Импортировано', impBad: 'Это не файл резервной копии Яси' },
+  en: { title: '🟩 Twitter-Pet', enabled: 'Pet enabled', hero: 'Character:', lvl: 'Lv.', maxAb: 'max abilities ✨', abHint: '+speed +size', max: '(max)', xp: 'XP', hunger: 'Hunger', mood: 'Mood', energy: 'Energy', bond: 'Bond', feed: 'Feed meat', hint: 'Hunger grows over time. Care for the pet — feed, pet, play: it changes with how you treat it. Click the pet to open the «Care» menu.', ai: 'AI brain (Hermes / GPT)', aiOn: 'Connected', aiOff: 'Not set up', connect: '⚙ Connect Hermes / GPT', cfgUrl: 'Address', cfgKey: 'Key', cfgModel: 'Model', test: 'Test connection', save: 'Save', testing: 'Testing…', ok: '🟢 Connection OK', fail: 'Failed', saved: '✓ Saved', hintHermes: 'In Hermes enable the «API server» channel, set API_SERVER_KEY, enter the address and key.', hintGpt: 'Direct OpenAI connection: paste sk-… key. Stored locally, never synced.', getKey: '🔑 Get a key ↗', langBtn: 'RU', dev: '🛠 Developer', devLedges: 'Ledge overlay', devLedgesHint: 'Shows how Yasya sees the page: orange — standing here, green — jumpable from her spot, yellow — jumpable from the ledge edge (route), red — visible but unreachable, blue — the floor.', amSub: 'ChatGPT subscription', amKey: 'API key', signinBtn: 'Sign in with ChatGPT', signedReauth: 'Sign in again', signedIn: '🟢 Signed in', signinStart: 'Requesting code…', signinCode: 'Open the page and enter the code:', signinFail: 'Sign-in failed', signinTimeout: 'Timed out — try again', hintSub: 'Sign in with your ChatGPT account (subscription). An OpenAI page opens — enter the code. ⚠️ Unofficial path: Cloudflare may refuse it and there is account risk. If it fails, use Hermes.', paused: 'Pause (freeze in place)', flags: '🧩 Features', flagsHint: 'Applies instantly: a feature you turn off stops right on the page. A broken feature turns itself off.', flagNames: { tamagotchi: 'Tamagotchi (hunger/energy)', mediaDownload: 'Media download', notes: 'Notes', aiAssistant: 'AI assistant', skills: 'Skills', memory: 'Memory', games: 'Mini-games' }, backup: '💾 Backup', exportBtn: 'Export', importBtn: 'Import', backupHint: 'JSON with stats, notes, memory and settings. AI keys (yasiaAI) are never exported.', expOk: '✓ File saved', impOk: '✓ Imported', impBad: 'Not a Yasya backup file' },
 };
 let lang = 'ru';
 const L2 = () => P[lang] || P.ru;
@@ -113,7 +113,7 @@ if (heroesBox) {
 const heroBtns = [...document.querySelectorAll('.hero')];
 function markHero(hero) { heroBtns.forEach((b) => b.classList.toggle('active', b.dataset.hero === hero)); }
 
-chrome.storage.sync.get({ enabled: true, hero: 'catgirl', dlgLang: 'ru', devLedges: false }, (s) => { cb.checked = s.enabled; markHero(s.hero); lang = (s && s.dlgLang === 'en') ? 'en' : 'ru'; const dv = document.getElementById('devLedges'); if (dv) dv.checked = !!s.devLedges; localize(); });
+chrome.storage.sync.get({ enabled: true, paused: false, hero: 'catgirl', dlgLang: 'ru', devLedges: false }, (s) => { cb.checked = s.enabled; const pcb = document.getElementById('paused'); if (pcb) pcb.checked = !!s.paused; markHero(s.hero); lang = (s && s.dlgLang === 'en') ? 'en' : 'ru'; const dv = document.getElementById('devLedges'); if (dv) dv.checked = !!s.devLedges; localize(); });
 chrome.storage.local.get({
   hunger: 0, hungerAt: Date.now(), xp: 0,
   energy: 100, energyAt: Date.now(), energyResting: false, bond: 0, bondAt: Date.now(), moodBias: 0, moodBiasAt: Date.now(),
@@ -134,6 +134,7 @@ chrome.storage.onChanged.addListener((ch, area) => {
 });
 
 cb.addEventListener('change', () => chrome.storage.sync.set({ enabled: cb.checked }));
+{ const pcb = document.getElementById('paused'); if (pcb) pcb.addEventListener('change', () => chrome.storage.sync.set({ paused: pcb.checked })); }   // ⏸ пауза: страница подхватит вживую (storage.onChanged)
 { const dv = document.getElementById('devLedges'); if (dv) dv.addEventListener('change', () => chrome.storage.sync.set({ devLedges: dv.checked })); }   // дебаг-оверлей полок: страница подхватит вживую (storage.onChanged)
 heroBtns.forEach((b) => b.addEventListener('click', () => { chrome.storage.sync.set({ hero: b.dataset.hero }); markHero(b.dataset.hero); }));
 
@@ -148,6 +149,61 @@ feedBtn.addEventListener('click', () => {
   render();
 });
 
+// ---------- фиче-флаги: тумблеры способностей (core/flags.js; storage.sync yasiaFlags) ----------
+// Страница слушает yasiaFlags через flags.watch() -> системы стартуют/стопаются вживую.
+function buildFlags() {
+  const box = document.getElementById('flags');
+  if (!box || !(window.Yasia && Yasia.flags)) return;
+  const t = L2(), names = Object.keys(Yasia.flags.DEFAULTS).filter((n) => t.flagNames[n]);   // zombies/bowGame (план) не показываем
+  box.innerHTML = names.map((n) => `<label class="row"><span>${t.flagNames[n]}</span><input type="checkbox" data-flag="${n}"></label>`).join('');
+  Yasia.flags.load(() => {
+    box.querySelectorAll('[data-flag]').forEach((fcb) => {
+      fcb.checked = Yasia.flags.enabled(fcb.dataset.flag);
+      fcb.addEventListener('change', () => Yasia.flags.set(fcb.dataset.flag, fcb.checked));
+    });
+  });
+}
+
+// ---------- экспорт/импорт состояния ----------
+// Белые списки = всё состояние Яси, КРОМЕ yasiaAI (там apiKey и токены — секреты не покидают устройство).
+const EXPORT_SYNC = ['enabled', 'paused', 'hero', 'dlgLang', 'devLedges', 'yasiaFlags', 'yasiaMode', 'roam', 'scale', 'walkSpeed', 'throwPower'];
+const EXPORT_LOCAL = ['hunger', 'hungerAt', 'xp', 'energy', 'energyAt', 'energyResting', 'bond', 'bondAt', 'moodBias', 'moodBiasAt', 'yasiaNotes', 'yasiaReminders', 'yasiaSkills', 'yasiaMemory', 'yasiaPlaces', 'yasiaAiHosts', 'yasiaHermesSkills'];
+function filterKeys(obj, allow) { const out = {}; if (obj && typeof obj === 'object') for (const k of allow) if (k in obj && obj[k] !== undefined) out[k] = obj[k]; return out; }
+function backupMsg(cls, txt) { const m = document.getElementById('backup-msg'); if (m) { m.className = 'ai-msg ' + cls; m.textContent = txt; } }
+function doExport() {
+  chrome.storage.sync.get(EXPORT_SYNC, (sv) => chrome.storage.local.get(EXPORT_LOCAL, (lv) => {
+    let ver = ''; try { ver = chrome.runtime.getManifest().version; } catch (_) {}
+    const data = { app: 'yasenka', kind: 'state', version: ver, exportedAt: new Date().toISOString(), sync: filterKeys(sv, EXPORT_SYNC), local: filterKeys(lv, EXPORT_LOCAL) };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'yasya-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    backupMsg('ok', L2().expOk);
+  }));
+}
+function doImport(file) {
+  file.text().then((txt) => {
+    let data = null;
+    try { data = JSON.parse(txt); } catch (_) {}
+    if (!data || data.app !== 'yasenka' || (typeof data.sync !== 'object' && typeof data.local !== 'object')) { backupMsg('err', L2().impBad); return; }
+    const sv = filterKeys(data.sync, EXPORT_SYNC), lv = filterKeys(data.local, EXPORT_LOCAL);
+    chrome.storage.sync.set(sv, () => chrome.storage.local.set(lv, () => {
+      backupMsg('ok', L2().impOk);
+      setTimeout(() => location.reload(), 600);   // перечитать всё из storage (статы, герой, флаги)
+    }));
+  }).catch(() => backupMsg('err', L2().impBad));
+}
+{
+  const eb = document.getElementById('exportBtn'); if (eb) eb.addEventListener('click', doExport);
+  const ib = document.getElementById('importBtn'), inf = document.getElementById('importFile');
+  if (ib && inf) {
+    ib.addEventListener('click', () => inf.click());
+    inf.addEventListener('change', () => { if (inf.files && inf.files[0]) doImport(inf.files[0]); inf.value = ''; });
+  }
+}
+
 // живое обновление шкалы голода, пока попап открыт
 setInterval(render, 1000);
 
@@ -158,6 +214,9 @@ function localize() {
   set('t-title', t.title); set('t-enabled', t.enabled); set('t-hero', t.hero);
   set('t-xp', t.xp); set('t-hunger', t.hunger); set('t-mood', t.mood); set('t-energy', t.energy); set('t-bond', t.bond);
   set('t-feed', t.feed); set('t-hint', t.hint); set('t-dev', t.dev); set('t-devledges', t.devLedges); set('t-devledges-hint', t.devLedgesHint); set('t-ai', t.ai); set('ai-toggle', t.connect);
+  set('t-paused', t.paused); set('t-flags', t.flags); set('t-flags-hint', t.flagsHint);
+  set('t-backup', t.backup); set('exportBtn', t.exportBtn); set('importBtn', t.importBtn); set('t-backup-hint', t.backupHint);
+  buildFlags();
   set('t-cfg-url', t.cfgUrl); set('t-cfg-key', t.cfgKey); set('t-cfg-model', t.cfgModel);
   set('cfg-test', t.test); set('cfg-save', t.save);
   const lb = document.getElementById('lang'); if (lb) lb.textContent = t.langBtn;

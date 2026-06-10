@@ -15,7 +15,7 @@
     SPEED, RUN_MUL,
     PLAT_GRAVITY, PLAT_JUMP_UP, PLAT_JUMP_DX, PLAT_JUMP_MS, PLAT_FLOOR,
     VIEW_PAD_TOP, VIEW_PAD_BOTTOM,
-    PET_W, PET_H, HOVER_R, FUSE_MS,
+    PET_W, PET_H, STROKE_DIST,
     HUNGER_PER_MIN, FEED_AMOUNT, FEED_XP, LEVEL_XP, MAX_LEVEL,
     HUNGER_HUNGRY, HUNGER_STARVING,
     ENERGY_START, ENERGY_REST_MIN, ENERGY_RUN_SEC, ENERGY_SLEEP_MIN, ENERGY_LOW, ENERGY_WAKE, ENERGY_TIRED,
@@ -27,17 +27,15 @@
   // ---------- состояние ----------
   let enabled = true;
   let mode = 'idle';          // idle | wander | approach | beg | happy
-  let busy = false;           // занят анимацией (пакость/еда/взрыв)
+  let busy = false;           // занят анимацией (пакость/еда)
   let px = 80, py = 0, tx = 80, ty = 0, face = 1;
   let happyUntil = 0, wanderUntil = 0;
   let hiddenAt = 0, lastHref = location.href;
   let lastSave = 0, lastTick = 0;
   let nextMischief = 0;
   let hopPhase = 0, hopY = 0, prevPx = 80, prevPy = 0;
-  let fuseMs = 0, explodeCooldown = 0;
-  let boomActive = false, debris = [], boomHidden = [];
-  let flung = false, flungUntil = 0, fakeX = 0, fakeY = 0, cornerIdx = 0;
   let mouseX = 0, mouseY = 0;
+  let paused = false;         // ⏸ пауза (попап): замерла на месте, автодействия спят; статы идут (wall-clock), явные клики работают
   let roam = true;            // ходит/бегает сама (переключается в настройках)
   let running = false, runUntil = 0, nextRunDecide = 0, runMul = 1;
   let dragging = false, dragOffX = 0, dragOffY = 0, grabPx = 0, grabPy = 0, didDrag = false;
@@ -187,8 +185,6 @@
         </div>
       </div>
     </div>
-    <div class="twtr-fakecursor" id="twtr-fakecursor"><svg viewBox="0 0 24 24" width="22" height="22">
-      <path d="M3 2 L3 20 L8 15 L11 22 L14 21 L11 14 L18 14 Z" fill="#fff" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg></div>
     <div class="twtr-pet is-walking" id="twtr-pet">
       <div class="twtr-pet__bubble" id="twtr-pet-bubble">❤?</div>
       <div class="twtr-pet-sign" id="twtr-pet-sign" hidden></div>
@@ -227,7 +223,6 @@
   const dlgList = root.querySelector('#twtr-dlg-list');
   const dlgVideo = root.querySelector('#twtr-dlg-video');
   const dlgCare = root.querySelector('#twtr-dlg-care');
-  const fakeCursor = root.querySelector('#twtr-fakecursor');
   const sprite = root.querySelector('#twtr-sprite');
   const frameEls = {};                                   // все кадры лежат слоями-картинками, переключаем видимость (без мерцания от смены src)
   // (заполняется ниже из CAT_SETS — по одному <img> на кадр)
@@ -635,7 +630,7 @@
     pet.classList.toggle('is-happy', m === 'happy');
     bubble.classList.toggle('show', m === 'happy');
   }
-  function resetToWander() { fuseMs = 0; pet.classList.remove('is-fuse'); setMode('wander'); pickWanderTarget(); }
+  function resetToWander() { setMode('wander'); pickWanderTarget(); }
 
   // ОГНЕННАЯ форма на время скачивания: качается видео -> Яся замирает и горит, скачалось -> обычное состояние.
   function setDownloading(on) {
@@ -803,7 +798,7 @@
     setTimeout(() => { busy = false; setMode('wander'); }, 1200);
   }
 
-  // ---------- ВЗРЫВ по наведению (крипер!) ----------
+  // ---------- частицы (поощрение в играх и заботе) ----------
   function spawnParticles(color, count) {
     const cx = px + PET_W / 2, cy = py + PET_H / 2;
     for (let i = 0; i < count; i++) {
@@ -815,123 +810,6 @@
       setTimeout(() => p.remove(), 650);
     }
   }
-  // крипера разносит на пиксельные блоки во все стороны (остаются до взмаха мышью)
-  function spawnBlocks(cx, cy) {
-    const colors = ['#6cba43', '#4f9b34', '#3c7a2c', '#7bd16a', '#14110f'];
-    for (let i = 0; i < 26; i++) {
-      const b = document.createElement('div'); b.className = 'twtr-block';
-      const sz = 5 + Math.random() * 8;
-      b.style.width = sz + 'px'; b.style.height = sz + 'px';
-      b.style.background = colors[Math.floor(Math.random() * colors.length)];
-      b.style.left = cx + 'px'; b.style.top = cy + 'px';
-      root.appendChild(b);
-      const ang = Math.random() * Math.PI * 2, dist = 30 + Math.random() * 130;
-      const dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist * 0.7 + 30 + Math.random() * 70;
-      const rot = Math.random() * 720 - 360;
-      requestAnimationFrame(() => { b.style.transform = `translate(${dx.toFixed(0)}px, ${dy.toFixed(0)}px) rotate(${rot.toFixed(0)}deg)`; });
-      debris.push(b);
-    }
-  }
-
-  // буквы рядом с эпицентром РАЗЛЕТАЮТСЯ: оригинал прячем (обратимо), летят копии
-  function scatterLetters(cx, cy) {
-    let count = 0;
-    const els = new Set();
-    for (let i = 0; i < 16; i++) {
-      const ax = cx + (Math.random() * 2 - 1) * 200, ay = cy + (Math.random() * 2 - 1) * 200;
-      const el = document.elementFromPoint(ax, ay);
-      if (el && el.nodeType === 1 && el !== pet && !root.contains(el) && el.textContent && el.textContent.trim()) els.add(el);
-    }
-    for (const el of els) {
-      if (count >= 90) break;
-      const er = el.getBoundingClientRect();
-      if (er.height > 160 || el.querySelector('img,svg,video,canvas')) continue; // только текстовые run-ы, не контейнеры
-      const cs = getComputedStyle(el);
-      const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (n) => /\S/.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });
-      let node, made = false;
-      while ((node = tw.nextNode()) && count < 90) {
-        const s = node.nodeValue;
-        for (let i = 0; i < s.length && count < 90; i++) {
-          if (!/\S/.test(s[i])) continue;
-          const range = document.createRange(); range.setStart(node, i); range.setEnd(node, i + 1);
-          const r = range.getBoundingClientRect();
-          if (!r.width) continue;
-          const lx = r.left + r.width / 2, ly = r.top + r.height / 2, d = Math.hypot(lx - cx, ly - cy);
-          if (d > 330) continue;
-          const ch = document.createElement('div'); ch.className = 'twtr-block-letter'; ch.textContent = s[i];
-          ch.style.left = r.left + 'px'; ch.style.top = r.top + 'px';
-          ch.style.fontFamily = cs.fontFamily; ch.style.fontSize = cs.fontSize; ch.style.fontWeight = cs.fontWeight; ch.style.color = cs.color;
-          root.appendChild(ch);
-          const ang = Math.atan2(ly - cy, lx - cx) + (Math.random() - 0.5) * 0.8;
-          const force = Math.max(45, 240 - d * 0.7) + Math.random() * 60;   // ближе к центру — дальше летит
-          const dx = Math.cos(ang) * force, dy = Math.sin(ang) * force + 30, rot = Math.random() * 720 - 360;
-          requestAnimationFrame(() => { ch.style.transform = `translate(${dx.toFixed(0)}px, ${dy.toFixed(0)}px) rotate(${rot.toFixed(0)}deg)`; });
-          debris.push(ch); count++; made = true;
-        }
-      }
-      if (made) { boomHidden.push({ el, v: el.style.visibility }); el.style.visibility = 'hidden'; } // прячем оригинал
-    }
-  }
-
-  function explode() {
-    fuseMs = 0; pet.classList.remove('is-fuse');
-    explodeCooldown = now() + 9000;
-    busy = true; boomActive = true;
-    const cx = px + PET_W / 2, cy = py + PET_H / 2;
-    pet.classList.add('is-boom');
-    scatterLetters(cx, cy);   // сначала буквы (пока блоки не перекрыли точки), потом блоки
-    spawnBlocks(cx, cy);
-    setTimeout(() => { pet.style.visibility = 'hidden'; pet.classList.remove('is-boom'); }, 320);
-    startFling();   // курсор улетает по углам; всё застывает до взмаха мышью
-  }
-
-  // взмахнул мышью -> убираем весь разлетевшийся мусор, возвращаем курсор и крипера
-  function clearBoom() {
-    if (!boomActive) return;
-    boomActive = false;
-    endFling();
-    for (const el of debris) { el.style.transition = 'opacity .3s, transform .3s'; el.style.opacity = '0'; const e = el; setTimeout(() => e.remove(), 320); }
-    debris = [];
-    for (const h of boomHidden) { try { h.el.style.visibility = h.v; } catch (_) {} }   // вернуть оригинальные буквы
-    boomHidden = [];
-    px = 40 + Math.random() * (window.innerWidth - 80 - PET_W);
-    py = window.innerHeight - PET_H - 40; tx = px; ty = py; prevPx = px; prevPy = py;
-    pet.style.visibility = '';
-    busy = false; setMode('happy'); happyUntil = now() + 600;
-  }
-
-  // ---------- курсор «улетает по углам» ----------
-  let noCursorStyle = null;
-  function injectNoCursor() {
-    if (noCursorStyle) return;
-    noCursorStyle = document.createElement('style');
-    noCursorStyle.textContent = '*{cursor:none !important}';
-    document.documentElement.appendChild(noCursorStyle);
-  }
-  function removeNoCursor() { if (noCursorStyle) { noCursorStyle.remove(); noCursorStyle = null; } }
-  function startFling() {
-    flung = true; flungUntil = now() + 8000;
-    injectNoCursor();
-    fakeX = mouseX; fakeY = mouseY; cornerIdx = 0;
-    fakeCursor.style.opacity = '1'; fakeCursor.style.display = 'block';
-  }
-  function updateFling() {
-    if (now() > flungUntil) { clearBoom(); return; }   // страховка: само развеется
-    const m = 26;
-    const corners = [{ x: m, y: m }, { x: window.innerWidth - m, y: m }, { x: window.innerWidth - m, y: window.innerHeight - m }, { x: m, y: window.innerHeight - m }];
-    const c = corners[cornerIdx];
-    fakeX += (c.x - fakeX) * 0.14; fakeY += (c.y - fakeY) * 0.14;
-    if (Math.hypot(c.x - fakeX, c.y - fakeY) < 28) cornerIdx = (cornerIdx + 1) % 4;
-    fakeCursor.style.transform = `translate(${fakeX}px, ${fakeY}px)`;
-  }
-  function endFling() {
-    flung = false;
-    fakeCursor.style.transform = `translate(${mouseX}px, ${mouseY}px)`;
-    fakeCursor.style.opacity = '0';
-    setTimeout(() => { fakeCursor.style.display = 'none'; }, 220);
-    removeNoCursor();
-  }
-
   // ---------- перетаскивание мышкой ----------
   pet.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
@@ -948,6 +826,7 @@
     if (!dragging) return;
     dragging = false; pet.classList.remove('is-grabbed'); jumping = false;
     standLedge = null;                                   // оторвали от опоры — летит/падает
+    if (paused) { thrown = false; vx = 0; vy = 0; saveState(); return; }   // пауза: просто переставили на новое место, без инерции (иначе зависнет в воздухе — ветка paused не зовёт физику)
     const power = throwMul;                              // 0..2 (ползунок «Инерция» 0..200%)
     const gain = power <= 1 ? power : 1 + (power - 1) * 9;   // нелинейно: 0%->0, 100%->×1, 200%->×10 (на максе лёгкий толчок отшвыривает)
     const vmax = 34 + 58 * power;                        // ПОТОЛОК скорости растёт с инерцией (34..150); раньше фикс ±38 «съедал» разницу
@@ -958,6 +837,19 @@
     thrown = true;                                       // дальше physics доводит до приземления (учитывая инерцию)
     if (pendingMad) { pendingMad = false; playEmote('angry', 3000); say(pick(MAD_CALLS), 1900); }   // забрали от кино -> ЗЛИТСЯ; эмоция стартует на ОТПУСКАНИИ (иначе за время долгого перетаскивания окно успеет истечь и злость не покажется)
     saveState();
+  });
+
+  // ---------- поглаживание мышью ----------
+  // водишь курсором по питомцу (не таща) — накапливается «глажка»; STROKE_DIST px = одно «погладить».
+  // careAction('pet') сам держит кулдаун ACT_COOLDOWN_MS, так что спам движений не накручивает статы.
+  let strokeAcc = 0, strokeLX = 0, strokeLY = 0, strokeLastT = 0;
+  pet.addEventListener('mousemove', (e) => {
+    if (dragging || thrown || busy || gameActive || downloading || watching || hiding) return;   // сидящую у кино/спрятанную случайной мышью не дёргаем
+    const t = now();
+    if (t - strokeLastT > 600) strokeAcc = 0;            // пауза в движении — глажка начинается заново
+    else strokeAcc += Math.hypot(e.clientX - strokeLX, e.clientY - strokeLY);
+    strokeLastT = t; strokeLX = e.clientX; strokeLY = e.clientY;
+    if (strokeAcc >= (STROKE_DIST || 260)) { strokeAcc = 0; careAction('pet'); }
   });
 
   // ---------- меню настроек (размер) ----------
@@ -993,6 +885,17 @@
     e.stopPropagation(); roam = !roam; applyRoam();
     Yasia.storage.syncSet({ roam });
   });
+  function applyPaused() {   // ⏸ пауза (тумблер в попапе): замереть на месте, не пряча; статы wall-clock идут дальше
+    if (paused) {
+      if (gameActive) { try { Yasia.events.emit('game:stop'); } catch (_) {} }   // игру честно завершаем (иначе зомби/мясо зависнут на экране)
+      running = false; jumping = false; climbing = false; falling = false; thrown = false; vx = 0; vy = 0;
+      pet.classList.remove('is-moving', 'is-jump');
+      if (mode !== 'happy') setMode('idle');
+    } else {
+      standLedge = null; nextJumpDecide = 0;             // опору переоценит платформер
+      if (roam && mode === 'idle') setMode('wander');
+    }
+  }
 
   // эмоции для подписи в облачке. DEFAULT_EMOS = фолбэк, если манифест не загрузился; applyManifest перестраивает из манифеста.
   const EMO_EXTRA = [   // не-эмоции, но тоже тест-кнопки emo:<key> с подписью (движение, проигрываемое как «эмоция» в тесте)
@@ -1549,14 +1452,72 @@
     const p = detectPlatform();
     const known = (p === 'tiktok' || p === 'twitter' || p === 'instagram' || p === 'youtube');
     const hintStyle = 'font-size:11px;color:#536471;margin-top:6px;line-height:1.35;';
-    if (!known && !extractGeneric()) { dlgVideo.innerHTML = `<div class="twtr-dlg-hint" style="${hintStyle}">${t.novideo}</div>`; return; }
+    const imgBtn = `<button class="twtr-dlg-dl" id="twtr-dlg-dli" type="button">${t.dlImgsBtn}</button>`;
+    const wireImgs = () => { const b = dlgVideo.querySelector('#twtr-dlg-dli'); if (b) b.addEventListener('click', (e) => { e.stopPropagation(); doDownloadImages(e.currentTarget); }); };
+    if (!known && !extractGeneric()) {   // видео нет — но картинки со страницы скачать можно всегда
+      dlgVideo.innerHTML = `<div class="twtr-dlg-hint" style="${hintStyle}">${t.novideo}</div>${imgBtn}<div class="twtr-dlg-status" id="twtr-dlg-status"></div>`;
+      wireImgs(); return;
+    }
     const name = { tiktok: 'TikTok', twitter: 'Twitter / X', instagram: 'Instagram', youtube: 'YouTube' }[p] || (dlgLang === 'en' ? 'Video' : 'Видео');
     const wm = p === 'tiktok' ? t.wmTt : (p === 'youtube' ? t.wmYt : '');
     const hint = (p === 'tiktok' || p === 'instagram') ? `<div class="twtr-dlg-hint" style="${hintStyle}">${t.hintShare}</div>`
       : (p === 'youtube' ? `<div class="twtr-dlg-hint" style="${hintStyle}">${t.hintYt}</div>` : '');
     const linkField = (p === 'tiktok' || p === 'instagram' || p === 'twitter') ? `<input class="twtr-dlg-link" id="twtr-dlg-link" type="text" placeholder="${t.linkPh}">` : '';
-    dlgVideo.innerHTML = `<span class="twtr-dlg-plat">🎬 ${name} — ${t.onpage}</span>${linkField}<button class="twtr-dlg-dl" id="twtr-dlg-dl" type="button">${t.dlbtn}${wm}</button><div class="twtr-dlg-status" id="twtr-dlg-status"></div>${hint}`;
+    dlgVideo.innerHTML = `<span class="twtr-dlg-plat">🎬 ${name} — ${t.onpage}</span>${linkField}<button class="twtr-dlg-dl" id="twtr-dlg-dl" type="button">${t.dlbtn}${wm}</button>${imgBtn}<div class="twtr-dlg-status" id="twtr-dlg-status"></div>${hint}`;
     dlgVideo.querySelector('#twtr-dlg-dl').addEventListener('click', (e) => { e.stopPropagation(); doDownload(e.currentTarget); });
+    wireImgs();
+  }
+
+  // ---------- скачивание картинок ----------
+  // На X/Twitter — фото твитов (pbs.twimg.com/media) в максимальном качестве (name=orig);
+  // на остальных сайтах — крупные видимые <img>. До 8 штук, ближние к центру экрана первыми.
+  function collectPageImages() {
+    const seen = new Set(), out = [];
+    const midY = window.innerHeight / 2;
+    const cand = [];
+    for (const im of document.querySelectorAll('img')) {
+      const r = im.getBoundingClientRect();
+      if (r.width < 120 || r.height < 120 || r.bottom < 0 || r.top > window.innerHeight) continue;   // мелочь (аватарки/смайлы) и вне экрана
+      const src = im.currentSrc || im.src || '';
+      if (!/^https?:/.test(src) || /\.svg(\?|$)/i.test(src)) continue;
+      cand.push({ src, mid: (r.top + r.bottom) / 2 });
+    }
+    cand.sort((a, b) => Math.abs(a.mid - midY) - Math.abs(b.mid - midY));
+    for (const c of cand) {
+      let u = c.src;
+      if (/pbs\.twimg\.com\/media\//.test(u)) { try { const x = new URL(u); x.searchParams.set('name', 'orig'); u = x.toString(); } catch (_) {} }   // X отдаёт оригинал по name=orig
+      else if (isTwitter) continue;                       // на X берём только фото твитов (не аватарки/баннеры)
+      if (seen.has(u)) continue;
+      seen.add(u); out.push(u);
+      if (out.length >= 8) break;
+    }
+    return out;
+  }
+  function imageFilename(u, i) {
+    let ext = 'jpg';
+    try { const x = new URL(u); const f = x.searchParams.get('format'); const m = x.pathname.match(/\.(jpe?g|png|webp|gif)(\?|$)/i); ext = ((f || (m && m[1]) || 'jpg') + '').toLowerCase(); } catch (_) {}
+    return 'yasya_img_' + Date.now() + '_' + (i + 1) + '.' + ext;
+  }
+  async function doDownloadImages(btn) {
+    const status = dlgVideo.querySelector('#twtr-dlg-status');
+    const setStatus = (cls, txt) => { if (status) { status.className = 'twtr-dlg-status ' + cls; status.textContent = txt; } };
+    const T = tr();
+    if (Yasia.flags && !Yasia.flags.enabled('mediaDownload')) { setStatus('err', T.stDlOff); return; }
+    const urls = collectPageImages();
+    if (!urls.length) { setStatus('err', T.stNoImgs); return; }
+    if (Yasia.guard && Yasia.guard.needDownloadConfirm()) {   // СТРАЖ: как у видео — частые скачивания/safe-режим требуют явного «да»
+      const ok = await Yasia.guard.confirm({ text: T.gdDlMany, yes: T.gdYes, no: T.gdNo });
+      if (!ok) { setStatus('', ''); return; }
+    }
+    if (Yasia.guard) Yasia.guard.noteDownload();
+    btn.disabled = true; setStatus('', T.stImgsDl + urls.length + '…');
+    let okN = 0;
+    for (let i = 0; i < urls.length; i++) {
+      try { const r = await chrome.runtime.sendMessage({ type: 'YASIA_DOWNLOAD', url: urls[i], filename: imageFilename(urls[i], i) }); if (r && r.ok) okN++; } catch (_) {}
+    }
+    btn.disabled = false;
+    if (okN) { setStatus('ok', T.stImgsOk + okN); say(tr().sCatch, 1800); }
+    else setStatus('err', T.stFail + 'images');
   }
 
   // ---------- скил «Забота»: 7 действий + строка состояния ----------
@@ -1921,7 +1882,6 @@
     const dt = lastTick ? Math.min(t - lastTick, 64) : 16; lastTick = t;
 
     if (sayUntil && t > sayUntil) { bubble.classList.remove('show', 'talk'); sayUntil = 0; }
-    if (flung) updateFling();
     if (busy) { render(); return; }
 
     if (location.href !== lastHref) { lastHref = location.href; if (gameActive) { try { Yasia.events.emit('game:stop'); } catch (_) {} } resetToWander(); }
@@ -1940,6 +1900,8 @@
       peakVx = Math.abs(ivx) > Math.abs(peakVx) ? ivx : peakVx * 0.85;   // пик скорости кисти (чтобы лёгкий толчок не терялся в сглаживании)
       peakVy = Math.abs(ivy) > Math.abs(peakVy) ? ivy : peakVy * 0.85;
       lastDragX = px; lastDragY = py;
+    } else if (paused) {                                 // ⏸ пауза: стоит на месте; перетаскивание и явные клики работают, автодействия спят
+      if (mode === 'happy' && t > happyUntil) setMode('idle');
     } else if (gameActive) {                             // идёт мини-игра -> ведём питомца к игровой цели и шлём 'game:tick' (логика в systems/games.js)
       gameTick(t, dt);
     } else if (downloading) {                            // качается видео -> стоит на месте и горит (огненная форма)
@@ -2017,11 +1979,13 @@
       if (t > nextChatter) { nextChatter = t + 9000 + Math.random() * 12000; if (!Yasia.guard || Yasia.guard.allows('chatter')) say(Math.random() < 0.32 ? pick(SP('event')) : pick(SP('idle')), 2000); }   // болтовня — по режиму (страж)
     }
 
-    careTick(t, dt);    // статы: затухание/восстановление, амбиент, авто-сохранение, реплики по состоянию
-    popcornTick(t);     // пока играет видео — поток зёрнышек попкорна (вылетают, падают, лежат ~2с, тают)
+    if (!paused) {
+      careTick(t, dt);    // статы: затухание/восстановление, амбиент, авто-сохранение, реплики по состоянию
+      popcornTick(t);     // пока играет видео — поток зёрнышек попкорна (вылетают, падают, лежат ~2с, тают)
+    }
 
     // голодный — иногда просит мяса
-    if (!busy && mode !== 'happy' && currentHunger() > 78 && Math.random() < 0.003) {
+    if (!paused && !busy && mode !== 'happy' && currentHunger() > 78 && Math.random() < 0.003) {
       bubble.textContent = '🍖'; bubble.classList.add('show');
       setTimeout(() => { if (bubble.textContent === '🍖') bubble.classList.remove('show'); }, 1600);
     }
@@ -2148,7 +2112,7 @@
   const isTwitter = (() => { const h = location.hostname; return h === 'x.com' || h.endsWith('.x.com') || h === 'twitter.com' || h.endsWith('.twitter.com'); })();
 
   try {
-    Yasia.storage.syncGet({ enabled: true, hero: 'catgirl', scale: 1, roam: true, walkSpeed: 1, throwPower: 1 }, (s) => { enabled = s.enabled; hero = s.hero; userScale = s.scale || 1; roam = s.roam; userSpeed = s.walkSpeed || 1; throwMul = (typeof s.throwPower === 'number') ? s.throwPower : 1; applyEnabled(); applyHero(); applyScale(); applySpeed(); applyInertia(); applyRoam(); });
+    Yasia.storage.syncGet({ enabled: true, paused: false, hero: 'catgirl', scale: 1, roam: true, walkSpeed: 1, throwPower: 1 }, (s) => { enabled = s.enabled; paused = !!s.paused; hero = s.hero; userScale = s.scale || 1; roam = s.roam; userSpeed = s.walkSpeed || 1; throwMul = (typeof s.throwPower === 'number') ? s.throwPower : 1; applyEnabled(); applyHero(); applyScale(); applySpeed(); applyInertia(); applyRoam(); applyPaused(); });
     Yasia.storage.localGet({
       hunger: 0, hungerAt: Date.now(), xp: 0,
       energy: ENERGY_START, energyAt: Date.now(), energyResting: false, bond: BOND_START, bondAt: Date.now(), moodBias: 0, moodBiasAt: Date.now(),
@@ -2160,6 +2124,7 @@
     });
     Yasia.storage.onChanged((ch) => {
       if (ch.enabled) { enabled = ch.enabled.newValue; applyEnabled(); }
+      if (ch.paused) { paused = !!ch.paused.newValue; applyPaused(); }
       if (ch.hero) { hero = ch.hero.newValue; applyHero(); }
       if (ch.scale) { userScale = ch.scale.newValue || 1; applyScale(); }
       if (ch.walkSpeed) { userSpeed = ch.walkSpeed.newValue || 1; applySpeed(); }
@@ -2199,7 +2164,6 @@
   window.addEventListener('resize', () => { px = clamp(px, 0, window.innerWidth - PET_W - 8); py = clamp(py, 0, window.innerHeight - PET_H - 8); });
 
   window.addEventListener('mousemove', (e) => {
-    if (boomActive && Math.hypot(e.clientX - mouseX, e.clientY - mouseY) > 4) clearBoom(); // взмахнул — всё развеялось
     mouseX = e.clientX; mouseY = e.clientY;
   });
 

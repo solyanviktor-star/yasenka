@@ -9,3 +9,6 @@ fgspec.json
 *.log
 *.zip
 node_modules/
+
+# локальные рабочие заметки (не часть расширения)
+V1.0-CHECKLIST.md

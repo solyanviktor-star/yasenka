@@ -90,6 +90,11 @@
     <input type="checkbox" id="enabled">
   </label>
 
+  <label class="row">
+    <span id="t-paused">Pause (freeze in place)</span>
+    <input type="checkbox" id="paused">
+  </label>
+
   <!-- AI brain (Hermes / GPT) -->
   <div class="ai-box">
     <div class="ai-head">
@@ -158,6 +163,25 @@
 
   <button class="feed" id="feed"><img src="items/meat.png" alt=""><span id="t-feed">Feed meat</span></button>
 
+  <!-- фиче-флаги: способности можно включать/выключать (core/flags.js, storage.sync yasiaFlags) -->
+  <details class="dev">
+    <summary id="t-flags">🧩 Features</summary>
+    <div id="flags"></div>
+    <p class="hint" id="t-flags-hint"></p>
+  </details>
+
+  <!-- экспорт/импорт состояния: статы, заметки, память, настройки. Ключи ИИ (yasiaAI) НЕ выгружаются. -->
+  <details class="dev">
+    <summary id="t-backup">💾 Backup</summary>
+    <div class="ai-row" style="margin-top:8px">
+      <button class="ai-test" id="exportBtn" type="button">Export</button>
+      <button class="ai-test" id="importBtn" type="button">Import</button>
+    </div>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+    <div class="ai-msg" id="backup-msg"></div>
+    <p class="hint" id="t-backup-hint"></p>
+  </details>
+
   <!-- режим разработчика: служебные тумблеры (не способности питомца) -->
   <details class="dev">
     <summary id="t-dev">🛠 Developer</summary>
@@ -171,6 +195,9 @@
   <p class="hint" id="t-hint"></p>
 
   <script src="core/config.js"></script>
+  <script src="core/storage.js"></script>
+  <script src="core/events.js"></script>
+  <script src="core/flags.js"></script>
   <script src="core/heroes.js"></script>
   <script src="popup.js"></script>
 </body>

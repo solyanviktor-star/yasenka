@@ -60,13 +60,9 @@
 @keyframes twtr-breathe { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(1.03); } }
 @keyframes twtr-happy { 0% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-12px) rotate(-8deg); } 60% { transform: translateY(-3px) rotate(8deg); } 100% { transform: translateY(0) rotate(0); } }
 @keyframes twtr-chomp { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(.82) scaleX(1.08); } }
-@keyframes twtr-fuse { 0%,49% { filter: none; } 50%,100% { filter: brightness(2.4) saturate(.4); } }
-@keyframes twtr-boom { 0% { transform: scale(1); filter: brightness(1); opacity: 1; } 45% { transform: scale(1.7); filter: brightness(3.5); } 100% { transform: scale(2.4); filter: brightness(5); opacity: 0; } }
 
 .twtr-pet.is-happy   .twtr-pet__char { animation: twtr-happy .6s ease; }
 .twtr-pet.is-chomp   .twtr-pet__char { animation: twtr-chomp .25s ease-in-out 2; }
-.twtr-pet.is-fuse    .twtr-pet__char { animation: twtr-fuse .34s steps(1) infinite; }
-.twtr-pet.is-boom    .twtr-pet__char { animation: twtr-boom .32s ease-out forwards; }
 .twtr-pet.is-glow    .twtr-pet__char { filter: drop-shadow(0 0 6px rgba(255,180,60,.9)); }
 .twtr-pet.is-noema.is-glow .twtr-pet__char { filter: drop-shadow(0 0 6px rgba(220,225,235,.95)); }  /* Noema Ч/Б — нейтральное бело-серебристое свечение, без рыжего */
 /* ОГНЕННАЯ форма (скачивание) — пульсирующее пламенное свечение поверх кадров огня */
@@ -192,23 +188,8 @@
 .twtr-test-btn:hover { background: #1d9bf0; color: #fff; }
 .twtr-test-btn:active { transform: scale(.94); }
 
-/* ---------- фейковый курсор (улетает по углам при взрыве) ---------- */
-.twtr-fakecursor { position: absolute; top: 0; left: 0; display: none; pointer-events: none; z-index: 2147483003; transition: opacity .2s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
-
 /* ---------- частицы левелапа ---------- */
 .twtr-particle { position: absolute; width: 7px; height: 7px; border-radius: 1px; pointer-events: none; z-index: 2147482999; transition: transform .6s ease-out, opacity .6s ease-out; }
-
-/* ---------- взрыв крипера: пиксельные блоки + разлетевшиеся буквы (висят до взмаха) ---------- */
-.twtr-block {
-  position: absolute; pointer-events: none; z-index: 2147482998; border-radius: 1px;
-  box-shadow: inset -2px -2px 0 rgba(0,0,0,.22), 0 0 0 1px rgba(0,0,0,.3);
-  transition: transform .55s cubic-bezier(.2,.7,.3,1);
-}
-.twtr-block-letter {
-  position: absolute; pointer-events: none; z-index: 2147482998; line-height: 1;
-  transition: transform .55s cubic-bezier(.2,.7,.3,1);
-  text-shadow: 0 1px 2px rgba(0,0,0,.4);
-}
 
 /* ---------- мясо (кормление) ---------- */
 .twtr-pet-meat { position: absolute; width: 36px; height: 36px; pointer-events: none; z-index: 2147482999; transform: translate(0,0) scale(.6); transition: transform .5s cubic-bezier(.3,1,.4,1); image-rendering: auto; }

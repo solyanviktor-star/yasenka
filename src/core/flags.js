@@ -41,9 +41,28 @@
       try {
         Yasia.storage.syncGet({ yasiaFlags: null }, (s) => {
           if (s && s.yasiaFlags && typeof s.yasiaFlags === 'object') cur = Object.assign({}, DEFAULTS, s.yasiaFlags);
+          this.watch();
           if (cb) cb(Object.assign({}, cur));
         });
       } catch (_) { if (cb) cb(Object.assign({}, cur)); }
+    },
+    // внешние правки (попап пишет storage.sync yasiaFlags) -> применяем диф и эмитим flags:changed,
+    // чтобы registry.watchFlags() стартовал/остановил системы вживую. Свои же set() дифа не дают (cur уже новый).
+    watch() {
+      if (this._watching || !(Yasia.storage && Yasia.storage.onChanged)) return;
+      this._watching = true;
+      try {
+        Yasia.storage.onChanged((ch, area) => {
+          if (area !== 'sync' || !ch || !ch.yasiaFlags) return;
+          const nv = (ch.yasiaFlags.newValue && typeof ch.yasiaFlags.newValue === 'object') ? ch.yasiaFlags.newValue : {};
+          const next = Object.assign({}, DEFAULTS, nv);
+          for (const k of Object.keys(DEFAULTS)) {
+            if (cur[k] === next[k]) continue;
+            cur[k] = next[k];
+            try { Yasia.events && Yasia.events.emit('flags:changed', { name: k, on: cur[k], all: Object.assign({}, cur) }); } catch (_) {}
+          }
+        });
+      } catch (_) {}
     },
   };
 })();

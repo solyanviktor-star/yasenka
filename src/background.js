@@ -27,10 +27,10 @@ function injectAll() {
 
 chrome.runtime.onInstalled.addListener(injectAll);
 
-// ---------- скачивание видео со страницы (по запросу из pet.js) ----------
+// ---------- скачивание медиа со страницы (по запросу из pet.js) ----------
 function sanitizeName(n) {
   let s = String(n || 'video').replace(/[\\/:*?"<>| -]+/g, '_').replace(/^\.+/, '').slice(0, 150) || 'video';
-  if (!/\.(mp4|webm|mov|m4v)$/i.test(s)) s += '.mp4';   // всегда видеорасширение (иначе Chrome по html-телу делает .txt)
+  if (!/\.(mp4|webm|mov|m4v|jpe?g|png|webp|gif)$/i.test(s)) s += '.mp4';   // известное медиарасширение оставляем, иначе видеодефолт (Chrome по html-телу делает .txt)
   return s;
 }
 
