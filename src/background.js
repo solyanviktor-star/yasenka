@@ -2,8 +2,10 @@
 // во ВСЕ уже открытые вкладки (новые загрузки страниц подхватываются content_scripts
 // автоматически). Так «один питомец на все вкладки» работает без ручной перезагрузки.
 
-const CSS = ['src/pet.css'];
-const JS = ['src/core/config.js', 'src/core/storage.js', 'src/core/events.js', 'src/pet.js'];
+// списки берём ИЗ МАНИФЕСТА (content_scripts[0] — универсальный набор) -> единственный источник правды, не разъезжается с manifest.json
+const MF_CS = (chrome.runtime.getManifest().content_scripts || [])[0] || {};
+const CSS = MF_CS.css || ['src/pet.css'];
+const JS = MF_CS.js || ['src/core/config.js', 'src/pet.js'];   // фолбэк на минимум, если манифест внезапно без content_scripts
 
 function removeOld() {
   const r = document.getElementById('twtr-pet-root');
@@ -25,10 +27,10 @@ function injectAll() {
 
 chrome.runtime.onInstalled.addListener(injectAll);
 
-// ---------- скачивание видео со страницы (по запросу из pet.js) ----------
+// ---------- скачивание медиа со страницы (по запросу из pet.js) ----------
 function sanitizeName(n) {
   let s = String(n || 'video').replace(/[\\/:*?"<>| -]+/g, '_').replace(/^\.+/, '').slice(0, 150) || 'video';
-  if (!/\.(mp4|webm|mov|m4v)$/i.test(s)) s += '.mp4';   // всегда видеорасширение (иначе Chrome по html-телу делает .txt)
+  if (!/\.(mp4|webm|mov|m4v|jpe?g|png|webp|gif)$/i.test(s)) s += '.mp4';   // известное медиарасширение оставляем, иначе видеодефолт (Chrome по html-телу делает .txt)
   return s;
 }
 
@@ -153,8 +155,389 @@ async function fetchText(msg) {
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
 
+// ---------- ИИ-мозг v0.8: прокси к OpenAI-совместимому серверу (Hermes / OpenAI) ----------
+// Запрос идёт ОТСЮДА (из service worker), а не из content script: фетч в origin расширения с host_permissions
+// освобождён от CORS и mixed-content (https-страница X -> http://localhost Hermes — ок). Ключи приходят из настроек расширения.
+async function aiChat(msg) {
+  try {
+    const base = String(msg.baseUrl || '').replace(/\/+$/, '');
+    if (!base) return { ok: false, error: 'no server address' };
+    const url = base + (msg.path || '/v1/chat/completions');
+    const headers = { 'Content-Type': 'application/json' };
+    if (msg.apiKey) headers['Authorization'] = 'Bearer ' + msg.apiKey;
+    if (msg.sessionKey) headers['X-Hermes-Session-Key'] = msg.sessionKey;   // «память» Hermes между запросами (OpenAI игнорит лишний заголовок)
+    let messages = msg.messages || [];
+    if (msg.imageUrl) {   // мультимодал: скрин страницы -> в последнее user-сообщение (OpenAI chat-формат)
+      messages = messages.slice();
+      for (let i = messages.length - 1; i >= 0; i--) { if (messages[i].role === 'user') { messages[i] = { role: 'user', content: [{ type: 'text', text: String(messages[i].content || '') }, { type: 'image_url', image_url: { url: msg.imageUrl } }] }; break; } }
+    }
+    const body = JSON.stringify({ model: msg.model || 'hermes-agent', messages, stream: false });
+    const ctrl = new AbortController();
+    const to = setTimeout(() => { try { ctrl.abort(); } catch (_) {} }, msg.timeoutMs || 120000);
+    let resp;
+    try { resp = await fetch(url, { method: 'POST', headers, body, signal: ctrl.signal }); }
+    finally { clearTimeout(to); }
+    if (!resp.ok) {
+      let detail = ''; try { detail = (await resp.text()).slice(0, 300); } catch (_) {}
+      return { ok: false, status: resp.status, error: 'HTTP ' + resp.status + (detail ? ': ' + detail : '') };
+    }
+    const data = await resp.json();
+    const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (typeof content !== 'string') return { ok: false, error: 'empty response' };
+    return { ok: true, content };
+  } catch (e) {
+    const m = String((e && e.message) || e);
+    return { ok: false, error: /abort/i.test(m) ? 'request timeout' : m };
+  }
+}
+// проверка связи: GET /v1/models с ключом (есть и у Hermes, и у OpenAI)
+async function aiPing(msg) {
+  try {
+    const base = String(msg.baseUrl || '').replace(/\/+$/, '');
+    if (!base) return { ok: false, error: 'no address' };
+    const headers = {}; if (msg.apiKey) headers['Authorization'] = 'Bearer ' + msg.apiKey;
+    const ctrl = new AbortController();
+    const to = setTimeout(() => { try { ctrl.abort(); } catch (_) {} }, 15000);
+    let resp;
+    try { resp = await fetch(base + '/v1/models', { headers, signal: ctrl.signal }); }
+    finally { clearTimeout(to); }
+    if (!resp.ok) return { ok: false, status: resp.status, error: 'HTTP ' + resp.status };
+    let models = []; try { const d = await resp.json(); models = ((d && d.data) || []).map((m) => m && m.id).filter(Boolean); } catch (_) {}
+    return { ok: true, models };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+// ---------- ChatGPT-подписка напрямую: device-code OAuth + Codex-бэкенд (v2.9.0) ----------
+// Логин = device-code (как Hermes `hermes auth`): без localhost-сервера. Запросы к модели идут на закрытый
+// codex-бэкенд (OpenAI Responses API), ПРИКИДЫВАЯСЬ Codex CLI. fetch не даёт ставить User-Agent/originator ->
+// переписываем их через declarativeNetRequest (лучший шанс пройти Cloudflare; TLS-отпечаток не подделать -> возможен 403).
+const CODEX_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
+const CODEX_ISSUER = 'https://auth.openai.com';
+const CODEX_TOKEN_URL = CODEX_ISSUER + '/oauth/token';
+const CODEX_BASE = 'https://chatgpt.com/backend-api/codex';
+const CODEX_DNR_RULE_ID = 9200;
+
+async function ensureCodexHeaderRule() {
+  try {
+    await chrome.declarativeNetRequest.updateSessionRules({
+      removeRuleIds: [CODEX_DNR_RULE_ID],
+      addRules: [{
+        id: CODEX_DNR_RULE_ID, priority: 1,
+        condition: { urlFilter: 'https://chatgpt.com/backend-api/codex', resourceTypes: ['xmlhttprequest'] },
+        action: { type: 'modifyHeaders', requestHeaders: [
+          { header: 'user-agent', operation: 'set', value: 'codex_cli_rs/0.0.0 (Hermes Agent)' },
+          { header: 'originator', operation: 'set', value: 'codex_cli_rs' },
+        ] },
+      }],
+    });
+  } catch (_) {}
+}
+ensureCodexHeaderRule();
+
+function codexAccountId(token) {   // ChatGPT-Account-ID из claim JWT (как codex-rs auth.rs)
+  try {
+    const p = String(token || '').split('.'); if (p.length < 2) return '';
+    let b = p[1].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
+    const claims = JSON.parse(atob(b));
+    return (claims['https://api.openai.com/auth'] || {}).chatgpt_account_id || '';
+  } catch (_) { return ''; }
+}
+async function codexStart() {   // шаг 1: запрос кода устройства
+  try {
+    const r = await fetch(CODEX_ISSUER + '/api/accounts/deviceauth/usercode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: CODEX_CLIENT_ID }) });
+    if (!r.ok) return { ok: false, error: 'HTTP ' + r.status };
+    const d = await r.json();
+    if (!d.user_code || !d.device_auth_id) return { ok: false, error: 'incomplete device response' };
+    return { ok: true, userCode: d.user_code, deviceAuthId: d.device_auth_id, interval: Math.max(3, parseInt(d.interval || '5', 10)), verifyUrl: CODEX_ISSUER + '/codex/device' };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+async function codexExchange(code, verifier) {   // шаг 4: код -> токены
+  const r = await fetch(CODEX_TOKEN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: CODEX_ISSUER + '/deviceauth/callback', client_id: CODEX_CLIENT_ID, code_verifier: verifier }).toString() });
+  if (!r.ok) return { ok: false, error: 'token exchange HTTP ' + r.status };
+  const d = await r.json();
+  if (!d.access_token) return { ok: false, error: 'no access_token' };
+  return { ok: true, pending: false, accessToken: d.access_token, refreshToken: d.refresh_token || '', accountId: codexAccountId(d.access_token) };
+}
+async function codexPoll(msg) {   // шаг 3: опрос; на 200 сразу обмениваем код на токены
+  try {
+    const r = await fetch(CODEX_ISSUER + '/api/accounts/deviceauth/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_auth_id: msg.deviceAuthId, user_code: msg.userCode }) });
+    if (r.status === 403 || r.status === 404) return { ok: true, pending: true };   // ещё не подтвердил вход
+    if (!r.ok) return { ok: false, error: 'HTTP ' + r.status };
+    const d = await r.json();
+    if (!d.authorization_code || !d.code_verifier) return { ok: false, error: 'incomplete auth response' };
+    return await codexExchange(d.authorization_code, d.code_verifier);
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+async function codexRefresh(msg) {
+  try {
+    const r = await fetch(CODEX_TOKEN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: msg.refreshToken, client_id: CODEX_CLIENT_ID }).toString() });
+    if (!r.ok) return { ok: false, status: r.status, error: 'refresh HTTP ' + r.status };
+    const d = await r.json();
+    if (!d.access_token) return { ok: false, error: 'no access_token' };
+    return { ok: true, accessToken: d.access_token, refreshToken: d.refresh_token || msg.refreshToken, accountId: codexAccountId(d.access_token) };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+function extractCodexText(data) {
+  if (!data) return '';
+  if (typeof data.output_text === 'string' && data.output_text) return data.output_text;
+  let out = '';
+  for (const it of (data.output || [])) {
+    if (it && it.type === 'message' && Array.isArray(it.content)) for (const c of it.content) { if (c && (c.type === 'output_text' || c.type === 'text') && typeof c.text === 'string') out += c.text; }
+  }
+  return out;
+}
+function parseCodexSSE(raw) {
+  let out = '';
+  for (const line of String(raw).split(/\r?\n/)) {
+    const s = line.trim(); if (!s.startsWith('data:')) continue;
+    const payload = s.slice(5).trim(); if (!payload || payload === '[DONE]') continue;
+    try { const ev = JSON.parse(payload);
+      if (ev.type === 'response.output_text.delta' && typeof ev.delta === 'string') out += ev.delta;
+      else if (ev.type === 'response.completed' && ev.response) { const f = extractCodexText(ev.response); if (f) out = f; }
+    } catch (_) {}
+  }
+  return out;
+}
+async function codexChat(msg) {   // запрос к модели через codex-бэкенд (OpenAI Responses API)
+  await ensureCodexHeaderRule();
+  try {
+    const token = msg.accessToken; if (!token) return { ok: false, error: 'not signed in' };
+    let instructions = ''; const input = [];
+    for (const m of (msg.messages || [])) {
+      if (m.role === 'system') { instructions = (instructions ? instructions + '\n\n' : '') + String(m.content || ''); continue; }
+      input.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') });
+    }
+    if (!instructions) instructions = 'You are a helpful assistant.';
+    if (msg.imageUrl) {   // мультимодал: прикрепляем скрин страницы к последнему сообщению пользователя
+      let done = false;
+      for (let i = input.length - 1; i >= 0; i--) { if (input[i].role === 'user') { input[i] = { role: 'user', content: [{ type: 'input_text', text: String(input[i].content || '') }, { type: 'input_image', image_url: msg.imageUrl }] }; done = true; break; } }
+      if (!done) input.push({ role: 'user', content: [{ type: 'input_image', image_url: msg.imageUrl }] });
+    }
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'text/event-stream', 'Authorization': 'Bearer ' + token };
+    const acct = msg.accountId || codexAccountId(token); if (acct) headers['ChatGPT-Account-ID'] = acct;
+    const body = JSON.stringify({ model: msg.model || 'gpt-5.5', instructions, input, store: false, stream: true });   // codex-бэкенд ТРЕБУЕТ stream:true -> ответ SSE, собираем parseCodexSSE
+    const ctrl = new AbortController();
+    const to = setTimeout(() => { try { ctrl.abort(); } catch (_) {} }, msg.timeoutMs || 120000);
+    let resp; try { resp = await fetch(CODEX_BASE + '/responses', { method: 'POST', headers, body, signal: ctrl.signal }); } finally { clearTimeout(to); }
+    if (resp.status === 401) return { ok: false, status: 401, error: 'unauthorized' };
+    if (!resp.ok) {
+      let detail = ''; try { detail = (await resp.text()).slice(0, 300); } catch (_) {}
+      const cf = resp.headers.get('cf-mitigated');
+      return { ok: false, status: resp.status, error: 'HTTP ' + resp.status + (cf ? ' (cloudflare ' + cf + ')' : '') + (detail ? ': ' + detail : '') };
+    }
+    const ct = resp.headers.get('content-type') || '';
+    const raw = await resp.text();   // читаем тело один раз
+    let text = '';
+    if (/event-stream/i.test(ct) || /^\s*(event:|data:)/m.test(raw)) text = parseCodexSSE(raw);   // SSE по типу ИЛИ по содержимому
+    else { try { text = extractCodexText(JSON.parse(raw)); } catch (_) { text = parseCodexSSE(raw); } }
+    if (!text) return { ok: false, error: 'empty response' + (raw ? ': ' + raw.slice(0, 200) : '') };
+    return { ok: true, content: text };
+  } catch (e) { const m = String((e && e.message) || e); return { ok: false, error: /abort/i.test(m) ? 'request timeout' : m }; }
+}
+
+// Фоновый device-code вход. Опрос ведём через chrome.alarms -> переживает И засыпание service worker'а (MV3 глушит setTimeout-цикл ~30с),
+// И закрытие любого окна (panel/popup). Состояние и токены — в storage.local; токен сохраняется сам в 'yasiaAI'.
+const CODEX_LOGIN_KEY = '_codexLogin';
+function codexLoginGet() { return new Promise((res) => { try { chrome.storage.local.get({ [CODEX_LOGIN_KEY]: null }, (s) => res((s && s[CODEX_LOGIN_KEY]) || null)); } catch (_) { res(null); } }); }
+function codexLoginSet(st) { return new Promise((res) => { try { chrome.storage.local.set({ [CODEX_LOGIN_KEY]: st }, () => res()); } catch (_) { res(); } }); }
+async function codexWriteTokens(r) {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get({ yasiaAI: null }, (s) => {
+        const cfg = (s && s.yasiaAI && typeof s.yasiaAI === 'object') ? s.yasiaAI : {};
+        cfg.gpt = Object.assign({}, cfg.gpt || {});
+        cfg.gpt.chatgpt = { accessToken: r.accessToken, refreshToken: r.refreshToken, accountId: r.accountId };
+        cfg.gpt.authMode = 'chatgpt'; cfg.provider = 'gpt';
+        try { chrome.storage.local.set({ yasiaAI: cfg }, () => resolve(true)); } catch (_) { resolve(false); }
+      });
+    } catch (_) { resolve(false); }
+  });
+}
+async function codexLoginBegin() {
+  const s = await codexStart();
+  if (!s || !s.ok) return s || { ok: false, error: 'start failed' };
+  await codexLoginSet({ status: 'pending', deviceAuthId: s.deviceAuthId, userCode: s.userCode, verifyUrl: s.verifyUrl, startedAt: Date.now(), error: '' });
+  try { chrome.alarms.create('codexPoll', { delayInMinutes: 0.1, periodInMinutes: 0.5 }); } catch (_) {}   // будим воркер каждые ~30с (мин. для unpacked) — переживает засыпание
+  return { ok: true, userCode: s.userCode, verifyUrl: s.verifyUrl };
+}
+async function codexLoginTick() {
+  const st = await codexLoginGet();
+  if (!st || st.status !== 'pending') { try { chrome.alarms.clear('codexPoll'); } catch (_) {} return; }
+  if (Date.now() - (st.startedAt || 0) > 15 * 60 * 1000) { await codexLoginSet({ status: 'timeout', error: 'timeout' }); try { chrome.alarms.clear('codexPoll'); } catch (_) {} return; }
+  const r = await codexPoll({ deviceAuthId: st.deviceAuthId, userCode: st.userCode });
+  if (!r || r.pending) return;   // ещё не подтвердил — ждём следующего alarm
+  if (r.ok) { await codexWriteTokens(r); await codexLoginSet({ status: 'ok' }); }
+  else await codexLoginSet({ status: 'error', error: r.error || 'error' });
+  try { chrome.alarms.clear('codexPoll'); } catch (_) {}
+}
+try { chrome.alarms.onAlarm.addListener((a) => {
+  if (!a || !a.name) return;
+  if (a.name === 'codexPoll') return void codexLoginTick();
+  if (a.name.indexOf('rem_') === 0) return void remFire(a.name);   // сработала напоминалка
+}); } catch (_) {}
+async function codexLoginStatus() { return { ok: true, state: await codexLoginGet() }; }
+
+// снимок видимой вкладки (для «отправить скрин в GPT») — нужен host_permissions на текущий сайт (есть: https://*/*, http://*/*)
+async function captureScreen() {
+  try {
+    const dataUrl = await new Promise((res, rej) => {
+      try { chrome.tabs.captureVisibleTab({ format: 'jpeg', quality: 70 }, (u) => { const e = chrome.runtime.lastError; if (e) rej(new Error(e.message)); else res(u); }); }
+      catch (e) { rej(e); }
+    });
+    if (!dataUrl) return { ok: false, error: 'no image' };
+    return { ok: true, dataUrl };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+// ---------- ДОЛГАЯ ПАМЯТЬ + ДИНАМИЧЕСКИЕ УМЕНИЯ Hermes: аутентифицированный GET (skills/capabilities) ----------
+async function hermesGet(msg) {
+  try {
+    const base = String(msg.baseUrl || '').replace(/\/+$/, '');
+    if (!base) return { ok: false, error: 'no address' };
+    const headers = {}; if (msg.apiKey) headers['Authorization'] = 'Bearer ' + msg.apiKey;
+    const ctrl = new AbortController();
+    const to = setTimeout(() => { try { ctrl.abort(); } catch (_) {} }, msg.timeoutMs || 12000);
+    let resp; try { resp = await fetch(base + (msg.path || '/v1/skills'), { headers, signal: ctrl.signal }); } finally { clearTimeout(to); }
+    if (!resp.ok) return { ok: false, status: resp.status, error: 'HTTP ' + resp.status };
+    let data = null; try { data = await resp.json(); } catch (_) { return { ok: false, error: 'bad json' }; }
+    return { ok: true, data };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+// ---------- СТРИМИНГ-СТАТУСЫ: потоковый чат через Port, разбор стандартных дельт + кастомных hermes.tool.progress ----------
+function parseChatSSEFull(raw) {   // фолбэк, если поток не отдали телом: собрать ответ из накопленного SSE-текста
+  let full = '';
+  for (const line of String(raw).split(/\r?\n/)) {
+    const s = line.trim(); if (!s.startsWith('data:')) continue;
+    const p = s.slice(5).trim(); if (!p || p === '[DONE]') continue;
+    try { const ev = JSON.parse(p); const d = ev.choices && ev.choices[0] && ev.choices[0].delta && ev.choices[0].delta.content; if (typeof d === 'string') full += d; } catch (_) {}
+  }
+  return full;
+}
+async function aiChatStream(msg, port) {
+  let aborted = false;
+  const ctrl = new AbortController();
+  port.onDisconnect.addListener(() => { aborted = true; try { ctrl.abort(); } catch (_) {} });
+  const safePost = (m) => { if (!aborted) try { port.postMessage(m); } catch (_) {} };
+  try {
+    const base = String(msg.baseUrl || '').replace(/\/+$/, '');
+    if (!base) { safePost({ t: 'error', error: 'no server address' }); return; }
+    const url = base + (msg.path || '/v1/chat/completions');
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' };
+    if (msg.apiKey) headers['Authorization'] = 'Bearer ' + msg.apiKey;
+    if (msg.sessionKey) headers['X-Hermes-Session-Key'] = msg.sessionKey;   // та же долгая память, что и в обычном чате
+    let messages = msg.messages || [];
+    if (msg.imageUrl) { messages = messages.slice(); for (let i = messages.length - 1; i >= 0; i--) { if (messages[i].role === 'user') { messages[i] = { role: 'user', content: [{ type: 'text', text: String(messages[i].content || '') }, { type: 'image_url', image_url: { url: msg.imageUrl } }] }; break; } } }
+    const body = JSON.stringify({ model: msg.model || 'hermes-agent', messages, stream: true });
+    const to = setTimeout(() => { try { ctrl.abort(); } catch (_) {} }, msg.timeoutMs || 180000);
+    let resp;
+    try { resp = await fetch(url, { method: 'POST', headers, body, signal: ctrl.signal }); }
+    catch (e) { clearTimeout(to); safePost({ t: 'error', error: String((e && e.message) || e) }); return; }
+    if (!resp.ok) { clearTimeout(to); let d = ''; try { d = (await resp.text()).slice(0, 300); } catch (_) {} safePost({ t: 'error', status: resp.status, error: 'HTTP ' + resp.status + (d ? ': ' + d : '') }); return; }
+    if (!resp.body || !resp.body.getReader) { clearTimeout(to); const raw = await resp.text(); let full = ''; try { const data = JSON.parse(raw); full = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || ''; } catch (_) { full = parseChatSSEFull(raw); } safePost({ t: 'done', content: full }); return; }
+    const reader = resp.body.getReader(); const dec = new TextDecoder();
+    let buf = '', full = '', curEvent = '';
+    while (true) {
+      let r; try { r = await reader.read(); } catch (_) { break; }
+      if (r.done) break;
+      buf += dec.decode(r.value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) !== -1) {
+        let line = buf.slice(0, nl); buf = buf.slice(nl + 1); line = line.replace(/\r$/, '');
+        if (!line) { curEvent = ''; continue; }
+        if (line.indexOf('event:') === 0) { curEvent = line.slice(6).trim(); continue; }
+        if (line.indexOf('data:') !== 0) continue;
+        const payload = line.slice(5).trim(); if (!payload || payload === '[DONE]') continue;
+        let ev; try { ev = JSON.parse(payload); } catch (_) { continue; }
+        if (/tool/i.test(curEvent) || (ev && (ev.tool || ev.tool_name || (ev.type && /tool|progress/i.test(ev.type))))) {   // hermes.tool.progress — кастомное событие выполнения инструмента
+          const label = ev.label || ev.message || ev.status || ev.tool_name || ev.tool || ev.type || curEvent;
+          if (label) safePost({ t: 'progress', label: String(label).slice(0, 80), tool: String(ev.tool || ev.tool_name || '').slice(0, 40) });
+          continue;
+        }
+        const delta = ev.choices && ev.choices[0] && ev.choices[0].delta && ev.choices[0].delta.content;   // стандартный чанк OpenAI
+        if (typeof delta === 'string' && delta) { full += delta; safePost({ t: 'delta', text: delta }); }
+        else { const mc = ev.choices && ev.choices[0] && ev.choices[0].message && ev.choices[0].message.content; if (typeof mc === 'string' && mc) full = mc; }
+      }
+    }
+    clearTimeout(to);
+    safePost({ t: 'done', content: full });
+  } catch (e) { safePost({ t: 'error', error: String((e && e.message) || e) }); }
+}
+
+// ---------- НАПОМИНАЛКИ (локальные, chrome.alarms): Яся напоминает прямо в браузере ----------
+const REM_KEY = 'yasiaReminders';
+function remGet() { return new Promise((res) => { try { chrome.storage.local.get({ [REM_KEY]: [] }, (s) => res((s && s[REM_KEY]) || [])); } catch (_) { res([]); } }); }
+function remSet(list) { return new Promise((res) => { try { chrome.storage.local.set({ [REM_KEY]: list }, () => res()); } catch (_) { res(); } }); }
+async function remAdd(msg) {
+  try {
+    const fireAt = +msg.fireAt || 0;
+    const text = String(msg.text || '').slice(0, 300).trim();
+    if (!text || !fireAt || fireAt < Date.now() + 1500) return { ok: false, error: 'bad reminder' };
+    const id = 'rem_' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+    const list = await remGet(); list.push({ id, text, fireAt, created: Date.now() }); await remSet(list);
+    try { chrome.alarms.create(id, { when: fireAt }); } catch (_) {}
+    return { ok: true, id, fireAt };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+async function remList() { return { ok: true, reminders: (await remGet()).sort((a, b) => a.fireAt - b.fireAt) }; }
+async function remDel(msg) {
+  try { await remSet((await remGet()).filter((r) => r.id !== msg.id)); try { chrome.alarms.clear(msg.id); } catch (_) {} return { ok: true }; }
+  catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+function queryTabs(q) { return new Promise((res) => { try { chrome.tabs.query(q, (t) => res(t || [])); } catch (_) { res([]); } }); }
+function sendToTab(tabId, payload) {   // доставка подтверждается ответом контент-скрипта ({ok:true}); нет получателя/нет ответа -> false
+  return new Promise((res) => { try { chrome.tabs.sendMessage(tabId, payload, (resp) => { void chrome.runtime.lastError; res(!!(resp && resp.ok)); }); } catch (_) { res(false); } });
+}
+async function remDeliver(r) {         // активная вкладка приоритетно, иначе любая http-вкладка; true = кто-то реально показал
+  const payload = { type: 'YASIA_REMIND_FIRE', text: r.text };
+  for (const t of await queryTabs({ active: true, lastFocusedWindow: true })) { if (t.id && /^https?:/i.test(t.url || '') && await sendToTab(t.id, payload)) return true; }
+  for (const t of await queryTabs({})) { if (t.id && /^https?:/i.test(t.url || '') && await sendToTab(t.id, payload)) return true; }
+  return false;
+}
+async function remFire(id) {           // удаляем ТОЛЬКО после подтверждённой доставки; иначе помечаем missed (отдадим при следующем YASIA_REMIND_PULL)
+  const list = await remGet(); const r = list.find((x) => x.id === id); if (!r) return;
+  if (await remDeliver(r)) await remSet((await remGet()).filter((x) => x.id !== id));
+  else await remSet((await remGet()).map((x) => x.id === id ? Object.assign({}, x, { missed: true }) : x));
+}
+async function remPull() {             // контент-скрипт загрузился и спрашивает пропущенное: отдаём missed/просроченные и удаляем (доставка = этот ответ)
+  const list = await remGet(); const now = Date.now();
+  const due = list.filter((x) => x.missed || x.fireAt <= now);
+  if (due.length) await remSet(list.filter((x) => !(x.missed || x.fireAt <= now)));
+  return { ok: true, due: due.map((x) => ({ text: x.text, fireAt: x.fireAt })) };
+}
+async function remRearm() {   // расширение перезагрузили -> alarms сброшены: будущие пере-ставим, просроченные пометим missed (вкладок может ещё не быть)
+  const list = await remGet(); const now = Date.now(); let dirty = false;
+  for (const r of list) {
+    if (r.fireAt > now + 500) { try { chrome.alarms.create(r.id, { when: r.fireAt }); } catch (_) {} }
+    else if (!r.missed) { r.missed = true; dirty = true; }
+  }
+  if (dirty) await remSet(list);
+}
+remRearm();
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (!port || port.name !== 'yasia-ai-stream') return;
+  if (port.sender && port.sender.id && port.sender.id !== chrome.runtime.id) return;   // только свои content-script'ы
+  port.onMessage.addListener((m) => { if (m && m.type === 'start') aiChatStream(m, port); });
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg) return;
+  if (!sender || sender.id !== chrome.runtime.id) return;   // только свои content-script'ы (не доверять чужим расширениям/контекстам)
+  if (msg.type === 'YASIA_HERMES_GET') { hermesGet(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_REMIND_ADD') { remAdd(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_REMIND_LIST') { remList().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_REMIND_DEL') { remDel(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_REMIND_PULL') { remPull().then(sendResponse); return true; }
   if (msg.type === 'YASIA_DOWNLOAD') { downloadVideo(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_FETCH') { fetchText(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_AI') { aiChat(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_AI_PING') { aiPing(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_CODEX_START') { codexStart().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_CODEX_POLL') { codexPoll(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_CODEX_REFRESH') { codexRefresh(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_CODEX_CHAT') { codexChat(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_CODEX_LOGIN') { codexLoginBegin().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_CODEX_LOGIN_STATUS') { codexLoginStatus().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_CAPTURE') { captureScreen().then(sendResponse); return true; }
 });

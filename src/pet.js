@@ -7,71 +7,133 @@
   const ROOT_ID = 'twtr-pet-root';
   if (document.getElementById(ROOT_ID)) return; // защита от повторной инъекции
 
-  console.log('%c🟩 Browser Pet (Yasia) запущен', 'color:#5cba47;font-weight:bold', location.href);
+  console.log('%c🟩 Твиттер-Питомец (Creeper) запущен', 'color:#5cba47;font-weight:bold', location.href);
 
   // ---------- параметры ----------
   // значения вынесены в src/core/config.js (window.Yasia.config) — грузится перед pet.js
   const {
     SPEED, RUN_MUL,
     PLAT_GRAVITY, PLAT_JUMP_UP, PLAT_JUMP_DX, PLAT_JUMP_MS, PLAT_FLOOR,
-    ARRIVE, STAND_GAP, NEAR, SCAN_MS, BEG_TIMEOUT,
-    HAPPY_MS, SNUB_MS, STABLE_FRAMES, VIEW_PAD_TOP, VIEW_PAD_BOTTOM,
-    PET_W, PET_H, HOVER_R, FUSE_MS,
-    HUNGER_PER_MIN, FEED_AMOUNT, FEED_XP, LIKE_XP, LEVEL_XP, MAX_LEVEL,
+    VIEW_PAD_TOP, VIEW_PAD_BOTTOM,
+    PET_W, PET_H, STROKE_DIST,
+    HUNGER_PER_MIN, FEED_AMOUNT, FEED_XP, LEVEL_XP, MAX_LEVEL,
+    HUNGER_HUNGRY, HUNGER_STARVING,
+    ENERGY_START, ENERGY_REST_MIN, ENERGY_RUN_SEC, ENERGY_SLEEP_MIN, ENERGY_LOW, ENERGY_WAKE, ENERGY_TIRED,
+    BOND_START, BOND_DECAY_MIN, BOND_FRIEND, BOND_BESTIE,
+    MOOD_BASE, MOOD_BIAS_MAX, MOOD_BIAS_DECAY_MIN, MOOD_HUNGER_K, MOOD_ENERGY_K, MOOD_BOND_K, MOOD_GOOD, MOOD_BAD,
+    ACT_FEED, ACT_PET, ACT_PLAY, ACT_CALL, ACT_HELP, ACT_WAKE, ACT_COOLDOWN_MS, GREET_AWAY_MS,
   } = (window.Yasia && window.Yasia.config) || {};
 
   // ---------- состояние ----------
   let enabled = true;
   let mode = 'idle';          // idle | wander | approach | beg | happy
-  let busy = false;           // занят анимацией (пакость/еда/взрыв)
-  let targetId = null;
+  let busy = false;           // занят анимацией (пакость/еда)
   let px = 80, py = 0, tx = 80, ty = 0, face = 1;
-  let lastScan = 0, begUntil = 0, happyUntil = 0, wanderUntil = 0;
-  let lastBtnTop = 0, stableFrames = 0, hiddenAt = 0, lastHref = location.href;
+  let happyUntil = 0, wanderUntil = 0;
+  let hiddenAt = 0, lastHref = location.href;
   let lastSave = 0, lastTick = 0;
   let nextMischief = 0;
   let hopPhase = 0, hopY = 0, prevPx = 80, prevPy = 0;
-  let fuseMs = 0, explodeCooldown = 0;
-  let boomActive = false, debris = [], boomHidden = [];
-  let flung = false, flungUntil = 0, fakeX = 0, fakeY = 0, cornerIdx = 0;
   let mouseX = 0, mouseY = 0;
-  let roam = true;            // ходит/бегает сама (всегда включено)
-  let running = true, runUntil = 0, nextRunDecide = 0, runMul = 1;   // бег по умолчанию
+  let paused = false;         // ⏸ пауза (попап): замерла на месте, автодействия спят; статы идут (wall-clock), явные клики работают
+  let roam = true;            // ходит/бегает сама (переключается в настройках)
+  let running = false, runUntil = 0, nextRunDecide = 0, runMul = 1;
   let dragging = false, dragOffX = 0, dragOffY = 0, grabPx = 0, grabPy = 0, didDrag = false;
   let thrown = false, dragVx = 0, dragVy = 0, lastDragX = 0, lastDragY = 0, peakVx = 0, peakVy = 0;   // бросок по инерции (+ пик скорости кисти)
   // платформер
-  let ledges = [], standLedge = null, lastLedgeScan = 0, vy = 0, vx = 0;
-  let jumping = false, jumpT = 0, jumpFromX = 0, jumpFromY = 0, jumpToX = 0, jumpToY = 0, jumpPeak = 0, jumpDest = null;
+  let ledges = [], standLedge = null, lastLedgeScan = 0, vy = 0, vx = 0, lastLeftEl = null;   // lastLeftEl — блок, с которого только что спрыгнула (анти-пинг-понг в свободном платформере)
+  let jumping = false;   // в прыжке; внутренности прыжка (откуда/куда/горб/дроп) — в движке core/platformer.js (engine.jumpPhase/isDrop)
   let walkTargetX = 0, nextJumpDecide = 0, sayUntil = 0, nextChatter = 0, climbing = false, falling = false;
+  let testKind = null, testUntil = 0, testDir = 1, testEmo = null;   // ручная проверка действий/эмоций из настроек
   // игровые параметры
   let hungerBase = 0, hungerAt = Date.now(), xp = 0, level = 1;
-  let speedMul = 1, sizeMul = 1, userScale = 1.8;   // userScale — размер (единственная настройка), по умолчанию 180%
-  const userSpeed = 0.7, throwMul = 0.4;   // скорость 70% и инерция 40% — зафиксированы
-  const snubbed = new Map();
+  // ТАМАГОЧИ: статы (модель base+at — линейное затухание по времени, как у голода; считается одинаково в любой вкладке и попапе)
+  let energyBase = 100, energyAt = Date.now(), energyResting = false;   // энергия 0..100 (wall-clock: ставка по режиму сон/бодрствование)
+  let bondBase = 0, bondAt = Date.now();            // привязанность 0..100
+  let moodBiasBase = 0, moodBiasAt = Date.now();    // бонус настроения от ласки (тает к 0)
+  let ambient = null, ambientEmo = null, resting = false;   // текущее состояние заботы (null -> первый setAmbient не короткозамкнётся)
+  let happyKind = 'happy';   // что показывать в mode==='happy': 'happy' (подпрыг от ласки/еды) или 'wave' (намеренное приветствие)
+  let nextAmbient = 0, nextCarePersist = 0, nextAmbSpeak = 0, nextAct = 0, awakeUntil = 0;
+  let hiding = false, awayAt = 0;                   // «спрятать» + метка ухода со вкладки (для приветствия)
+  let downloading = false, dlHoldT = null;          // качается видео -> Яся переходит в ОГНЕННУЮ форму (стоит, горит)
+  let watching = false, watchArrived = false, watchDismissed = false, lastPopcornT = 0, watchTestUntil = 0;   // играет видео -> Яся идёт под видео, садится (watchArrived); watchDismissed=прогнали от видео; watchTestUntil — ручной тест
+  let watchHelp = false, watchHelpSayT = 0;   // видео высоко, выше не залезть -> стоит на самой высокой/ближней полке и просит подсадить (англ.)
+  let watchClimbing = false, watchClimbCx = 0, watchClimbY = 0, watchStuck = false, watchHopT = 0, watchStuckT = 0;   // лезет к видео по полкам (goal-directed); watchStuck=выше/ближе не достать -> просит; watchHopT=подпрыг на месте; watchStuckT=когда впервые застряла (дебаунс «подсадить»)
+  let watchFromEl = null, watchMoodT = 0, watchPingT = 0, pendingMad = false;   // watchFromEl=только что покинутая полка (анти-пинг-понг); watchPingT=таймер анти-крюка (чтобы не зависнуть на настоящем обратном пути); watchMoodT=троттл роста настроения; pendingMad=злость стартует на отпускании
+  let watchVid = null;   // на какое видео нацелена (DOM-ссылка) -> при смене целевого видео сбрасываем «дошла»/«просит» и заново оцениваем достижимость
+  let gameActive = false, gameId = null, gameTargetX = 0, gameRun = false, gameVy = 0, gameFloor = true;   // мини-игра «забрала» питомца: главный цикл ведёт её к gameTargetX и шлёт 'game:tick' (логика в systems/games.js). gameFloor=false -> позицию ведёт сама игра (прятки за элементами)
+  let gameClimb = false, gameClimbCx = 0, gameClimbY = 0;   // игра-платформер: лезет по полкам страницы к точке (gameClimbCx,gameClimbY) — напр. запрыгнуть к высокому курсору
+  let speedMul = 1, sizeMul = 1, userScale = 1, userSpeed = 1, throwMul = 1;   // userScale — размер, userSpeed — скорость ходьбы, throwMul — сила инерции броска (ползунки)
   const STATE_KEY = 'petState';
 
   // ---------- DOM ----------
+  const FACE_SVG = `<svg class="creeper__face" viewBox="0 0 8 8">
+    <rect x="1" y="2" width="2" height="2"></rect>
+    <rect x="5" y="2" width="2" height="2"></rect>
+    <rect x="3" y="3" width="2" height="3"></rect>
+    <rect x="2" y="5" width="2" height="2"></rect>
+    <rect x="4" y="5" width="2" height="2"></rect>
+  </svg>`;
+
   const root = document.createElement('div');
   root.id = ROOT_ID;
   root.innerHTML = `
     <button class="twtr-pet-toggle" id="twtr-pet-toggle" type="button">🐾</button>
     <button class="twtr-pet-settings-btn" id="twtr-settings-btn" type="button">⚙</button>
     <div class="twtr-pet-settings" id="twtr-settings">
-      <div class="twtr-set-title">Pet settings</div>
+      <div class="twtr-set-title">Настройки питомца</div>
       <div class="twtr-set-row">
-        <span id="twtr-set-size-label">Size</span>
+        <span id="twtr-l-size">Размер</span>
         <span class="twtr-set-stepper">
           <button class="twtr-set-mini" data-act="dec" type="button">−</button>
-          <span class="twtr-set-val" id="twtr-scale-val">180%</span>
+          <span class="twtr-set-val" id="twtr-scale-val">100%</span>
           <button class="twtr-set-mini" data-act="inc" type="button">+</button>
         </span>
+      </div>
+      <div class="twtr-set-row">
+        <span id="twtr-l-speed">Скорость</span>
+        <span class="twtr-set-stepper">
+          <input class="twtr-set-range" id="twtr-speed" type="range" min="30" max="200" step="10" value="100">
+          <span class="twtr-set-val" id="twtr-speed-val">100%</span>
+        </span>
+      </div>
+      <div class="twtr-set-row">
+        <span id="twtr-l-inertia">Инерция</span>
+        <span class="twtr-set-stepper">
+          <input class="twtr-set-range" id="twtr-inertia" type="range" min="0" max="200" step="10" value="100">
+          <span class="twtr-set-val" id="twtr-inertia-val">100%</span>
+        </span>
+      </div>
+      <div class="twtr-set-row">
+        <span id="twtr-l-roam">Ходит и бегает</span>
+        <button class="twtr-set-switch" id="twtr-roam-sw" type="button" role="switch" aria-checked="true"><span class="twtr-set-knob"></span></button>
+      </div>
+      <div class="twtr-set-sub" id="twtr-l-mode">Режим:</div><!-- режимы поведения (страж, v0.9): гейтят автономные действия -->
+      <div class="twtr-mode-row">
+        <button class="twtr-mode-btn" data-mode="game" type="button">🎮</button>
+        <button class="twtr-mode-btn" data-mode="calm" type="button">😌</button>
+        <button class="twtr-mode-btn" data-mode="work" type="button">💼</button>
+        <button class="twtr-mode-btn" data-mode="ai" type="button">🤖</button>
+        <button class="twtr-mode-btn" data-mode="safe" type="button">🛡</button>
+      </div>
+      <div class="twtr-set-sub">Проверить действие:</div>
+      <div class="twtr-test-grid">
+        <button class="twtr-test-btn" data-test="idle" type="button">🐾 Стоять</button>
+        <button class="twtr-test-btn" data-test="wave" type="button">👋 Помахать</button>
+        <button class="twtr-test-btn" data-test="left" type="button">← Идёт</button>
+        <button class="twtr-test-btn" data-test="right" type="button">Идёт →</button>
+        <button class="twtr-test-btn" data-test="jump" type="button">⬆ Прыжок</button>
+        <button class="twtr-test-btn" data-test="climb" type="button">⛰ Карабкаться</button>
+        <span id="twtr-test-emos" style="display:contents"></span><!-- кнопки эмоций строятся из манифеста героя (renderTestEmos) -->
+        <button class="twtr-test-btn" data-test="emo:fall" type="button">😱 Падение</button>
+        <button class="twtr-test-btn" data-test="emo:run" type="button">🏃 Бег</button>
       </div>
     </div>
     <div class="twtr-pet-dialog" id="twtr-dialog">
       <div class="twtr-dlg-backdrop" id="twtr-dlg-backdrop"></div>
       <div class="twtr-dlg-card">
         <div class="twtr-dlg-head">
-          <span class="twtr-dlg-title">🐱 Yasia</span>
+          <span class="twtr-dlg-title">🐱 Яся</span>
           <span class="twtr-dlg-head-r">
             <button class="twtr-dlg-lang" id="twtr-dlg-lang" type="button">EN</button>
             <button class="twtr-dlg-x" id="twtr-dlg-x" type="button">✕</button>
@@ -81,14 +143,33 @@
         <div class="twtr-dlg-greet" id="twtr-dlg-greet"></div>
         <div class="twtr-dlg-ask">
           <input class="twtr-dlg-askin" id="twtr-dlg-ask" type="text">
+          <button class="twtr-dlg-askshot" id="twtr-dlg-askshot" type="button" title="📸">📸</button>
           <button class="twtr-dlg-asksend" id="twtr-dlg-asksend" type="button">→</button>
         </div>
         <div class="twtr-dlg-ai" id="twtr-dlg-ai" hidden></div>
         <div class="twtr-dlg-caps" id="twtr-dlg-caps">
+          <div class="twtr-skill" data-skill="ai">
+            <button class="twtr-dlg-cap" id="twtr-cap-ai" type="button"><span class="twtr-cap-ic">🤖</span><span class="twtr-cap-tx" id="twtr-cap-ai-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-ai" hidden>
+              <div class="twtr-dlg-aipanel" id="twtr-dlg-aipanel"></div>
+            </div>
+          </div>
+          <div class="twtr-skill" data-skill="care">
+            <button class="twtr-dlg-cap" id="twtr-cap-care" type="button"><span class="twtr-cap-ic">🐾</span><span class="twtr-cap-tx" id="twtr-cap-care-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-care" hidden>
+              <div class="twtr-dlg-care" id="twtr-dlg-care"></div>
+            </div>
+          </div>
           <div class="twtr-skill" data-skill="dl">
             <button class="twtr-dlg-cap" id="twtr-cap-dl" type="button"><span class="twtr-cap-ic">📥</span><span class="twtr-cap-tx" id="twtr-cap-dl-tx"></span><span class="twtr-cap-arr">›</span></button>
             <div class="twtr-skill-body" id="twtr-skill-dl" hidden>
               <div class="twtr-dlg-video" id="twtr-dlg-video"></div>
+            </div>
+          </div>
+          <div class="twtr-skill" data-skill="games">
+            <button class="twtr-dlg-cap" id="twtr-cap-games" type="button"><span class="twtr-cap-ic">🎮</span><span class="twtr-cap-tx" id="twtr-cap-games-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-games" hidden>
+              <div class="twtr-dlg-games" id="twtr-dlg-games"></div>
             </div>
           </div>
           <div class="twtr-skill" data-skill="notes">
@@ -104,12 +185,21 @@
         </div>
       </div>
     </div>
-    <div class="twtr-fakecursor" id="twtr-fakecursor"><svg viewBox="0 0 24 24" width="22" height="22">
-      <path d="M3 2 L3 20 L8 15 L11 22 L14 21 L11 14 L18 14 Z" fill="#fff" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg></div>
     <div class="twtr-pet is-walking" id="twtr-pet">
       <div class="twtr-pet__bubble" id="twtr-pet-bubble">❤?</div>
+      <div class="twtr-pet-sign" id="twtr-pet-sign" hidden></div>
       <div class="twtr-pet__inner">
         <div class="twtr-pet__char">
+          <div class="creeper">
+            <div class="creeper__legs">
+              <span class="creeper__leg leg-back leg-a"></span>
+              <span class="creeper__leg leg-back leg-b"></span>
+              <span class="creeper__leg leg-front leg-b"></span>
+              <span class="creeper__leg leg-front leg-a"></span>
+            </div>
+            <div class="creeper__body"></div>
+            <div class="creeper__head">${FACE_SVG}</div>
+          </div>
           <div class="twtr-pet__sprite" id="twtr-sprite"></div>
         </div>
       </div>
@@ -123,49 +213,173 @@
   const settingsBtn = root.querySelector('#twtr-settings-btn');
   const settingsPanel = root.querySelector('#twtr-settings');
   const scaleVal = root.querySelector('#twtr-scale-val');
+  const speedRange = root.querySelector('#twtr-speed');
+  const speedVal = root.querySelector('#twtr-speed-val');
+  const inertiaRange = root.querySelector('#twtr-inertia');
+  const inertiaVal = root.querySelector('#twtr-inertia-val');
+  const roamSw = root.querySelector('#twtr-roam-sw');
   const dialog = root.querySelector('#twtr-dialog');
   const dlgText = root.querySelector('#twtr-dlg-text');
   const dlgList = root.querySelector('#twtr-dlg-list');
   const dlgVideo = root.querySelector('#twtr-dlg-video');
-  const fakeCursor = root.querySelector('#twtr-fakecursor');
+  const dlgCare = root.querySelector('#twtr-dlg-care');
   const sprite = root.querySelector('#twtr-sprite');
   const frameEls = {};                                   // все кадры лежат слоями-картинками, переключаем видимость (без мерцания от смены src)
   // (заполняется ниже из CAT_SETS — по одному <img> на кадр)
   let curFrameEl = null;
+  let firstFrameReady = false, pendingReveal = false;   // первый показ ждём декодирования стартового кадра -> без «прозрачного квадрата» на первой загрузке
   function showFrame(name) {
-    const el = frameEls[name];
+    let el = frameEls[name];
+    if (!el && CAT_SETS[name]) el = frameEls[CAT_SETS[name][0]];   // дали имя СОСТОЯНИЯ (idle/wave/jump) -> берём первый кадр (idle0…)
     if (!el || el === curFrameEl) return;
     if (curFrameEl) curFrameEl.classList.remove('on');
     el.classList.add('on'); curFrameEl = el;
   }
 
-  // ---------- герой ----------
-  let hero = 'catgirl';   // 'catgirl' = Yasia (единственный герой)
-  // кошка — кадры по состояниям. data-driven: число кадров -> CAT_SETS/CAT_DIR + сами <img> строим из этого.
-  const CAT_IDLE_MS = 280, CAT_WALK_MS = 110, CAT_RUN_MS = 70, CAT_JUMP_MS = 70, CAT_CLIMB_MS = 170, CAT_EMO_MS = 150;
+  // ---------- выбор героя ----------
+  // реестр скинов с покадровой анимацией. dir — папка в src/heroes/. Раскладка кадров у всех одна (CAT_FRAMES).
+  const isFramed = () => hero !== 'creeper';   // любой герой со спрайт-кадрами (всё, кроме старого крипера); список героев — в core/config.js HEROES, папка = id
+  let hero = 'catgirl';   // 'creeper' (скрыт) | 'catgirl' = Yasia (по умолчанию) | 'noema'
+  // кошка — кадры по состояниям. ИСТОЧНИК ПРАВДЫ — манифест героя (src/heroes/<id>/manifest.json), который грузит
+  // applyManifest() и переписывает таблицы ниже. Значения здесь = FALLBACK, если манифест не загрузился (поведение не ломается).
+  let CAT_IDLE_MS = 480, CAT_WALK_MS = 110, CAT_RUN_MS = 70, CAT_JUMP_MS = 70, CAT_CLIMB_MS = 170, CAT_FALL_MS = 90, CAT_WAVE_MS = 150;
+  const CAT_EMO_MS = 150;                        // дефолт для эмоции без своего тайминга
+  let CAT_FIRE_MS = 130; const FIRE_MIN_MS = 2600;   // огонь мерцает (мс/кадр); огненная форма держится минимум столько (видно даже на быстром скачивании)
+  // темп эмоций по смыслу (мс/кадр): сон медленно «дышит», голод настойчив, злость дрожит резко
+  let EMO_MS = { sleep: 480, hungry: 180, sad: 260, angry: 120, dizzy: 170, happy: 130 };
+  const emoMs = (name) => EMO_MS[name] || CAT_EMO_MS;
   const HAPPY_HOP_PX = 18, HAPPY_HOP_MS = 340;   // радость — высота и частота подпрыгивания
-  const CAT_FRAMES = {           // state -> сколько кадров (1 = одиночный спрайт <state>.png в папке <state>/)
-    idle: 1, walk: 6, jump: 1, climb: 1, wave: 1,                                   // были раньше
-    happy: 4, sad: 4, angry: 4, dizzy: 4, hungry: 4, sleep: 4, fall: 5, run: 6,     // новые эмоции/состояния
+  let CAT_FRAMES = {             // state -> сколько кадров (1 = одиночный спрайт <state>.png в папке <state>/)
+    idle: 4, walk: 6, jump: 4, climb: 1, wave: 4,                                   // idle=дыхание, wave=махание, jump=дуга
+    happy: 4, sad: 5, angry: 5, dizzy: 5, hungry: 5, sleep: 5, fall: 5, run: 6,     // эмоции = упорядоченные циклы (ping-pong)
+    fire: 4,                                                                        // ОГНЕННАЯ форма (только Яся): стоит, пламя мерцает — на время скачивания видео
   };
-  // эмоции, где кадры = разные позы (не motion-арк) -> включаем кросс-фейд, чтобы сгладить скачки. Ходьбу/бег НЕ трогаем.
-  const EMO_XFADE = { happy: 1, sad: 1, angry: 1, dizzy: 1, hungry: 1, sleep: 1, fall: 1 };
+  // эмоции, где кадры = разные позы (не motion-арк) -> включаем кросс-фейд, чтобы сгладить скачки. Ходьбу/бег/прыжок НЕ трогаем.
+  const EMO_XFADE = {};   // кросс-фейд ОТКЛЮЧЁН: между разными позами он давал двоение («мигание»). Плавность теперь = упорядоченные кадры + ping-pong
+  const STATIC_HOLD = { idle: 1 };   // состояния-«одна картинка»: кадр НЕ циклим (даже если в манифесте их несколько); оживление = мягкое CSS-дыхание .twtr-pet__char (покой = 1 картинка, как раньше)
+  // эмоции-движения проигрываем ping-pong (0..n-1..1) -> бесшовный цикл из последовательности «начало -> пик»
+  let PING_PONG = { sad: 1, angry: 1, dizzy: 1, hungry: 1, sleep: 1 };
+  let FRAME_SRC = null;          // key -> относительный путь спрайта из манифеста (если null -> папочная конвенция)
+  let MANIFEST_EMOS = [];        // эмоции из манифеста [{key,icon,label}] -> авто-кнопки тест-сетки и подписи
+  const AMBIENT_DEFAULT = { sleep: 'sleep', hungry: 'hungry', grumpy: 'angry', starving: 'sad' };   // care-state -> эмоция (фолбэк; манифест переопределяет полем careState на эмоции)
+  let AMBIENT_EMO = Object.assign({}, AMBIENT_DEFAULT);
+  let ACTION_STATE = {};         // appState из манифеста (напр. watching) -> имя анимации; событийные действия (смотрит видео и т.п.)
   const CAT_SETS = {}, CAT_DIR = {};
-  for (const st in CAT_FRAMES) {
-    const n = CAT_FRAMES[st];
-    CAT_SETS[st] = n === 1 ? [st] : Array.from({ length: n }, (_, i) => st + i);    // idle->['idle'], walk->['walk0'..'walk5']
-    for (const f of CAT_SETS[st]) CAT_DIR[f] = st;                                   // walk3->'walk', angry0->'angry'
+  // дефолты-фолбэк в ОДНОМ месте: если манифест не загрузился, всё откатывается сюда (без загрязнения таблиц от прошлого героя)
+  function resetToDefaults() {
+    CAT_IDLE_MS = 480; CAT_WALK_MS = 110; CAT_RUN_MS = 70; CAT_JUMP_MS = 70; CAT_CLIMB_MS = 170; CAT_FALL_MS = 90; CAT_WAVE_MS = 150; CAT_FIRE_MS = 130;
+    EMO_MS = { sleep: 480, hungry: 180, sad: 260, angry: 120, dizzy: 170, happy: 130 };
+    CAT_FRAMES = { idle: 4, walk: 6, jump: 4, climb: 1, wave: 4, happy: 4, sad: 5, angry: 5, dizzy: 5, hungry: 5, sleep: 5, fall: 5, run: 6 };
+    if (hero === 'catgirl') CAT_FRAMES.fire = 4;   // огненная форма только у Яси (и в фолбэке без манифеста)
+    PING_PONG = { sad: 1, angry: 1, dizzy: 1, hungry: 1, sleep: 1 };
+    AMBIENT_EMO = Object.assign({}, AMBIENT_DEFAULT);   // care-state -> эмоция: дефолтная карта
+    ACTION_STATE = {};                                  // app-state-анимации только из манифеста (в фолбэке нет)
+    MANIFEST_EMOS = [];                                 // тест-сетка откатится на DEFAULT_EMOS
+    FRAME_SRC = null;
+    for (const k in CAT_SETS) delete CAT_SETS[k];
+    for (const k in CAT_DIR) delete CAT_DIR[k];
+    for (const st in CAT_FRAMES) {
+      const n = CAT_FRAMES[st];
+      CAT_SETS[st] = n === 1 ? [st] : Array.from({ length: n }, (_, i) => st + i);    // idle->['idle'], walk->['walk0'..'walk5']
+      for (const f of CAT_SETS[st]) CAT_DIR[f] = st;                                   // walk3->'walk', angry0->'angry'
+    }
   }
+  resetToDefaults();   // первичная сборка наборов из дефолтов (манифест переопределит при загрузке героя)
   for (const st in CAT_SETS) for (const f of CAT_SETS[st]) {                         // строим слои-картинки (по одному <img> на кадр)
     const im = document.createElement('img'); im.setAttribute('data-f', f); im.alt = ''; sprite.appendChild(im); frameEls[f] = im;
   }
-  let catIdx = 0, lastFrameT = 0, catAct = null;
+  let catIdx = 0, catStep = 0, lastFrameT = 0, catAct = null;   // catStep — счётчик для ping-pong (0..2(n-1))
+  function frameUrl(k) {
+    const dir = hero;   // папка героя = его id (src/heroes/<id>/)
+    try {
+      if (FRAME_SRC && FRAME_SRC[k]) return chrome.runtime.getURL('src/heroes/' + dir + '/' + FRAME_SRC[k]);   // путь из манифеста
+      return chrome.runtime.getURL('src/heroes/' + dir + '/' + (CAT_DIR[k] || k) + '/' + k + '.png');           // папочная конвенция (фолбэк)
+    } catch (_) { return ''; }
+  }
   function buildCatFrames() {
-    const url = (k) => { try { return chrome.runtime.getURL('src/heroes/catgirl/' + (CAT_DIR[k] || k) + '/' + k + '.png'); } catch (_) { return ''; } };
-    for (const k in frameEls) { const u = url(k); if (u) frameEls[k].src = u; }   // каждое движение в своей папке
+    for (const k in frameEls) {
+      if (FRAME_SRC) {                                                  // манифест активен: гасим кадры, которых нет у текущего героя
+        if (!FRAME_SRC[k]) { frameEls[k].removeAttribute('src'); continue; }
+        frameEls[k].src = frameUrl(k); continue;
+      }
+      if (!CAT_DIR[k]) { frameEls[k].removeAttribute('src'); continue; }   // фолбэк: гасим осиротевшие слои прошлого героя (нет в текущих наборах) -> без 404
+      const u = frameUrl(k); if (u) frameEls[k].src = u;
+    }
+  }
+  function ensureLayer(key) {   // <img>-слой под новый кадр из манифеста (которого не было в дефолтах)
+    if (frameEls[key]) return;
+    const im = document.createElement('img'); im.setAttribute('data-f', key); im.alt = ''; sprite.appendChild(im); frameEls[key] = im;
+  }
+  // применить манифест героя как ИСТОЧНИК ПРАВДЫ: пересобрать наборы кадров/тайминги/ping-pong (поведение = данные).
+  function applyManifest(m) {
+    const A = (m && m.animations) || {};
+    const sets = {}, src = {}, ms = {}, pp = {}, frames = {}, emos = [], am = {}, act = {};
+    for (const name in A) {
+      const a = A[name] || {};
+      const fr = Array.isArray(a.frames) ? a.frames : [];
+      const keys = fr.map((p) => String(p).split('/').pop().replace(/\.png$/i, ''));   // ключ кадра = имя файла без .png (idle0, climb…)
+      sets[name] = keys.length ? keys : [name];
+      frames[name] = sets[name].length;
+      keys.forEach((k, i) => { src[k] = fr[i]; });
+      if (a.fps) ms[name] = Math.round(1000 / a.fps);
+      if (a.pingpong) pp[name] = 1;
+      if (a.group === 'emotions') emos.push({ key: name, icon: a.icon || '', label: a.label || name });   // -> тест-сетка + подпись (новая эмоция = кнопка)
+      if (a.careState) am[a.careState] = name;   // care-state -> эмоция: авто-показ по состоянию питомца (данные, не код)
+      if (a.appState) act[a.appState] = name;    // app-state -> анимация: событийное действие (напр. watching=смотрит видео)
+    }
+    for (const k in CAT_SETS) delete CAT_SETS[k];
+    for (const k in CAT_DIR) delete CAT_DIR[k];
+    for (const name in sets) { CAT_SETS[name] = sets[name]; for (const k of sets[name]) CAT_DIR[k] = name; }
+    CAT_FRAMES = frames;
+    const mm = (n, d) => (ms[n] != null ? ms[n] : d);
+    CAT_IDLE_MS = mm('idle', 480); CAT_WALK_MS = mm('walk', 110); CAT_RUN_MS = mm('run', 70);
+    CAT_JUMP_MS = mm('jump', 70); CAT_CLIMB_MS = mm('climb', 170); CAT_FALL_MS = mm('fall', 90);
+    CAT_WAVE_MS = mm('wave', 150); CAT_FIRE_MS = mm('fire', 130);
+    EMO_MS = Object.assign({}, ms, { sleep: mm('sleep', 480), hungry: mm('hungry', 180), sad: mm('sad', 260), angry: mm('angry', 120), dizzy: mm('dizzy', 170), happy: mm('happy', 130) });   // fps ЛЮБОЙ эмоции из манифеста (...ms) + семантические дефолты для известных
+    PING_PONG = pp;
+    FRAME_SRC = src;
+    MANIFEST_EMOS = emos;
+    AMBIENT_EMO = Object.assign({}, AMBIENT_DEFAULT, am);   // карта care-state -> эмоция из манифеста (с дефолтами как фолбэк)
+    ACTION_STATE = act;   // карта app-state -> анимация из манифеста (watching и т.п.)
+    if (emos.length) EMOTIONS = emos.map((e) => ({ key: e.key, emo: e.icon, name: e.label })).concat(EMO_EXTRA);   // подписи в облачке — тоже из манифеста
+    for (const k in src) ensureLayer(k);   // докинуть слои под новые кадры (новые эмоции/действия)
+  }
+  function renderTestEmos() {   // строит кнопки эмоций в сетке «Проверить действие» из манифеста (а не из статичного HTML)
+    const box = root.querySelector('#twtr-test-emos');
+    if (!box) return;
+    const list = (MANIFEST_EMOS && MANIFEST_EMOS.length) ? MANIFEST_EMOS : DEFAULT_EMOS;
+    box.innerHTML = list.map((e) =>
+      `<button class="twtr-test-btn" data-test="emo:${e.key}" type="button">${(e.icon ? e.icon + ' ' : '') + (e.label || e.key)}</button>`).join('')
+      + (CAT_SETS.fire ? '<button class="twtr-test-btn" data-test="fire" type="button">' + tr().tbFire + '</button>' : '')   // кнопка огня только у героя с fire в манифесте
+      + (watchAnim() ? '<button class="twtr-test-btn" data-test="watch" type="button">' + tr().tbPopcorn + '</button>' : '');   // кнопка «смотрит видео» только у героя с watching-анимацией
   }
   function applyHero() {
-    buildCatFrames(); catIdx = 0; catAct = null; showFrame('idle');
+    pet.classList.toggle('is-catgirl', isFramed());   // класс = режим спрайт-кадров (любой скин)
+    const HEROES_CFG = (window.Yasia && Yasia.config && Yasia.config.HEROES) || [];   // скин-CSS из реестра (data-driven): у кого есть cssClass — тоглим по текущему герою
+    if (HEROES_CFG.length) HEROES_CFG.forEach((h) => { if (h.cssClass) pet.classList.toggle(h.cssClass, h.id === hero); });
+    else pet.classList.toggle('is-noema', hero === 'noema');   // фолбэк, если реестр не загрузился
+    if (!isFramed()) return;
+    const finish = () => {
+      buildCatFrames(); catIdx = 0; catAct = null; showFrame('idle');
+      pet.classList.toggle('is-fire', downloading && !!CAT_SETS.fire);   // огонь/свечение только у героя, у кого fire есть (смена скина во время скачивания)
+      renderTestEmos();   // сетка тест-эмоций строится из манифеста (новая эмоция = кнопка без правки кода)
+      const idle0 = (CAT_SETS.idle && CAT_SETS.idle[0]) || 'idle';   // базовый кадр = первый idle
+      const probe = new Image();   // откат на крипера только если базовый кадр реально не грузится
+      probe.onerror = () => { if (isFramed()) pet.classList.remove('is-catgirl'); };
+      probe.src = frameEls[idle0] ? frameEls[idle0].src : '';
+      const idleEl = frameEls[idle0];   // показываем Ясю только когда стартовый PNG декодирован (иначе мелькает пустой квадрат)
+      const markReady = () => { firstFrameReady = true; if (pendingReveal) { pendingReveal = false; pet.style.opacity = '1'; } };
+      if (!idleEl || !idleEl.src) markReady();
+      else if (idleEl.complete && idleEl.naturalWidth > 0) markReady();   // уже в кэше
+      else { idleEl.addEventListener('load', markReady, { once: true }); idleEl.addEventListener('error', markReady, { once: true }); setTimeout(markReady, 2000); }   // страховка: не остаться невидимой, если картинка не грузится
+    };
+    const id = hero;
+    if (Yasia.heroes) Yasia.heroes.load(id, (m) => {
+      if (id !== hero) return;                 // устаревший колбэк: герой сменился во время async-загрузки манифеста
+      if (m) applyManifest(m); else resetToDefaults();   // нет манифеста -> чистые дефолты + папочный фолбэк
+      finish();
+    });
+    else { resetToDefaults(); finish(); }
   }
 
   py = ty = prevPy = window.innerHeight - PET_H - 40;
@@ -175,22 +389,8 @@
   const now = () => performance.now();
   const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
 
-  // ---------- речь питомца (зависит от языка dlgLang; по умолчанию EN) ----------
-  const SAY = {
-    en: {
-      idle:  ['Hi! 🐾', 'Whatcha up to?', 'Meow~', 'Pet me!', 'I live here 😺', 'Bored...'],
-      jump:  ['Whee!', 'Hop!', 'Nya!', 'Jump!', 'Flying! ✨'],
-      top:   ["I'm on top! 🏔️", 'Great view from here!', 'King of the hill 👑'],
-      event: ["Don't forget the events! 🎉", 'Events are waiting!', 'Filling in the events board! 📋'],
-    },
-    ru: {
-      idle:  ['Привет! 🐾', 'Чем занят?', 'Мяу~', 'Погладь меня!', 'Я тут живу 😺', 'Скучно...'],
-      jump:  ['Опа!', 'Хоп!', 'Ня!', 'Прыг!', 'Лечу! ✨'],
-      top:   ['Я на вершине! 🏔️', 'Отсюда всё видно!', 'Король горы 👑'],
-      event: ['Не забудь про ивенты! 🎉', 'Ивенты ждут!', 'Заполняем табличку ивентов! 📋'],
-    },
-  };
-  const says = (k) => (SAY[dlgLang] || SAY.en)[k];
+  // ---------- речь питомца ---------- (пулы фраз вынесены в L.<lang>.say.* — локализуются переключателем языка)
+  const SP = (k) => (tr().say && tr().say[k]) || [];   // пул реплик текущего языка
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
   function say(text, ms) {
     bubble.textContent = text;
@@ -224,40 +424,195 @@
     pet.classList.toggle('is-glow', level >= 4);
   }
 
-  // ---------- селекторы X ----------
-  function getStatusId(article) {
-    const links = article.querySelectorAll('a[href*="/status/"]');
-    for (const a of links) { if (!a.querySelector('time')) continue; const m = a.getAttribute('href').match(/\/status\/(\d+)/); if (m) return m[1]; }
-    for (const a of links) { const m = a.getAttribute('href').match(/\/status\/(\d+)/); if (m) return m[1]; }
-    return null;
+  // ---------- ТАМАГОЧИ: статы (energy/bond/mood) ----------
+  const elapsedMin = (at) => (Date.now() - at) / 60000;
+  // энергия: во сне (energyResting) растёт, иначе тратится — wall-clock, поэтому восстановление работает и в фоне/оффлайн
+  function currentEnergy() {
+    const rate = energyResting ? ENERGY_SLEEP_MIN : -ENERGY_REST_MIN;
+    return clamp(energyBase + elapsedMin(energyAt) * rate, 0, 100);
   }
-  function articleById(id) {
-    if (!id) return null;
-    for (const art of document.querySelectorAll('article[data-testid="tweet"]')) if (getStatusId(art) === id) return art;
-    return null;
+  function setEnergyResting(r) { if (r === energyResting) return; energyBase = currentEnergy(); energyAt = Date.now(); energyResting = r; }   // фиксируем энергию на смене режима
+  function currentBond() { return clamp(bondBase - elapsedMin(bondAt) * BOND_DECAY_MIN, 0, 100); }
+  function currentMoodBias() {   // бонус от ласки тает к нулю
+    const dec = elapsedMin(moodBiasAt) * MOOD_BIAS_DECAY_MIN;
+    return moodBiasBase > 0 ? Math.max(0, moodBiasBase - dec) : Math.min(0, moodBiasBase + dec);
   }
-  function likeBtnById(id) { const art = articleById(id); return art ? art.querySelector('[data-testid="like"]') : null; }
-  function rectOf(btn) {
-    if (!btn || !btn.isConnected) return null;
-    const r = btn.getBoundingClientRect();
-    if (r.width === 0 || r.height === 0) return null;
-    if (r.top < VIEW_PAD_TOP || r.bottom > window.innerHeight - VIEW_PAD_BOTTOM) return null;
-    return r;
+  function currentMood() {       // ПРОИЗВОДНОЕ: голод/энергия/привязанность + бонус
+    const h = currentHunger(), e = currentEnergy(), b = currentBond();
+    let m = MOOD_BASE + currentMoodBias();
+    if (h > 60) m -= (h - 60) * MOOD_HUNGER_K;
+    if (e < 30) m -= (30 - e) * MOOD_ENERGY_K;
+    m += b * MOOD_BOND_K;
+    return clamp(m, 0, 100);
   }
-  function pruneSnub(t) { for (const [id, exp] of snubbed) if (t >= exp) snubbed.delete(id); }
-  function findTarget() {
-    if (dialogOpen()) return null;
-    const t = now(); let best = null, bestD = Infinity;
-    const cx = px + PET_W / 2, cy = py + PET_H / 2;
-    for (const art of document.querySelectorAll('article[data-testid="tweet"]')) {
-      const btn = art.querySelector('[data-testid="like"]'); if (!btn) continue;
-      const id = getStatusId(art); if (!id) continue;
-      const exp = snubbed.get(id); if (exp && t < exp) continue;
-      const r = rectOf(btn); if (!r) continue;
-      const d = Math.hypot(r.left - cx, r.top - cy);
-      if (d < bestD) { bestD = d; best = id; }
+  // мутаторы (rebase: читаем текущее с учётом затухания, прибавляем дельту, сбрасываем метку времени)
+  function addEnergy(d) { energyBase = clamp(currentEnergy() + d, 0, 100); energyAt = Date.now(); }
+  function addBond(d) { bondBase = clamp(currentBond() + d, 0, 100); bondAt = Date.now(); }
+  function addMoodBias(d) { moodBiasBase = clamp(currentMoodBias() + d, -MOOD_BIAS_MAX, MOOD_BIAS_MAX); moodBiasAt = Date.now(); }
+  function addHunger(d) { hungerBase = clamp(currentHunger() + d, 0, 100); hungerAt = Date.now(); }
+  function saveCare(extra) {
+    Yasia.storage.localSet(Object.assign({
+      hunger: hungerBase, hungerAt,
+      energy: energyBase, energyAt, energyResting,
+      bond: bondBase, bondAt,
+      moodBias: moodBiasBase, moodBiasAt,
+    }, extra || {}));
+  }
+
+  // амбиентное состояние по статам -> поза/поведение
+  function computeAmbient() {
+    const h = currentHunger(), e = currentEnergy(), m = currentMood();
+    const sleepThr = resting ? ENERGY_WAKE : ENERGY_LOW;          // гистерезис: засыпает на ENERGY_LOW, просыпается только выспавшись (ENERGY_WAKE)
+    if (e < sleepThr && now() > awakeUntil) return 'sleep';
+    if (h >= HUNGER_STARVING) return 'starving';                 // очень голодная -> грустит/вредничает
+    if (m <= MOOD_BAD) return 'grumpy';                          // плохое настроение -> сидит/бурчит
+    if (h >= HUNGER_HUNGRY) return 'hungry';                     // голодная -> просит
+    if (m >= MOOD_GOOD && e >= ENERGY_TIRED) return 'playful';   // довольна и бодра -> бегает/прыгает
+    return 'normal';
+  }
+  function setAmbient(a) {
+    if (a === ambient) return;
+    ambient = a;
+    ambientEmo = AMBIENT_EMO[a] || null;   // care-state -> эмоция по карте (из манифеста: поле careState; иначе дефолт) -> новая авто-эмоция = только данные
+    resting = (a === 'sleep');
+    setEnergyResting(resting);                         // сон <-> бодрствование переключает знак ставки энергии
+    pet.classList.toggle('is-resting', resting);
+  }
+  function ambientSpeak(t) {
+    if (t < nextAmbSpeak || busy || dragging || hiding || gameActive || dialog.classList.contains('show') || isTyping()) return;
+    nextAmbSpeak = t + 11000 + Math.random() * 12000;
+    let line = null;
+    if (ambient === 'sleep') { if (Math.random() < 0.5) line = tr().sZzz; }
+    else if (ambient === 'starving') line = pick(SP('starving'));
+    else if (ambient === 'hungry') line = pick(SP('hungry'));
+    else if (ambient === 'grumpy') line = pick(SP('grumpy'));
+    else if (currentBond() >= BOND_FRIEND && Math.random() < 0.5) line = pick(SP('bond'));
+    if (line) say(line, 2200);
+  }
+  function careTick(t, dt) {
+    // восстановление сна теперь в currentEnergy (wall-clock); здесь только доп. расход на бег
+    if (!resting && running && pet.classList.contains('is-moving')) addEnergy(-ENERGY_RUN_SEC * dt / 1000);
+    if (comeUntil && t > comeUntil) comeUntil = 0;          // не добежала за отведённое время — снимаем «зов»
+    if (t > nextAmbient) { nextAmbient = t + 1200; setAmbient(computeAmbient()); }
+    if (t > nextCarePersist) { nextCarePersist = t + 5000; saveCare(); }
+    ambientSpeak(t);
+  }
+
+  // ---------- ТАМАГОЧИ: действия пользователя (скил «Забота») ----------
+  function applyAct(a) {
+    if (!a) return;
+    if (a.hunger) addHunger(a.hunger);
+    if (a.energy) addEnergy(a.energy);
+    if (a.bond) addBond(a.bond);
+    if (a.mood) addMoodBias(a.mood);
+    if (a.xp) gainXp(a.xp);
+  }
+  let comeUntil = 0;                          // пока бежит на зов — целевая точка у курсора
+  function comeHere() {                       // «позвать» — прибегает к курсору
+    if (hiding) unhide();
+    awakeUntil = now() + 8000; nextAmbient = now() + 1200; setAmbient(computeAmbient());   // мгновенно будим (resting=false), иначе не побежит
+    const tgt = clamp((mouseX || window.innerWidth / 2) - PET_W / 2, 0, window.innerWidth - PET_W);
+    walkTargetX = tgt; running = true; runUntil = now() + 2200; nextRunDecide = now() + 2400; nextJumpDecide = now() + 2600; comeUntil = now() + 2600;
+    face = tgt > px ? 1 : -1;
+    setMode('wander');   // НЕ happy: иначе ветка happy в tick не вызывает платформер и питомец стоит. Радость — по прибытии
+    say(pick(SP('come')), 1400);
+  }
+  function hide() { hiding = true; pet.classList.add('is-hiding'); setMode('idle'); say(tr().sHide, 1600); }
+  function unhide() { if (!hiding) return; hiding = false; pet.classList.remove('is-hiding'); setMode('happy'); happyUntil = now() + 900; }
+  function playEmote(emo, ms) { testKind = 'emo'; testEmo = emo; testUntil = now() + (ms || 2600); setMode('idle'); climbing = false; jumping = false; }
+  function doFeed() { applyAct(ACT_FEED); saveCare(); feedEat(); }
+  function doPet() { applyAct(ACT_PET); saveCare(); setMode('happy'); happyUntil = now() + 1200; say(currentBond() >= BOND_FRIEND ? pick(SP('bond')) : tr().sPetMur, 1600); }
+  function doPlay() {
+    if (currentEnergy() < 12) { addMoodBias(-3); saveCare(); say(tr().sPlayTired, 1800); return; }
+    applyAct(ACT_PLAY); saveCare(); playEmote('happy', 2600); say(tr().sPlayYay, 1800);
+  }
+  function doCall() { applyAct(ACT_CALL); saveCare(); comeHere(); }
+  function doHelp() {
+    if (currentMood() <= MOOD_BAD || currentEnergy() < 20) { addMoodBias(-2); saveCare(); say(tr().sHelpNoEnergy, 1800); return; }
+    applyAct(ACT_HELP); saveCare(); unhide();
+    setMode('happy'); happyUntil = now() + 1500; startTest('jump'); say(pick(SP('help')), 1900);
+  }
+  function doWake() {
+    const sleepy = resting || currentEnergy() <= ENERGY_TIRED;
+    if (!sleepy) { say(tr().sWakeNot, 1500); return; }
+    applyAct(ACT_WAKE);
+    if (currentEnergy() < ENERGY_LOW + 12) addEnergy(ENERGY_LOW + 12 - currentEnergy());   // реально выводим из сна (иначе уснёт снова через окно awakeUntil)
+    awakeUntil = now() + 20000; nextAmbient = now() + 1200; setAmbient(computeAmbient()); saveCare();
+    playEmote('dizzy', 2400); say(tr().sWakeUp, 1700);
+  }
+  function careAction(k) {
+    if (now() < nextAct) return; nextAct = now() + ACT_COOLDOWN_MS;
+    const movers = { call: 1, help: 1, hide: 1 };          // действия с перемещением -> закрываем облачко, чтобы видно
+    if (movers[k]) closeDialog();
+    ({ feed: doFeed, pet: doPet, play: doPlay, call: doCall, help: doHelp, hide: hide, wake: doWake }[k] || (() => {}))();
+    if (!movers[k] && dialog.classList.contains('show')) renderCareStatus();
+  }
+
+  // ---------- мини-игры (логика в src/systems/games.js) ----------
+  // pet.js даёт играм безопасный API над питомцем (позиция/курсор/XP/настроение/эмоции/ходьба) — см. petApi в yasiaCtx.
+  // Игра «забирает» питомца (gameClaim): главный цикл ведёт его к gameTargetX (наземно) и каждый кадр шлёт 'game:tick',
+  // где модуль игры двигает свои сущности, ставит цель и считает столкновения. Обычное гуляние/пакости/видео — на паузе.
+  function gameClaim(id) {
+    if (downloading) return false;                         // не мешаем скачиванию видео
+    if (watching) setWatching(false);
+    if (hiding) unhide();
+    closeDialog();
+    gameActive = true; gameId = id || null; gameTargetX = px; gameRun = false; gameVy = 0; gameFloor = true; gameClimb = false;
+    thrown = false; jumping = false; climbing = false; falling = false; vy = 0; vx = 0; testKind = null; running = false;
+    pet.style.opacity = '1'; pet.style.pointerEvents = '';   // на случай, если прошлая игра прятала питомца
+    setMode('idle');
+    return true;
+  }
+  function gameRelease() {
+    if (!gameActive) return;
+    gameActive = false; gameId = null; running = false; gameClimb = false; gameFloor = true;   // ВАЖНО: сбросить gameClimb, иначе обычный платформер после игры полезет к старой цели
+    pet.style.opacity = '1'; pet.style.pointerEvents = '';   // вернуть видимость/кликабельность (прятки могли спрятать)
+    resetToWander();
+  }
+  function gameTick(t, dt) {
+    if (gameClimb) {                                          // игра-платформер: лезет по полкам к точке (запрыгивает к высокому курсору)
+      platformerTick(t, dt);
+    } else if (jumping) {                                     // выполняем дугу баллистического прыжка (pet.hop -> стомп зомби)
+      updateJump(t);
+    } else if (gameFloor) {                                   // наземные игры: ведём к цели + гравитация к полу
+      const floorY = window.innerHeight - PLAT_FLOOR - PET_H; // НЕмасштабированная высота: спрайт растёт ВВЕРХ от низа бокса (origin 50% 100%) -> ноги всегда на py+PET_H (как в платформере/watching)
+      const sp = SPEED * userSpeed * (gameRun ? RUN_MUL : 1.6);
+      const adx = gameTargetX - px;
+      if (Math.abs(adx) > 3) { px += clamp(adx, -sp, sp); face = adx < 0 ? -1 : 1; running = gameRun; }
+      else running = false;
+      if (py < floorY) { gameVy = Math.min(gameVy + PLAT_GRAVITY, 26); py = Math.min(py + gameVy, floorY); }
+      else { py = floorY; gameVy = 0; }
+      px = clamp(px, 0, window.innerWidth - PET_W);
+    } else { running = false; }                               // позицию ведёт сама игра через pet.place() (прятки)
+    if (mode === 'happy' && t > happyUntil) setMode('idle');
+    try { Yasia.events.emit('game:tick', { t, dt }); } catch (_) {}   // модуль игры обновляет сущности/цель/коллизии
+  }
+  // целенаправленное лазание к точке (gameClimbCx,gameClimbY) для игр: жадный прыжок вверх к ближайшей подходящей полке,
+  // иначе просто идём по горизонтали к цели на текущем уровне. Своя (не watch*) логика — выверенный watchClimbDecide не трогаем.
+  function gameClimbDecide(t) {
+    if (!standLedge) return;
+    const W = PET_W, cx = px + W / 2, goalCx = gameClimbCx, goalY = gameClimbY;
+    const onLedgeX = goalCx >= standLedge.x1 - 4 && goalCx <= standLedge.x2 + 4;   // курсор по горизонтали над текущей полкой?
+    const goalAbove = standLedge.y - goalY > 30;     // курсор заметно ВЫШЕ
+    const goalBelow = goalY - standLedge.y > 30;     // курсор заметно НИЖЕ
+    walkTargetX = clamp(goalCx - W / 2, standLedge.x1, standLedge.x2 - W);    // по умолчанию идём к курсору по X в пределах полки
+    if (!goalAbove && !goalBelow && onLedgeX) return;                        // курсор на этом же уровне и над полкой -> просто дойдём пешком
+    const minLedgeY = PET_H * Math.max(1, sizeMul * userScale);              // полки за верхом экрана — игнор
+    const gd = (L) => Math.abs(clamp(goalCx, L.x1 + W / 2, L.x2 - W / 2) - goalCx) + Math.abs(L.y - goalY);   // близость полки к курсору (X+Y)
+    let best = null, bestD = gd(standLedge) - 4;                             // прыгаем, только если так СТРОГО ближе к курсору (без дрожи)
+    for (const L of ledges) {
+      if (L === standLedge || L.y < minLedgeY) continue;
+      if (!ledgeJumpable(standLedge, L)) continue;                           // достижимо прыжком вверх/вбок/ВНИЗ (вниз ledgeJumpable пускает далеко)
+      const d = gd(L);
+      if (d < bestD) { best = { L, c: clamp(goalCx, L.x1 + W / 2, L.x2 - W / 2) }; bestD = d; }
     }
-    return best;
+    if (best) {
+      const offC = clamp(best.c, standLedge.x1 + W / 2, standLedge.x2 - W / 2);
+      if (Math.abs(cx - offC) > 8) { walkTargetX = clamp(offC - W / 2, standLedge.x1, standLedge.x2 - W); return; }   // дойти до точки отрыва -> прыгнуть
+      startJump(best.L, best.c, t);
+      return;
+    }
+    if (goalBelow || !onLedgeX) walkTargetX = goalCx - W / 2;                // прыжком не достать, а курсор ниже/в стороне -> шагнуть С КРАЯ к нему (платформер уронит на нижний уровень за краем)
   }
 
   // ---------- движение ----------
@@ -267,47 +622,96 @@
     ty = window.innerHeight * 0.55 + Math.random() * (window.innerHeight * 0.38 - PET_H);
     wanderUntil = now() + 1800 + Math.random() * 2800;
   }
-  function moveToward(gx, gy) {
-    const dx = gx - px, dy = gy - py, d = Math.hypot(dx, dy);
-    const sp = SPEED * speedMul * runMul;
-    if (d <= sp) { px = gx; py = gy; return 0; }
-    px += (dx / d) * sp; py += (dy / d) * sp;
-    if (Math.abs(dx) > 1) face = dx > 0 ? 1 : -1;
-    return d;
-  }
-  function petNear(r) {
-    const cx = px + PET_W / 2, cy = py + PET_H / 2;
-    return Math.hypot(cx - (r.left + r.width / 2), cy - (r.top + r.height / 2)) < NEAR;
-  }
-
   function setMode(m) {
+    if (m === 'happy') happyKind = 'happy';   // ВСЕГДА сброс на подпрыг (даже если уже happy); приветствие выставит 'wave' сразу после
     if (mode === m) return;
     mode = m;
-    pet.classList.toggle('is-walking', m === 'approach' || m === 'wander');
-    pet.classList.toggle('is-begging', m === 'beg');
+    pet.classList.toggle('is-walking', m === 'wander');
     pet.classList.toggle('is-happy', m === 'happy');
-    bubble.classList.toggle('show', m === 'beg' || m === 'happy');
+    bubble.classList.toggle('show', m === 'happy');
   }
-  function dropTarget(snub) {
-    if (snub && targetId) snubbed.set(targetId, now() + SNUB_MS);
-    targetId = null; stableFrames = 0; setMode('wander'); pickWanderTarget();
-  }
-  function resetToWander() { targetId = null; stableFrames = 0; fuseMs = 0; pet.classList.remove('is-fuse'); setMode('wander'); pickWanderTarget(); }
+  function resetToWander() { setMode('wander'); pickWanderTarget(); }
 
-  // ---------- лайк ----------
-  function confirmLike(id) {
-    let tries = 0;
-    const check = () => {
-      const art = articleById(id);
-      if (art && art.querySelector('[data-testid="unlike"]')) {
-        bubble.textContent = '❤!';
-        gainXp(LIKE_XP);               // опыт за лайк
-        return;
-      }
-      if (++tries < 6) setTimeout(check, 90); else bubble.textContent = '🙀';
-    };
-    setTimeout(check, 90);
+  // ОГНЕННАЯ форма на время скачивания: качается видео -> Яся замирает и горит, скачалось -> обычное состояние.
+  function setDownloading(on) {
+    downloading = on;
+    pet.classList.toggle('is-fire', on && !!CAT_SETS.fire);   // огненное свечение только у героя с fire (у Noema — нет)
+    catAct = null;                          // чистый переход кадра (fire <-> обычное)
   }
+  function startDownloading() { if (dlHoldT) { clearTimeout(dlHoldT); dlHoldT = null; } setDownloading(true); }
+  function stopDownloadingSoon(startedAt) {  // держим форму минимум FIRE_MIN_MS, чтобы её было видно даже на мгновенном скачивании
+    const wait = Math.max(0, FIRE_MIN_MS - (now() - startedAt));
+    if (dlHoldT) clearTimeout(dlHoldT);
+    dlHoldT = setTimeout(() => { dlHoldT = null; setDownloading(false); }, wait);
+  }
+
+  // ---------- «СМОТРИТ ВИДЕО»: на странице играет видео -> Яся смотрит с попкорном ----------
+  // Анимация берётся по appState='watching' из манифеста (data-driven). Детект события (видео играет) — это «КОГДА», логика.
+  const watchAnim = () => { const a = ACTION_STATE.watching; return (a && CAT_SETS[a]) ? a : null; };   // null -> у героя нет такой анимации -> обычное поведение
+  function playingVideo() {   // самое КРУПНОЕ играющее видео на странице (под него и садимся)
+    const vids = document.getElementsByTagName('video');
+    let best = null, bestArea = 0;
+    for (let i = 0; i < vids.length; i++) {
+      const v = vids[i];
+      if (v.paused || v.ended || v.readyState <= 2 || !(v.currentTime > 0)) continue;
+      const r = v.getBoundingClientRect();
+      if (r.width < 80 || r.height < 60) continue;   // отсекаем пиксельные/трекинговые видео
+      const area = r.width * r.height;
+      if (area > bestArea) { bestArea = area; best = v; }
+    }
+    return best;
+  }
+  const anyVideoPlaying = () => !!playingVideo();
+  function setWatching(on) { if (watching === on) return; watching = on; if (!on) { watchArrived = false; watchHelp = false; watchHelpSayT = 0; watchClimbing = false; watchStuck = false; watchStuckT = 0; watchVid = null; watchFromEl = null; watchPingT = 0; } catAct = null; }   // выкл -> сбросить «дошла»/«лезет»/«просит подсадить»/цель/маршрут (и троттл фразы); catAct=null -> чистый переход кадра
+  let watchRecheckT = null, watchOffT = null;
+  function refreshWatching() {   // дебаунс + ГИСТЕРЕЗИС: вкл сразу, выкл с задержкой (буферизация видео не должна сгонять её с места)
+    if (watchRecheckT) return;
+    watchRecheckT = setTimeout(() => {
+      watchRecheckT = null;
+      const realPlaying = anyVideoPlaying();
+      if (!realPlaying) watchDismissed = false;   // видео встало -> снимаем «прогнали» (новый запуск снова заинтересует)
+      const playing = (realPlaying && !watchDismissed) || now() < watchTestUntil;   // прогнали от видео -> не подходим, пока это видео не остановится
+      if (playing) { if (Yasia.guard && !Yasia.guard.allows('watch') && now() >= watchTestUntil) return; if (watchOffT) { clearTimeout(watchOffT); watchOffT = null; } setWatching(true); }   // рабочий/безопасный режим: сама к видео не бежит (ручной тест — можно)
+      else if (watching && !watchOffT) { watchOffT = setTimeout(() => { watchOffT = null; setWatching(false); }, 1400); }   // видео встало -> уходит не сразу
+    }, 120);
+  }
+  ['play', 'playing', 'pause', 'ended', 'emptied', 'waiting'].forEach((ev) => document.addEventListener(ev, refreshWatching, true));
+  setInterval(refreshWatching, 1500);   // страховка: автоплей/SPA-навигация (если событие не поймали)
+
+  // частицы попкорна: вылетают вбок из ведёрка, падают на пол, лежат ~2с, тают
+  const POPCORN_EVERY = 950, POPCORN_SZ = 22;
+  function spawnKernel() {
+    let url = ''; try { url = chrome.runtime.getURL('src/items/popcorn.png'); } catch (_) {}
+    if (!url) return;
+    const k = document.createElement('img'); k.className = 'twtr-popcorn-k'; k.src = url; k.alt = '';
+    const sx = clamp(px + PET_W / 2 - POPCORN_SZ / 2, 0, window.innerWidth - POPCORN_SZ);
+    const sy = py + PET_H * 0.35;                                  // ~уровень ведёрка
+    k.style.left = sx + 'px'; k.style.top = sy + 'px';
+    root.appendChild(k);
+    const dir = Math.random() < 0.5 ? -1 : 1;                      // влево/вправо
+    const dx = dir * (50 + Math.random() * 110);
+    const upH = 50 + Math.random() * 50;
+    const floorDY = (py + PET_H - POPCORN_SZ * 0.4) - sy;          // «пол» = уровень её ног (лежат у неё под видео, а не на дне экрана)
+    const spin = Math.round(Math.random() * 540 - 270);
+    requestAnimationFrame(() => { k.style.transform = `translate(${Math.round(dx * 0.55)}px, ${-Math.round(upH)}px) rotate(${Math.round(spin / 2)}deg)`; });   // подлёт вверх-вбок
+    setTimeout(() => { k.style.transition = 'transform .5s cubic-bezier(.6,0,.9,.4)'; k.style.transform = `translate(${Math.round(dx)}px, ${Math.round(floorDY)}px) rotate(${spin}deg)`; }, 300);   // падение на пол
+    setTimeout(() => { k.style.transition = 'opacity .45s ease'; k.style.opacity = '0'; }, 2800);   // полежал ~2с -> тает
+    setTimeout(() => k.remove(), 3300);
+  }
+  function popcornTick(t) {   // поток зёрнышек, пока Яся смотрит видео
+    if (!(watching && watchAnim() && watchArrived) || document.hidden || dialog.classList.contains('show')) return;   // только когда уже села под видео
+    if (t - lastPopcornT > POPCORN_EVERY) { lastPopcornT = t; spawnKernel(); }
+  }
+  // фразы (англ.): просит подсадить наверх, когда видео в ленте и до него не допрыгнуть
+  const HELP_CALLS = ['Help me up!', 'Lift me up there!', 'Boost me up!', "I can't reach… help?", 'Pull me up to watch!', 'Gimme a lift!'];
+  // фразы (англ.): злится, когда её утащили от фильма
+  const MAD_CALLS = ['Hey! I was watching!', "I wasn't done!", 'Rude! Put me back!', 'My movie! 😾', 'Hmph! 😠'];
+  // фразы (ру+англ.): плеер YouTube ещё не прогрузил поток -> просит дать ролику поиграть и повторить
+  const YT_BUFFER_CALLS = [
+    'Дай ролику поиграть немного — я подгружу плеер 🎬 · Play it a bit so I can load the player',
+    'Плеер ещё грузится! Посмотри видео пару минут и жми снова 🍿 · Player still loading — watch a bit, then hit it again',
+    'Чуть проиграй видео со звуком, чтобы я поймала поток 🎬 · Let it play with sound so I can grab the stream',
+  ];
 
   // ---------- опыт ----------
   function gainXp(amount) {
@@ -324,7 +728,8 @@
 
   // ---------- пакости (визуальные) ----------
   function maybeMischief(t) {
-    if (busy || t < nextMischief || isTyping() || dialogOpen()) return;
+    if (Yasia.guard && !Yasia.guard.allows('mischief')) return;   // режимы (страж): пакости только в игровом
+    if (busy || gameActive || t < nextMischief || isTyping() || dialogOpen()) return;
     nextMischief = t + 13000 + Math.random() * 15000;
     if (isTwitter && Math.random() < 0.5) stealLetter(); else glassCrack();
   }
@@ -380,7 +785,7 @@
   // ---------- кормление ----------
   function feedEat() {
     busy = true;
-    // мясо прилетает снизу к питомцу
+    // мясо прилетает снизу к криперу
     const meat = document.createElement('img');
     try { meat.src = chrome.runtime.getURL('src/items/meat.png'); } catch (_) {}
     meat.className = 'twtr-pet-meat';
@@ -393,7 +798,7 @@
     setTimeout(() => { busy = false; setMode('wander'); }, 1200);
   }
 
-  // ---------- ВЗРЫВ по наведению ----------
+  // ---------- частицы (поощрение в играх и заботе) ----------
   function spawnParticles(color, count) {
     const cx = px + PET_W / 2, cy = py + PET_H / 2;
     for (let i = 0; i < count; i++) {
@@ -405,123 +810,6 @@
       setTimeout(() => p.remove(), 650);
     }
   }
-  // питомца разносит на пиксельные блоки во все стороны (остаются до взмаха мышью)
-  function spawnBlocks(cx, cy) {
-    const colors = ['#6cba43', '#4f9b34', '#3c7a2c', '#7bd16a', '#14110f'];
-    for (let i = 0; i < 26; i++) {
-      const b = document.createElement('div'); b.className = 'twtr-block';
-      const sz = 5 + Math.random() * 8;
-      b.style.width = sz + 'px'; b.style.height = sz + 'px';
-      b.style.background = colors[Math.floor(Math.random() * colors.length)];
-      b.style.left = cx + 'px'; b.style.top = cy + 'px';
-      root.appendChild(b);
-      const ang = Math.random() * Math.PI * 2, dist = 30 + Math.random() * 130;
-      const dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist * 0.7 + 30 + Math.random() * 70;
-      const rot = Math.random() * 720 - 360;
-      requestAnimationFrame(() => { b.style.transform = `translate(${dx.toFixed(0)}px, ${dy.toFixed(0)}px) rotate(${rot.toFixed(0)}deg)`; });
-      debris.push(b);
-    }
-  }
-
-  // буквы рядом с эпицентром РАЗЛЕТАЮТСЯ: оригинал прячем (обратимо), летят копии
-  function scatterLetters(cx, cy) {
-    let count = 0;
-    const els = new Set();
-    for (let i = 0; i < 16; i++) {
-      const ax = cx + (Math.random() * 2 - 1) * 200, ay = cy + (Math.random() * 2 - 1) * 200;
-      const el = document.elementFromPoint(ax, ay);
-      if (el && el.nodeType === 1 && el !== pet && !root.contains(el) && el.textContent && el.textContent.trim()) els.add(el);
-    }
-    for (const el of els) {
-      if (count >= 90) break;
-      const er = el.getBoundingClientRect();
-      if (er.height > 160 || el.querySelector('img,svg,video,canvas')) continue; // только текстовые run-ы, не контейнеры
-      const cs = getComputedStyle(el);
-      const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (n) => /\S/.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });
-      let node, made = false;
-      while ((node = tw.nextNode()) && count < 90) {
-        const s = node.nodeValue;
-        for (let i = 0; i < s.length && count < 90; i++) {
-          if (!/\S/.test(s[i])) continue;
-          const range = document.createRange(); range.setStart(node, i); range.setEnd(node, i + 1);
-          const r = range.getBoundingClientRect();
-          if (!r.width) continue;
-          const lx = r.left + r.width / 2, ly = r.top + r.height / 2, d = Math.hypot(lx - cx, ly - cy);
-          if (d > 330) continue;
-          const ch = document.createElement('div'); ch.className = 'twtr-block-letter'; ch.textContent = s[i];
-          ch.style.left = r.left + 'px'; ch.style.top = r.top + 'px';
-          ch.style.fontFamily = cs.fontFamily; ch.style.fontSize = cs.fontSize; ch.style.fontWeight = cs.fontWeight; ch.style.color = cs.color;
-          root.appendChild(ch);
-          const ang = Math.atan2(ly - cy, lx - cx) + (Math.random() - 0.5) * 0.8;
-          const force = Math.max(45, 240 - d * 0.7) + Math.random() * 60;   // ближе к центру — дальше летит
-          const dx = Math.cos(ang) * force, dy = Math.sin(ang) * force + 30, rot = Math.random() * 720 - 360;
-          requestAnimationFrame(() => { ch.style.transform = `translate(${dx.toFixed(0)}px, ${dy.toFixed(0)}px) rotate(${rot.toFixed(0)}deg)`; });
-          debris.push(ch); count++; made = true;
-        }
-      }
-      if (made) { boomHidden.push({ el, v: el.style.visibility }); el.style.visibility = 'hidden'; } // прячем оригинал
-    }
-  }
-
-  function explode() {
-    fuseMs = 0; pet.classList.remove('is-fuse');
-    explodeCooldown = now() + 9000;
-    busy = true; boomActive = true;
-    const cx = px + PET_W / 2, cy = py + PET_H / 2;
-    pet.classList.add('is-boom');
-    scatterLetters(cx, cy);   // сначала буквы (пока блоки не перекрыли точки), потом блоки
-    spawnBlocks(cx, cy);
-    setTimeout(() => { pet.style.visibility = 'hidden'; pet.classList.remove('is-boom'); }, 320);
-    startFling();   // курсор улетает по углам; всё застывает до взмаха мышью
-  }
-
-  // взмахнул мышью -> убираем весь разлетевшийся мусор, возвращаем курсор и питомца
-  function clearBoom() {
-    if (!boomActive) return;
-    boomActive = false;
-    endFling();
-    for (const el of debris) { el.style.transition = 'opacity .3s, transform .3s'; el.style.opacity = '0'; const e = el; setTimeout(() => e.remove(), 320); }
-    debris = [];
-    for (const h of boomHidden) { try { h.el.style.visibility = h.v; } catch (_) {} }   // вернуть оригинальные буквы
-    boomHidden = [];
-    px = 40 + Math.random() * (window.innerWidth - 80 - PET_W);
-    py = window.innerHeight - PET_H - 40; tx = px; ty = py; prevPx = px; prevPy = py;
-    pet.style.visibility = '';
-    busy = false; setMode('happy'); happyUntil = now() + 600;
-  }
-
-  // ---------- курсор «улетает по углам» ----------
-  let noCursorStyle = null;
-  function injectNoCursor() {
-    if (noCursorStyle) return;
-    noCursorStyle = document.createElement('style');
-    noCursorStyle.textContent = '*{cursor:none !important}';
-    document.documentElement.appendChild(noCursorStyle);
-  }
-  function removeNoCursor() { if (noCursorStyle) { noCursorStyle.remove(); noCursorStyle = null; } }
-  function startFling() {
-    flung = true; flungUntil = now() + 8000;
-    injectNoCursor();
-    fakeX = mouseX; fakeY = mouseY; cornerIdx = 0;
-    fakeCursor.style.opacity = '1'; fakeCursor.style.display = 'block';
-  }
-  function updateFling() {
-    if (now() > flungUntil) { clearBoom(); return; }   // страховка: само развеется
-    const m = 26;
-    const corners = [{ x: m, y: m }, { x: window.innerWidth - m, y: m }, { x: window.innerWidth - m, y: window.innerHeight - m }, { x: m, y: window.innerHeight - m }];
-    const c = corners[cornerIdx];
-    fakeX += (c.x - fakeX) * 0.14; fakeY += (c.y - fakeY) * 0.14;
-    if (Math.hypot(c.x - fakeX, c.y - fakeY) < 28) cornerIdx = (cornerIdx + 1) % 4;
-    fakeCursor.style.transform = `translate(${fakeX}px, ${fakeY}px)`;
-  }
-  function endFling() {
-    flung = false;
-    fakeCursor.style.transform = `translate(${mouseX}px, ${mouseY}px)`;
-    fakeCursor.style.opacity = '0';
-    setTimeout(() => { fakeCursor.style.display = 'none'; }, 220);
-    removeNoCursor();
-  }
-
   // ---------- перетаскивание мышкой ----------
   pet.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
@@ -531,13 +819,14 @@
     dragVx = 0; dragVy = 0; peakVx = 0; peakVy = 0; lastDragX = px; lastDragY = py;   // начинаем мерить скорость «кисти»
     pet.classList.add('is-grabbed');               // взяли «за шкирку» — болтается
     pet.classList.remove('is-moving');
-    if (hero === 'catgirl') showFrame('idle');  // замираем на кадре
+    if (isFramed()) showFrame('idle');  // замираем на кадре
     e.preventDefault(); e.stopPropagation();
   });
   window.addEventListener('mouseup', () => {
     if (!dragging) return;
     dragging = false; pet.classList.remove('is-grabbed'); jumping = false;
     standLedge = null;                                   // оторвали от опоры — летит/падает
+    if (paused) { thrown = false; vx = 0; vy = 0; saveState(); return; }   // пауза: просто переставили на новое место, без инерции (иначе зависнет в воздухе — ветка paused не зовёт физику)
     const power = throwMul;                              // 0..2 (ползунок «Инерция» 0..200%)
     const gain = power <= 1 ? power : 1 + (power - 1) * 9;   // нелинейно: 0%->0, 100%->×1, 200%->×10 (на максе лёгкий толчок отшвыривает)
     const vmax = 34 + 58 * power;                        // ПОТОЛОК скорости растёт с инерцией (34..150); раньше фикс ±38 «съедал» разницу
@@ -546,20 +835,82 @@
     vx = clamp(bvx * gain, -vmax, vmax);                 // инерция броска: горизонталь
     vy = clamp(bvy * gain, -vmax, 24 + 28 * power);      // вертикаль (вверх можно сильно подкинуть)
     thrown = true;                                       // дальше physics доводит до приземления (учитывая инерцию)
+    if (pendingMad) { pendingMad = false; playEmote('angry', 3000); say(pick(MAD_CALLS), 1900); }   // забрали от кино -> ЗЛИТСЯ; эмоция стартует на ОТПУСКАНИИ (иначе за время долгого перетаскивания окно успеет истечь и злость не покажется)
     saveState();
   });
 
-  // ---------- меню настроек (только размер) ----------
+  // ---------- поглаживание мышью ----------
+  // водишь курсором по питомцу (не таща) — накапливается «глажка»; STROKE_DIST px = одно «погладить».
+  // careAction('pet') сам держит кулдаун ACT_COOLDOWN_MS, так что спам движений не накручивает статы.
+  let strokeAcc = 0, strokeLX = 0, strokeLY = 0, strokeLastT = 0;
+  pet.addEventListener('mousemove', (e) => {
+    if (dragging || thrown || busy || gameActive || downloading || watching || hiding) return;   // сидящую у кино/спрятанную случайной мышью не дёргаем
+    const t = now();
+    if (t - strokeLastT > 600) strokeAcc = 0;            // пауза в движении — глажка начинается заново
+    else strokeAcc += Math.hypot(e.clientX - strokeLX, e.clientY - strokeLY);
+    strokeLastT = t; strokeLX = e.clientX; strokeLY = e.clientY;
+    if (strokeAcc >= (STROKE_DIST || 260)) { strokeAcc = 0; careAction('pet'); }
+  });
+
+  // ---------- меню настроек (размер) ----------
   function applyScale() { if (scaleVal) scaleVal.textContent = Math.round(userScale * 100) + '%'; render(); }
+  function applySpeed() { const p = Math.round(userSpeed * 100); if (speedVal) speedVal.textContent = p + '%'; if (speedRange) speedRange.value = p; }
+  if (speedRange) {
+    speedRange.addEventListener('input', (e) => { e.stopPropagation(); userSpeed = (+speedRange.value) / 100; applySpeed(); Yasia.storage.syncSet({ walkSpeed: userSpeed }); });
+    speedRange.addEventListener('mousedown', (e) => e.stopPropagation());
+    speedRange.addEventListener('click', (e) => e.stopPropagation());
+  }
+  function applyInertia() { const p = Math.round(throwMul * 100); if (inertiaVal) inertiaVal.textContent = p + '%'; if (inertiaRange) inertiaRange.value = p; }
+  if (inertiaRange) {
+    inertiaRange.addEventListener('input', (e) => { e.stopPropagation(); throwMul = (+inertiaRange.value) / 100; applyInertia(); Yasia.storage.syncSet({ throwPower: throwMul }); });
+    inertiaRange.addEventListener('mousedown', (e) => e.stopPropagation());
+    inertiaRange.addEventListener('click', (e) => e.stopPropagation());
+  }
   settingsBtn.addEventListener('click', (e) => { e.stopPropagation(); settingsPanel.classList.toggle('show'); });
   settingsPanel.addEventListener('click', (e) => {
+    const tb = e.target.closest('[data-test]'); if (tb) { e.stopPropagation(); startTest(tb.dataset.test); return; }
     const b = e.target.closest('[data-act]'); if (!b) return; e.stopPropagation();
     if (b.dataset.act === 'inc') userScale = Math.min(4.8, +(userScale + 0.2).toFixed(2));   // до 2× от прежнего максимума
     if (b.dataset.act === 'dec') userScale = Math.max(0.6, +(userScale - 0.2).toFixed(2));
     applyScale();
     Yasia.storage.syncSet({ scale: userScale });
   });
+  function applyRoam() {
+    roamSw.classList.toggle('on', roam);
+    roamSw.setAttribute('aria-checked', roam ? 'true' : 'false');
+    if (!roam) { running = false; jumping = false; pet.classList.remove('is-jump'); if (mode !== 'happy') setMode('idle'); }
+    else { standLedge = null; vy = 0; jumping = false; nextJumpDecide = 0; if (mode === 'idle') setMode('wander'); }
+  }
+  roamSw.addEventListener('click', (e) => {
+    e.stopPropagation(); roam = !roam; applyRoam();
+    Yasia.storage.syncSet({ roam });
+  });
+  function applyPaused() {   // ⏸ пауза (тумблер в попапе): замереть на месте, не пряча; статы wall-clock идут дальше
+    if (paused) {
+      if (gameActive) { try { Yasia.events.emit('game:stop'); } catch (_) {} }   // игру честно завершаем (иначе зомби/мясо зависнут на экране)
+      running = false; jumping = false; climbing = false; falling = false; thrown = false; vx = 0; vy = 0;
+      pet.classList.remove('is-moving', 'is-jump');
+      if (mode !== 'happy') setMode('idle');
+    } else {
+      standLedge = null; nextJumpDecide = 0;             // опору переоценит платформер
+      if (roam && mode === 'idle') setMode('wander');
+    }
+  }
 
+  // эмоции для подписи в облачке. DEFAULT_EMOS = фолбэк, если манифест не загрузился; applyManifest перестраивает из манифеста.
+  const EMO_EXTRA = [   // не-эмоции, но тоже тест-кнопки emo:<key> с подписью (движение, проигрываемое как «эмоция» в тесте)
+    { key: 'fall', emo: '😱', name: 'Падение' },
+    { key: 'run',  emo: '🏃', name: 'Бег' },
+  ];
+  const DEFAULT_EMOS = [
+    { key: 'happy',  icon: '😺', label: 'Радость' },
+    { key: 'sad',    icon: '😿', label: 'Грусть' },
+    { key: 'angry',  icon: '😠', label: 'Злость' },
+    { key: 'dizzy',  icon: '💫', label: 'Голова' },
+    { key: 'hungry', icon: '🍖', label: 'Голод' },
+    { key: 'sleep',  icon: '😴', label: 'Сон' },
+  ];
+  let EMOTIONS = DEFAULT_EMOS.map((e) => ({ key: e.key, emo: e.icon, name: e.label })).concat(EMO_EXTRA);
   document.addEventListener('click', (e) => {                 // клик вне меню — закрыть
     if (settingsPanel.classList.contains('show') && !settingsPanel.contains(e.target) && e.target !== settingsBtn) settingsPanel.classList.remove('show');
   });
@@ -815,12 +1166,12 @@
   // (Шифр подписи + чтение ytInitialPlayerResponse требуют page-world.) HD-склейка (mp4box) — там же, не для Web Store.
   let ytReqId = 0;
   function ytProgress(d) {                                    // прогресс HD/захвата: и в диалоге, и на самой Ясе (видно после закрытия окна)
-    const t = tr();
     let txt;
-    if (d.phase === 'prepare') txt = t.ytPrepare;
-    else if (d.phase === 'mux') txt = t.ytMux;
-    else if (d.phase === 'buffer') { const pct = d.total ? Math.round(d.loaded / d.total * 100) : 0; txt = t.ytBuffer + pct + t.ytBufferTail; }
-    else { const pct = d.total ? Math.round(d.loaded / d.total * 100) : 0; txt = (d.phase === 'video' ? t.ytVideo : t.ytAudio) + pct + '%'; }
+    const t = tr();
+    if (d.phase === 'prepare') txt = t.stPrepHd;
+    else if (d.phase === 'mux') txt = t.stMux;
+    else if (d.phase === 'buffer') { const pct = d.total ? Math.round(d.loaded / d.total * 100) : 0; txt = t.stCapturing + pct + t.stCapturingTail; }
+    else { const pct = d.total ? Math.round(d.loaded / d.total * 100) : 0; txt = (d.phase === 'video' ? t.stDlVideo : t.stDlAudio) + pct + '%'; }
     const status = dlgVideo && dlgVideo.querySelector('#twtr-dlg-status');
     if (status) { status.className = 'twtr-dlg-status'; status.textContent = txt; }
     say('⬇ ' + txt, 6000);                                    // дублируем на питомца — окно можно закрыть, прогресс остаётся виден
@@ -960,82 +1311,46 @@
   }
 
   // ---------- окно по клику: язык RU/EN + меню возможностей ----------
-  const L = {
-    en: {
-      name: 'Yasia',
-      greet: "Hi! I'm Yasia — I live on your feed, walk around the page, you can pet and feed me. Here's what I can do:",
-      dl: 'Download video from the page', notes: 'Notes & links', back: 'Back',
-      save: 'Save', ph: 'Paste any text or link…', empty: 'No notes yet',
-      novideo: "I don't see a video on this page. Open a clip (TikTok / Instagram / YouTube / X) and check again.",
-      onpage: 'video on this page', dlbtn: '⬇ Download', wmTt: ' (no watermark)', wmYt: ' (experimental)',
-      linkPh: 'Or paste a video link here…',
-      hintShare: 'To grab the exact clip: «Share → Copy link», then «Download». Didn\'t work — paste the link in the field above and «Download» again.',
-      hintYt: 'Quality = what the player loaded. Want 1080p — set it in the player (⚙), let it play a couple seconds, then «Download».',
-      askPh: 'Ask me or find a feature…', aiStub: '🤖 AI chat coming soon. For now I can: download videos and keep notes.', capsEmpty: 'Nothing found for that.',
-      other: 'RU',
-      // UI вне диалога
-      setTitle: 'Pet settings', size: 'Size', show: 'Show pet', hide: 'Hide pet', lvl: 'Lv.', del: 'Delete', video: 'Video', catchVideo: 'Here, catch the video!',
-      // статусы скачивания
-      stFinding: 'Looking for the video…', stByLink: 'Fetching by link: ', stByLinkFail: "Couldn't fetch the video by link. Open the clip itself (not the feed) and try again.",
-      stSaved: '✓ Saved in ', stThrottled: ' (n not sped up — may have been slow)', stDownloading: 'Downloading…',
-      stDownOkThrottled: '✓ Downloading (YouTube is throttling — may be slow)', stDownOk: '✓ Downloading!',
-      st403: 'YouTube rejected the link (403). Some clips are protected (PO-token) and can\'t be downloaded in the browser without a server — try another clip.',
-      stFail: "Failed: ", stErr: 'Error: ',
-      tipShare: 'Not sure which clip. Hit «Share → Copy link» (or paste a link in the field below), then «Download».',
-      tipNoVideo: 'Video not found. Open the video\'s own page (not the feed) and refresh.',
-      ytPrepare: 'Preparing HD…', ytMux: 'Muxing video + audio…', ytBuffer: 'Capturing from player ', ytBufferTail: "% (don't switch this video)", ytVideo: 'Downloading video ', ytAudio: 'Downloading audio ',
-    },
-    ru: {
-      name: 'Яся',
-      greet: 'Привет! Я Яся — живу у тебя на ленте, гуляю по странице, можно меня погладить и покормить. Вот что я умею:',
-      dl: 'Скачать видео со страницы', notes: 'Заметки и ссылки', back: 'Назад',
-      save: 'Сохранить', ph: 'Вставь любой текст или ссылку…', empty: 'Заметок пока нет',
-      novideo: 'На этой странице видео не вижу. Открой ролик (TikTok / Instagram / YouTube / X) и загляни снова.',
-      onpage: 'видео на странице', dlbtn: '⬇ Скачать', wmTt: ' (без вотермарки)', wmYt: ' (эксперим.)',
-      linkPh: 'Или вставь сюда ссылку на ролик…',
-      hintShare: 'Чтобы скачать именно нужный ролик: «Поделиться → Копировать ссылку», потом «Скачать». Не сработало — вставь ссылку в поле выше и снова «Скачать».',
-      hintYt: 'Качество = то, что загрузил плеер. Нужен 1080p — выставь его в плеере (⚙) и дай доиграться пару секунд, потом «Скачать».',
-      askPh: 'Спроси меня или найди функцию…', aiStub: '🤖 Чат с ИИ скоро подключим. Пока я умею: скачивать видео и вести заметки.', capsEmpty: 'Ничего не нашла по запросу.',
-      other: 'EN',
-      // UI вне диалога
-      setTitle: 'Настройки питомца', size: 'Размер', show: 'Показать питомца', hide: 'Спрятать питомца', lvl: 'Ур.', del: 'Удалить', video: 'Видео', catchVideo: 'Лови видео!',
-      // статусы скачивания
-      stFinding: 'Ищу видео…', stByLink: 'Беру по ссылке: ', stByLinkFail: 'Не достал видео по ссылке. Открой сам ролик (не ленту) и попробуй снова.',
-      stSaved: '✓ Скачано в ', stThrottled: ' (n не ускорен — могло быть медленно)', stDownloading: 'Качаю…',
-      stDownOkThrottled: '✓ Скачивается (YouTube троттлит — может медленно)', stDownOk: '✓ Скачивается!',
-      st403: 'YouTube отклонил ссылку (403). Часть роликов защищена (PO-token) и в браузере без сервера не качается — попробуй другой ролик.',
-      stFail: 'Не вышло: ', stErr: 'Ошибка: ',
-      tipShare: 'Не понял, какой ролик. Нажми «Поделиться → Копировать ссылку» (или вставь ссылку в поле ниже), потом «Скачать».',
-      tipNoVideo: 'Видео не найдено. Открой страницу самого видео (не ленту) и обнови.',
-      ytPrepare: 'Готовлю HD…', ytMux: 'Склеиваю видео + звук…', ytBuffer: 'Захватываю из плеера ', ytBufferTail: '% (не переключай это видео)', ytVideo: 'Качаю видео ', ytAudio: 'Качаю звук ',
-    },
-  };
-  let dlgLang = 'en';
-  const tr = () => L[dlgLang] || L.en;
+  // словарь интерфейса (RU/EN) вынесен в core/i18n.js — здесь только ссылка (язык и перерисовка остаются тут)
+  const L = (window.Yasia && Yasia.i18n && Yasia.i18n.L) || { ru: {}, en: {} };
+  let dlgLang = 'ru';
+  const tr = () => L[dlgLang] || L.ru;
   const setTxt = (sel, txt) => { const el = root.querySelector(sel); if (el) el.textContent = txt; };
+  // панель настроек (⚙) строится в root.innerHTML один раз -> перелейбливаем подписи/кнопки при смене языка
+  function renderSettingsLang() {
+    const t = tr();
+    const setEl = (sel, tx) => { const e = root.querySelector(sel); if (e && tx != null) e.textContent = tx; };
+    setEl('.twtr-set-title', t.setTitle);
+    setEl('#twtr-l-size', t.setSize); setEl('#twtr-l-speed', t.setSpeed); setEl('#twtr-l-inertia', t.setInertia); setEl('#twtr-l-roam', t.setRoam);
+    setEl('.twtr-set-sub', t.setTest);
+    const map = { idle: t.tbIdle, wave: t.tbWave, left: t.tbLeft, right: t.tbRight, jump: t.tbJump, climb: t.tbClimb, 'emo:fall': t.tbFall, 'emo:run': t.tbRun };
+    root.querySelectorAll('.twtr-test-btn[data-test]').forEach((b) => { const k = b.getAttribute('data-test'); if (map[k]) b.textContent = map[k]; });
+    renderModeRow();   // подписи режимов тоже зависят от языка
+  }
   function renderDlgLang() {
     const t = tr();
+    renderSettingsLang();
+    setTxt('.twtr-dlg-title', t.dlgTitle);   // заголовок окна тоже локализуем: «🐱 Яся» / «🐱 Yasya» (был жёстко зашит в HTML)
     setTxt('#twtr-dlg-greet', t.greet);
+    setTxt('#twtr-cap-ai-tx', t.ai);
+    setTxt('#twtr-cap-care-tx', t.care);
     setTxt('#twtr-cap-dl-tx', t.dl);
+    setTxt('#twtr-cap-games-tx', t.games);
     setTxt('#twtr-cap-notes-tx', t.notes);
     setTxt('#twtr-dlg-save', t.save);
     setTxt('#twtr-dlg-lang', t.other);
     if (dlgText) dlgText.placeholder = t.ph;
     const ask = root.querySelector('#twtr-dlg-ask'); if (ask) ask.placeholder = t.askPh;
-    const ai = root.querySelector('#twtr-dlg-ai'); if (ai && !ai.hidden) ai.textContent = t.aiStub;
     const ce = root.querySelector('#twtr-dlg-capsempty'); if (ce && !ce.hidden) ce.textContent = t.capsEmpty;
+    const aiBody = root.querySelector('#twtr-skill-ai');
+    if (aiBody && !aiBody.hidden && Yasia.ai && Yasia.ai.renderPanel) Yasia.ai.renderPanel(root.querySelector('#twtr-dlg-aipanel'));   // панель ИИ открыта -> перерисовать на новом языке
     renderNotes();
+    const careBody = root.querySelector('#twtr-skill-care');
+    if (careBody && !careBody.hidden) buildCareSection();   // скил заботы открыт -> перерисовать на новом языке
     const dlBody = root.querySelector('#twtr-skill-dl');
     if (dlBody && !dlBody.hidden) buildVideoSection();   // скил видео открыт -> перерисовать на новом языке
-    applyLang();   // язык остального UI (заголовок окна, панель настроек, тултипы)
-  }
-  // язык статичного UI вне диалога: заголовок облачка, панель настроек, кнопка показать/спрятать
-  function applyLang() {
-    const t = tr();
-    setTxt('.twtr-dlg-title', '🐱 ' + t.name);
-    setTxt('.twtr-set-title', t.setTitle);
-    setTxt('#twtr-set-size-label', t.size);
-    if (typeof applyEnabled === 'function') applyEnabled();   // тултип кнопки 🐾 на нужном языке
+    const gBody = root.querySelector('#twtr-skill-games');
+    if (gBody && !gBody.hidden) buildGamesSection();     // скил игр открыт -> перерисовать на новом языке
   }
   // фильтр возможностей по тексту ввода (поиск — первая функция поля)
   function filterCaps(q) {
@@ -1050,11 +1365,16 @@
     const ce = root.querySelector('#twtr-dlg-capsempty');
     if (ce) { ce.hidden = !(q && shown === 0); ce.textContent = tr().capsEmpty; }
   }
-  // обращение к ИИ (вторая функция поля) — ЗАГЛУШКА до подключения LLM
-  function askAI(q) {
-    if (!(q || '').trim()) return;
+  // обращение к ИИ (вторая функция поля) — делегируем «мозгу» (system/ai.js -> Hermes/GPT через background)
+  function askAI(q, opts) {
+    const shot = !!(opts && opts.shot);
+    if (!(q || '').trim() && !shot) return;
     const ai = root.querySelector('#twtr-dlg-ai'); if (!ai) return;
-    ai.hidden = false; ai.textContent = tr().aiStub;   // TODO: сюда подключить ответ LLM
+    ai.hidden = false;
+    const def = ((tr().lang || 'ru') === 'en') ? 'Look at the screenshot of this page: what is it and what can I do here? Tell me where to click.' : 'Посмотри на скриншот страницы: что это и что тут можно сделать? Подскажи, куда нажать.';
+    const text = (q || '').trim() || def;   // со скрином можно без текста — подставим вопрос по умолчанию
+    if (Yasia.ai && Yasia.ai.askInto) Yasia.ai.askInto(ai, text, opts);   // мозг сам сходит в Hermes/GPT и отрисует ответ/варианты
+    else ai.textContent = tr().aiStub;                            // флаг aiAssistant выключен / система не стартовала
   }
   // окно-облачко над Ясей: позиционируем по её реальному прямоугольнику (а не по центру экрана)
   function positionDialog() {
@@ -1090,8 +1410,41 @@
     if (wasOpen) return;                                  // был открыт -> теперь закрыт (вернулись в меню)
     wrap.classList.add('open');
     const body = wrap.querySelector('.twtr-skill-body'); if (body) body.hidden = false;
-    if (which === 'dl') buildVideoSection();
+    if (which === 'ai') {                                 // ИИ-мозг: панель строит system/ai.js (статус+быстрые действия+настройка)
+      const box = root.querySelector('#twtr-dlg-aipanel');
+      if (Yasia.ai && Yasia.ai.renderPanel) Yasia.ai.renderPanel(box);
+      else if (box) box.innerHTML = `<div class="twtr-dlg-empty">${tr().aiStub || ''}</div>`;   // флаг aiAssistant выключен/система упала -> честный отказ
+    }
+    else if (which === 'care') buildCareSection();
+    else if (which === 'dl') buildVideoSection();
+    else if (which === 'games') buildGamesSection();
+    else if (Yasia.flags && !Yasia.flags.enabled('notes')) {   // флаг выключен/система упала -> честный отказ (как у скачивания), а не мёртвая панель
+      const l = root.querySelector('#twtr-dlg-list'); if (l) l.innerHTML = `<div class="twtr-dlg-empty">${tr().notesOff || 'Заметки выключены.'}</div>`;
+    }
     else { renderNotes(); try { dlgText.focus(); } catch (_) {} }
+  }
+
+  // меню мини-игр: список запускаемых игр. Логику ведёт systems/games.js (через шину 'game:start').
+  function buildGamesSection() {
+    const t = tr();
+    const box = root.querySelector('#twtr-dlg-games'); if (!box) return;
+    if (Yasia.flags && !Yasia.flags.enabled('games')) { box.innerHTML = `<div class="twtr-dlg-empty">${t.gamesOff}</div>`; return; }
+    const games = [
+      { id: 'chase', ic: '🐭', name: t.gChase, desc: t.gChaseD, on: true },
+      { id: 'food', ic: '🍖', name: t.gFood, desc: t.gFoodD, on: true },
+      { id: 'zombie', ic: '🏹', name: t.gZombie, desc: t.gZombieD, on: true },
+      { id: 'hide', ic: '🙈', name: t.gHide, desc: t.gHideD, on: true },
+    ];
+    box.innerHTML = games.map((g) =>
+      `<button class="twtr-game-btn${g.on ? '' : ' off'}" data-game="${g.id}" type="button"${g.on ? '' : ' disabled'}>`
+      + `<span class="twtr-game-ic">${g.ic}</span><span class="twtr-game-tx"><b>${g.name}</b><i>${g.desc}</i></span></button>`).join('');
+    box.querySelectorAll('[data-game]').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (b.disabled) return;
+      const id = b.getAttribute('data-game');
+      closeDialog();
+      try { Yasia.events.emit('game:start', { id }); } catch (_) {}
+    }));
   }
 
   function buildVideoSection() {
@@ -1099,62 +1452,152 @@
     const p = detectPlatform();
     const known = (p === 'tiktok' || p === 'twitter' || p === 'instagram' || p === 'youtube');
     const hintStyle = 'font-size:11px;color:#536471;margin-top:6px;line-height:1.35;';
-    if (!known && !extractGeneric()) { dlgVideo.innerHTML = `<div class="twtr-dlg-hint" style="${hintStyle}">${t.novideo}</div>`; return; }
-    const name = { tiktok: 'TikTok', twitter: 'Twitter / X', instagram: 'Instagram', youtube: 'YouTube' }[p] || t.video;
+    const imgBtn = `<button class="twtr-dlg-dl" id="twtr-dlg-dli" type="button">${t.dlImgsBtn}</button>`;
+    const wireImgs = () => { const b = dlgVideo.querySelector('#twtr-dlg-dli'); if (b) b.addEventListener('click', (e) => { e.stopPropagation(); doDownloadImages(e.currentTarget); }); };
+    if (!known && !extractGeneric()) {   // видео нет — но картинки со страницы скачать можно всегда
+      dlgVideo.innerHTML = `<div class="twtr-dlg-hint" style="${hintStyle}">${t.novideo}</div>${imgBtn}<div class="twtr-dlg-status" id="twtr-dlg-status"></div>`;
+      wireImgs(); return;
+    }
+    const name = { tiktok: 'TikTok', twitter: 'Twitter / X', instagram: 'Instagram', youtube: 'YouTube' }[p] || (dlgLang === 'en' ? 'Video' : 'Видео');
     const wm = p === 'tiktok' ? t.wmTt : (p === 'youtube' ? t.wmYt : '');
     const hint = (p === 'tiktok' || p === 'instagram') ? `<div class="twtr-dlg-hint" style="${hintStyle}">${t.hintShare}</div>`
       : (p === 'youtube' ? `<div class="twtr-dlg-hint" style="${hintStyle}">${t.hintYt}</div>` : '');
     const linkField = (p === 'tiktok' || p === 'instagram' || p === 'twitter') ? `<input class="twtr-dlg-link" id="twtr-dlg-link" type="text" placeholder="${t.linkPh}">` : '';
-    dlgVideo.innerHTML = `<span class="twtr-dlg-plat">🎬 ${name} — ${t.onpage}</span>${linkField}<button class="twtr-dlg-dl" id="twtr-dlg-dl" type="button">${t.dlbtn}${wm}</button><div class="twtr-dlg-status" id="twtr-dlg-status"></div>${hint}`;
+    dlgVideo.innerHTML = `<span class="twtr-dlg-plat">🎬 ${name} — ${t.onpage}</span>${linkField}<button class="twtr-dlg-dl" id="twtr-dlg-dl" type="button">${t.dlbtn}${wm}</button>${imgBtn}<div class="twtr-dlg-status" id="twtr-dlg-status"></div>${hint}`;
     dlgVideo.querySelector('#twtr-dlg-dl').addEventListener('click', (e) => { e.stopPropagation(); doDownload(e.currentTarget); });
+    wireImgs();
+  }
+
+  // ---------- скачивание картинок ----------
+  // На X/Twitter — фото твитов (pbs.twimg.com/media) в максимальном качестве (name=orig);
+  // на остальных сайтах — крупные видимые <img>. До 8 штук, ближние к центру экрана первыми.
+  function collectPageImages() {
+    const seen = new Set(), out = [];
+    const midY = window.innerHeight / 2;
+    const cand = [];
+    for (const im of document.querySelectorAll('img')) {
+      const r = im.getBoundingClientRect();
+      if (r.width < 120 || r.height < 120 || r.bottom < 0 || r.top > window.innerHeight) continue;   // мелочь (аватарки/смайлы) и вне экрана
+      const src = im.currentSrc || im.src || '';
+      if (!/^https?:/.test(src) || /\.svg(\?|$)/i.test(src)) continue;
+      cand.push({ src, mid: (r.top + r.bottom) / 2 });
+    }
+    cand.sort((a, b) => Math.abs(a.mid - midY) - Math.abs(b.mid - midY));
+    for (const c of cand) {
+      let u = c.src;
+      if (/pbs\.twimg\.com\/media\//.test(u)) { try { const x = new URL(u); x.searchParams.set('name', 'orig'); u = x.toString(); } catch (_) {} }   // X отдаёт оригинал по name=orig
+      else if (isTwitter) continue;                       // на X берём только фото твитов (не аватарки/баннеры)
+      if (seen.has(u)) continue;
+      seen.add(u); out.push(u);
+      if (out.length >= 8) break;
+    }
+    return out;
+  }
+  function imageFilename(u, i) {
+    let ext = 'jpg';
+    try { const x = new URL(u); const f = x.searchParams.get('format'); const m = x.pathname.match(/\.(jpe?g|png|webp|gif)(\?|$)/i); ext = ((f || (m && m[1]) || 'jpg') + '').toLowerCase(); } catch (_) {}
+    return 'yasya_img_' + Date.now() + '_' + (i + 1) + '.' + ext;
+  }
+  async function doDownloadImages(btn) {
+    const status = dlgVideo.querySelector('#twtr-dlg-status');
+    const setStatus = (cls, txt) => { if (status) { status.className = 'twtr-dlg-status ' + cls; status.textContent = txt; } };
+    const T = tr();
+    if (Yasia.flags && !Yasia.flags.enabled('mediaDownload')) { setStatus('err', T.stDlOff); return; }
+    const urls = collectPageImages();
+    if (!urls.length) { setStatus('err', T.stNoImgs); return; }
+    if (Yasia.guard && Yasia.guard.needDownloadConfirm()) {   // СТРАЖ: как у видео — частые скачивания/safe-режим требуют явного «да»
+      const ok = await Yasia.guard.confirm({ text: T.gdDlMany, yes: T.gdYes, no: T.gdNo });
+      if (!ok) { setStatus('', ''); return; }
+    }
+    if (Yasia.guard) Yasia.guard.noteDownload();
+    btn.disabled = true; setStatus('', T.stImgsDl + urls.length + '…');
+    let okN = 0;
+    for (let i = 0; i < urls.length; i++) {
+      try { const r = await chrome.runtime.sendMessage({ type: 'YASIA_DOWNLOAD', url: urls[i], filename: imageFilename(urls[i], i) }); if (r && r.ok) okN++; } catch (_) {}
+    }
+    btn.disabled = false;
+    if (okN) { setStatus('ok', T.stImgsOk + okN); say(tr().sCatch, 1800); }
+    else setStatus('err', T.stFail + 'images');
+  }
+
+  // ---------- скил «Забота»: 7 действий + строка состояния ----------
+  function careStatusText() {
+    const t = tr(), h = currentHunger(), e = currentEnergy(), b = currentBond();
+    const parts = [
+      h >= HUNGER_STARVING ? t.sStarving : (h >= HUNGER_HUNGRY ? t.sHungry : t.sFed),
+      e <= ENERGY_LOW ? t.sSleepy : (e < ENERGY_TIRED ? t.sTired : t.sEnergetic),
+      b >= BOND_BESTIE ? t.sBestie : (b >= BOND_FRIEND ? t.sFriend : t.sShy),
+    ];
+    return t.careNow + ': ' + parts.join(', ');
+  }
+  function renderCareStatus() { const el = root.querySelector('#twtr-care-stat'); if (el) el.textContent = careStatusText(); }
+  function buildCareSection() {
+    if (!dlgCare) return;
+    const t = tr();
+    const acts = [
+      ['feed', '🍖', t.aFeed], ['pet', '✋', t.aPet], ['play', '🎾', t.aPlay], ['call', '📣', t.aCall],
+      ['help', '🆘', t.aHelp], ['hide', '🙈', t.aHide], ['wake', '⏰', t.aWake],
+    ];
+    dlgCare.innerHTML = acts.map(([k, ic, lb]) => `<button class="twtr-care-btn" data-act="${k}" type="button"><span class="twtr-care-ic">${ic}</span><span>${lb}</span></button>`).join('') + `<div class="twtr-care-stat" id="twtr-care-stat"></div>`;
+    dlgCare.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); careAction(b.getAttribute('data-act')); }));
+    renderCareStatus();
   }
 
   async function doDownload(btn) {
-    const t = tr();
+    if (Yasia.flags && !Yasia.flags.enabled('mediaDownload')) {   // фича выключена/сломана -> вежливый отказ, без огня
+      const status = dlgVideo.querySelector('#twtr-dlg-status');
+      if (status) { status.className = 'twtr-dlg-status err'; status.textContent = tr().stDlOff; }
+      return;
+    }
+    startDownloading(); const dlStart = now();   // огненная форма на всё время скачивания (YT-склейка идёт минуты)
+    try {
+      return await doDownloadInner(btn);
+    } finally {
+      stopDownloadingSoon(dlStart);              // вернуть в обычное состояние (с минимальной выдержкой формы)
+    }
+  }
+  async function doDownloadInner(btn) {
     const status = dlgVideo.querySelector('#twtr-dlg-status');
     const setStatus = (cls, txt) => { if (status) { status.className = 'twtr-dlg-status ' + cls; status.textContent = txt; } };
-    btn.disabled = true; setStatus('', t.stFinding);
+    const T = tr();
+    btn.disabled = true; setStatus('', T.stSearching);
     const plat0 = detectPlatform();
     let media = null, explicit = false;
     // 1) если в буфере/поле — ссылка на ролик (TikTok/IG/X), берём ИМЕННО его. Ссылка АВТОРИТЕТНА:
     //    либо это видео, либо честный отказ — НИКОГДА не откатываемся в угадывание ленты (было «качает рандом»).
-    try { const lt = await explicitLinkTarget(); if (lt) { explicit = true; setStatus('', t.stByLink + (lt.id || lt.code || 'ok') + '…'); media = await resolveExplicit(lt); } } catch (_) {}
-    if (explicit && (!media || !media.url)) { setStatus('err', t.stByLinkFail); btn.disabled = false; return; }
+    try { const t = await explicitLinkTarget(); if (t) { explicit = true; setStatus('', T.stByLink + (t.id || t.code || 'ok') + '…'); media = await resolveExplicit(t); } } catch (_) {}
+    if (explicit && (!media || !media.url)) { setStatus('err', T.stByLinkFail); btn.disabled = false; return; }
     // 2) ссылки нет — определяем видео по странице (без рандома: если не опознали однозначно, будет «не найдено»)
     if (!media) { try { media = await resolveCurrentVideo(); } catch (_) {} }
     // YouTube HD: файл уже склеен и сохранён прямо в странице (mp4box -> Blob -> download)
-    if (media && media.ok && media.hd) { setStatus('ok', t.stSaved + media.quality + (media.throttled ? t.stThrottled : '')); say(t.catchVideo, 1800); btn.disabled = false; return; }
-    if (media && media.error) { setStatus('err', media.error); btn.disabled = false; return; }
+    if (media && media.ok && media.hd) { setStatus('ok', T.stDownloadedTo + media.quality + (media.throttled ? T.stThrottleN : '')); say(tr().sCatch, 1800); btn.disabled = false; return; }
+    if (media && media.error) { setStatus('err', media.error); if (media.needBuffer) say(pick(YT_BUFFER_CALLS), 7000); btn.disabled = false; return; }   // плеер ещё не отдал поток -> Яся вслух просит дать ролику поиграть (ру+англ)
     if (!media || !media.url) {
-      const tip = (plat0 === 'tiktok' || plat0 === 'instagram') ? t.tipShare : t.tipNoVideo;
+      const tip = (plat0 === 'tiktok' || plat0 === 'instagram') ? T.stNoClip : T.stNoVideo;
       setStatus('err', tip); btn.disabled = false; return;
     }
-    setStatus('', t.stDownloading);
+    // СТРАЖ: много скачиваний подряд (или безопасный режим) -> явное подтверждение пользователя
+    if (Yasia.guard && Yasia.guard.needDownloadConfirm()) {
+      const ok = await Yasia.guard.confirm({ text: tr().gdDlMany, yes: tr().gdYes, no: tr().gdNo });
+      if (!ok) { setStatus('', ''); btn.disabled = false; return; }
+    }
+    if (Yasia.guard) Yasia.guard.noteDownload();
+    setStatus('', T.stDownloading);
     try {
       // validate: прогнать через fetch+проверку content-type (YouTube/обычные сайты могут отдать html/текст -> иначе сохранится .txt)
       const plat = detectPlatform();
       const validate = !media.referer && (plat === 'youtube' || plat === 'generic');
       const res = await chrome.runtime.sendMessage({ type: 'YASIA_DOWNLOAD', url: media.url, filename: media.filename, referer: media.referer || null, validate });
-      if (res && res.ok) { setStatus('ok', media.throttled ? t.stDownOkThrottled : t.stDownOk); say(t.catchVideo, 1800); }
-      else if (plat === 'youtube' && /\b403\b/.test((res && res.error) || '')) setStatus('err', t.st403);
-      else setStatus('err', t.stFail + ((res && res.error) || 'error'));
-    } catch (err) { setStatus('err', t.stErr + String((err && err.message) || err)); }
+      if (res && res.ok) { setStatus('ok', media.throttled ? T.stDlThrottle : T.stDlOk); say(tr().sCatch, 1800); }
+      else if (plat === 'youtube' && /\b403\b/.test((res && res.error) || '')) setStatus('err', T.st403);
+      else setStatus('err', T.stFail + ((res && res.error) || 'error'));
+    } catch (err) { setStatus('err', T.stErr + String((err && err.message) || err)); }
     btn.disabled = false;
   }
 
-  // --- заметки ---
-  let notes = [];
-  function escHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-  function linkify(s) { return escHtml(s).replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'); }
-  function renderNotes() {
-    if (!dlgList) return;
-    if (!notes.length) { dlgList.innerHTML = `<div class="twtr-dlg-empty">${tr().empty}</div>`; return; }
-    dlgList.innerHTML = notes.map((n) => `<div class="twtr-dlg-note"><span>${linkify(n.text)}</span><button class="twtr-dlg-note-del" data-del="${n.id}" type="button" title="${tr().del}">✕</button></div>`).join('');
-    dlgList.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); const id = b.getAttribute('data-del'); notes = notes.filter((n) => n.id !== id); saveNotes(); renderNotes(); }));
-  }
-  function saveNotes() { Yasia.storage.localSet({ yasiaNotes: notes }); }
-  function addNote() { const v = dlgText.value.trim(); if (!v) return; notes.unshift({ id: String(Date.now()) + Math.floor(Math.random() * 1000), text: v }); saveNotes(); renderNotes(); dlgText.value = ''; }
-  Yasia.storage.localGet({ yasiaNotes: [] }, (s) => { notes = Array.isArray(s.yasiaNotes) ? s.yasiaNotes : []; renderNotes(); });
+  // --- заметки --- вынесены в src/systems/notes.js (флаг notes). Общение через шину:
+  const renderNotes = () => Yasia.events.emit('notes:render');   // обновить список (no-op, если система выключена/упала)
+  const addNote = () => Yasia.events.emit('notes:add');          // добавить из поля ввода
 
   function openDialog() {
     try { window.postMessage({ __yasiaCollect: true }, '*'); } catch (_) {}
@@ -1168,15 +1611,72 @@
   root.querySelector('#twtr-dlg-backdrop').addEventListener('click', (e) => { e.stopPropagation(); closeDialog(); });
   root.querySelector('#twtr-dlg-save').addEventListener('click', (e) => { e.stopPropagation(); addNote(); });
   root.querySelector('#twtr-dlg-lang').addEventListener('click', (e) => { e.stopPropagation(); dlgLang = dlgLang === 'ru' ? 'en' : 'ru'; try { Yasia.storage.syncSet({ dlgLang }); } catch (_) {} renderDlgLang(); });
+  root.querySelector('#twtr-cap-ai').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('ai'); });
+  root.querySelector('#twtr-cap-care').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('care'); });
   root.querySelector('#twtr-cap-dl').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('dl'); });
+  root.querySelector('#twtr-cap-games').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('games'); });
   root.querySelector('#twtr-cap-notes').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('notes'); });
+  // «мозг» (ai.js) распознал намерение в поле «спроси» -> открываем нужный навык прямо в окне Яси (маршрутизация запроса к её инструментам)
+  try { Yasia.events.on('cap:open', (p) => {
+    const which = p && p.which; if (!which) return;
+    if (!dialog.classList.contains('show')) openDialog();
+    const wrap = root.querySelector('.twtr-skill[data-skill="' + which + '"]');
+    if (wrap && !wrap.classList.contains('open')) toggleSkill(which);   // toggleSkill — переключатель: открываем только если ещё закрыт
+  }); } catch (_) {}
+  // режимы поведения (страж): кнопки в настройках; подсветка активного + тултип с названием
+  function renderModeRow() {
+    const t = tr(); const names = { game: t.mGame, calm: t.mCalm, work: t.mWork, ai: t.mAi, safe: t.mSafe };
+    const cur = Yasia.guard ? Yasia.guard.mode() : 'game';
+    root.querySelectorAll('.twtr-mode-btn').forEach((b) => {
+      const m = b.getAttribute('data-mode');
+      b.classList.toggle('on', m === cur);
+      if (names[m]) b.title = names[m];
+    });
+    const lbl = root.querySelector('#twtr-l-mode'); if (lbl && t.setMode) lbl.textContent = t.setMode + (names[cur] ? ' · ' + names[cur] : '');
+  }
+  root.querySelectorAll('.twtr-mode-btn').forEach((b) => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (Yasia.guard) Yasia.guard.setMode(b.getAttribute('data-mode'));
+    renderModeRow();
+  }));
+  try { if (Yasia.guard) Yasia.guard.onMode(() => renderModeRow()); } catch (_) {}   // смена из другой вкладки -> подсветка вживую
+  renderModeRow();
+
+  // сработала напоминалка (фон, chrome.alarms) -> Яся произносит её прямо на странице
+  function showReminder(text) {
+    const tx = String(text || '').slice(0, 200).trim(); if (!tx) return false;
+    setMode('happy'); happyKind = 'wave'; happyUntil = now() + 1800;
+    say('⏰ ' + tx, 6500); playEmote('happy', 1800);
+    return true;
+  }
+  try { chrome.runtime.onMessage.addListener((m, _s, sendResponse) => {
+    if (!m || m.type !== 'YASIA_REMIND_FIRE') return;
+    const ok = showReminder(m.text);
+    try { sendResponse({ ok }); } catch (_) {}   // подтверждение доставки: фон удалит напоминалку только после него
+  }); } catch (_) {}
+  // при загрузке страницы забираем пропущенные напоминалки (браузер был закрыт/не было вкладок) — показываем по очереди
+  try { setTimeout(() => {
+    chrome.runtime.sendMessage({ type: 'YASIA_REMIND_PULL' }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.ok || !Array.isArray(r.due)) return;
+      r.due.slice(0, 5).forEach((d, i) => setTimeout(() => showReminder(d.text), i * 7500));
+    });
+  }, 4000); } catch (_) {}
   const askEl = root.querySelector('#twtr-dlg-ask');
   if (askEl) {
     askEl.addEventListener('input', (e) => { e.stopPropagation(); filterCaps(askEl.value); });           // печатаешь -> фильтр возможностей сверху
     askEl.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); askAI(askEl.value); } });   // Enter -> к ИИ (заглушка)
   }
   root.querySelector('#twtr-dlg-asksend').addEventListener('click', (e) => { e.stopPropagation(); askAI(askEl ? askEl.value : ''); });
-  try { Yasia.storage.syncGet({ dlgLang: 'en' }, (s) => { dlgLang = (s && s.dlgLang === 'ru') ? 'ru' : 'en'; renderDlgLang(); }); } catch (_) {}
+  { const shotBtn = root.querySelector('#twtr-dlg-askshot'); if (shotBtn) shotBtn.addEventListener('click', (e) => { e.stopPropagation(); askAI(askEl ? askEl.value : '', { shot: true }); }); }   // 📸 -> вопрос + скрин страницы в GPT
+  try { Yasia.storage.syncGet({ dlgLang: 'ru' }, (s) => { dlgLang = (s && s.dlgLang === 'en') ? 'en' : 'ru'; renderDlgLang(); }); } catch (_) {}
+  // язык сменили в попапе/другой вкладке -> подхватываем вживую (единый переключатель на всё)
+  try { Yasia.storage.onChanged((ch, area) => {
+    if (area !== 'sync' || !ch || !ch.dlgLang) return;
+    const nl = ch.dlgLang.newValue === 'en' ? 'en' : 'ru';
+    if (nl === dlgLang) return;
+    dlgLang = nl; renderDlgLang();
+    try { toggle.title = enabled ? tr().ttHide : tr().ttShow; } catch (_) {}
+  }); } catch (_) {}
   dlgText.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); addNote(); } });
   dialog.addEventListener('mousedown', (e) => e.stopPropagation());   // работаем в окне, не таскаем Ясю
   dialog.addEventListener('click', (e) => e.stopPropagation());
@@ -1185,110 +1685,102 @@
   pet.addEventListener('click', (e) => {
     e.stopPropagation();
     if (didDrag) { didDrag = false; return; }   // это было перетаскивание, не клик
-    if ((mode === 'beg' || mode === 'approach') && targetId && !isTyping() && !dialogOpen()) {
-      const btn = likeBtnById(targetId), r = rectOf(btn);
-      if (r && stableFrames >= STABLE_FRAMES && petNear(r)) {
-        btn.click();
-        const id = targetId; targetId = null;
-        bubble.textContent = '❤?'; setMode('happy'); happyUntil = now() + HAPPY_MS;
-        confirmLike(id);
-        return;
-      }
-    }
+    if (gameActive) { try { Yasia.events.emit('game:petclick'); } catch (_) {} return; }   // идёт игра -> клик уходит игре (а не открывает окно)
+    if (hiding) { unhide(); return; }            // вылезает из укрытия по клику
     setMode('happy'); happyUntil = now() + 1200;   // гладят — машет ручкой
-    openDialog();                                   // и открываем окошко (заметки + скачать видео со страницы)
+    openDialog();                                   // и открываем окошко (забота + скачать видео + заметки)
   });
 
   // ---------- платформер: жизнь по структуре страницы ----------
   function petW() { return PET_W * sizeMul * userScale; }   // эффективная ширина с учётом размера = ХИТБОКС (растёт/уменьшается)
-  function collectLedges() {
-    const vw = window.innerWidth, vh = window.innerHeight, out = [], seen = new Set();
-    const els = document.querySelectorAll('article,[data-testid="tweet"],[data-testid="tweetText"],h1,h2,h3,[role="heading"],img,button,p,li');
-    for (const el of els) {
-      if (root.contains(el)) continue;
-      const r = el.getBoundingClientRect();
-      if (r.width < 44 || r.height < 14) continue;
-      if (r.top < 6 || r.top > vh - 10) continue;
-      const x1 = Math.max(4, r.left), x2 = Math.min(vw - 4, r.right);
-      if (x2 - x1 < Math.max(40, petW() * 0.8)) continue;   // узкая для её ХИТБОКСА (растёт с размером) -> не встать/не запрыгнуть
-      if (x2 - x1 > vw * 0.62) continue;          // слишком широкое — это контейнер/фон, а не «полка»
-      const key = Math.round(r.top / 6) + ':' + Math.round(x1 / 24);
-      if (seen.has(key)) continue; seen.add(key);
-      out.push({ el, x1, x2, y: Math.round(r.top) });
-      if (out.length > 70) break;
-    }
-    out.push({ el: null, floor: true, x1: 0, x2: vw, y: vh - PLAT_FLOOR });   // пол внизу: падает до него, если в её колонке нет элемента, потом запрыгивает наверх
-    out.sort((a, b) => a.y - b.y);
-    return out;
-  }
-  function reacquireFloor() {                          // после пересканирования вернуть опору без el (пол)
-    if (!standLedge || standLedge.el) return;
-    const cx = px + PET_W / 2, foot = py + PET_H;
-    for (const L of ledges) if (cx >= L.x1 && cx <= L.x2 && Math.abs(L.y - foot) < 6) { standLedge = L; return; }
-  }
-  function startJump(L, tgtCenterX, t) {
-    jumping = true; climbing = false; jumpT = t; jumpDest = L;
-    jumpFromX = px; jumpFromY = py;
-    jumpToX = clamp(tgtCenterX - PET_W / 2, L.x1, L.x2 - PET_W);
-    jumpToY = L.y - PET_H;
-    jumpPeak = Math.max(46, (jumpFromY - jumpToY) + 50);   // дуга всегда выше обеих точек
-    if (jumpToX !== px) face = jumpToX > px ? 1 : -1;
-    pet.classList.add('is-jump');
-    if (Math.random() < 0.35) say(pick(says('jump')), 1100);
-  }
-  function updateJump(t) {
-    const k = clamp((t - jumpT) / PLAT_JUMP_MS, 0, 1);
-    px = jumpFromX + (jumpToX - jumpFromX) * k;
-    py = (jumpFromY + (jumpToY - jumpFromY) * k) - Math.sin(Math.PI * k) * jumpPeak;
-    const minTop = PET_H * Math.max(0, sizeMul * userScale - 1);
-    if (py < minTop) py = minTop;                 // не выше верхнего края экрана
-    if (k >= 1) {
-      jumping = false; pet.classList.remove('is-jump');
-      standLedge = jumpDest; px = jumpToX; py = jumpToY; vy = 0;
-      walkTargetX = px; nextJumpDecide = t + 1600 + Math.random() * 2000;
-    }
-  }
-  function tryClimb(t) {
-    const cx = px + PET_W / 2;
-    climbing = false;
-    const minLedgeY = PET_H * Math.max(1, sizeMul * userScale);   // полки выше этого — за верхом экрана, игнор
-    let best = null, anyUp = null;
-    for (const L of ledges) {
-      if (L === standLedge) continue;
-      if (L.y < minLedgeY) continue;                  // не запрыгивать выше экрана
-      const up = standLedge.y - L.y;                  // >0 — полка выше на экране
-      if (up > 4 && up <= PLAT_JUMP_UP * 1.6 && (!anyUp || L.y < anyUp.y)) anyUp = L;   // только достижимое выше — иначе не тянется к далёкому (на Discord и т.п.)
-      if (up <= 4 || up > PLAT_JUMP_UP) continue;
-      const tgtX = clamp(cx, L.x1 + PET_W / 2, L.x2 - PET_W / 2);
-      if (Math.abs(tgtX - cx) > PLAT_JUMP_DX) continue;
-      const score = up - Math.abs(tgtX - cx) * 0.35;
-      if (!best || score > best.score) best = { L, tgtX };
-    }
-    if (best) { startJump(best.L, best.tgtX, t); return; }
-    if (anyUp) {                                       // выше есть, но далеко — подходим обычной ходьбой (без позы карабканья)
-      walkTargetX = clamp((anyUp.x1 + anyUp.x2) / 2, standLedge.x1, standLedge.x2 - PET_W);
-      return;
-    }
-    // добрался до самого верха — гуляет / иногда прыгает на случайную полку
-    if (Math.random() < 0.4 && ledges.length > 2) {
-      const L = ledges[Math.floor(Math.random() * ledges.length)];
-      const tx2 = clamp(cx, L.x1 + PET_W / 2, L.x2 - PET_W / 2);
-      if (L !== standLedge && L.y >= minLedgeY && Math.abs(tx2 - cx) <= PLAT_JUMP_DX && Math.abs(standLedge.y - L.y) <= PLAT_JUMP_UP) { startJump(L, tx2, t); return; }
-    }
-    const m = 45;   // иногда цель чуть за краем -> шагнёт с края и упадёт (платформер)
-    walkTargetX = standLedge.x1 - m + Math.random() * (standLedge.x2 - standLedge.x1 + 2 * m);
-    if (Math.random() < 0.15) say(pick(says('top')), 1600);
-  }
+  // ДВИЖОК ПЛАТФОРМЕРА вынесен в core/platformer.js: полки/прыжок/падение/свободное лазание.
+  // S — мост к локальным переменным (pet.js остаётся их хозяином: drag, игры, отрисовка работают как раньше).
+  const S = {
+    get px() { return px; }, set px(v) { px = v; },
+    get py() { return py; }, set py(v) { py = v; },
+    get vx() { return vx; }, set vx(v) { vx = v; },
+    get vy() { return vy; }, set vy(v) { vy = v; },
+    get face() { return face; }, set face(v) { face = v; },
+    get jumping() { return jumping; }, set jumping(v) { jumping = v; },
+    get falling() { return falling; }, set falling(v) { falling = v; },
+    get thrown() { return thrown; }, set thrown(v) { thrown = v; },
+    get climbing() { return climbing; }, set climbing(v) { climbing = v; },
+    get standLedge() { return standLedge; }, set standLedge(v) { standLedge = v; },
+    get walkTargetX() { return walkTargetX; }, set walkTargetX(v) { walkTargetX = v; },
+    get nextJumpDecide() { return nextJumpDecide; }, set nextJumpDecide(v) { nextJumpDecide = v; },
+    get lastLeftEl() { return lastLeftEl; }, set lastLeftEl(v) { lastLeftEl = v; },
+  };
+  const engine = Yasia.platformer.createEngine(S, {
+    params: () => ({ W: PET_W, H: PET_H, dx: PLAT_JUMP_DX, up: PLAT_JUMP_UP, gravity: PLAT_GRAVITY, jumpMs: PLAT_JUMP_MS, floorPad: PLAT_FLOOR, scaleK: sizeMul * userScale }),
+    petW,
+    rootContains: (el) => root.contains(el),
+    goalClimbing: () => (watchClimbing || gameClimb),
+    onJumpStart: () => pet.classList.add('is-jump'),
+    onJumpEnd: () => pet.classList.remove('is-jump'),
+    sayJump: () => say(pick(SP('jump')), 1100),
+    sayTop: () => say(pick(SP('top')), 1600),
+  });
+  // делегаты с прежними именами — все вызовы по файлу (watch/игры/petApi/тесты) работают без правок
+  function startJump(L, tgtCenterX, t) { engine.startJump(L, tgtCenterX, t); }
+  function updateJump(t) { engine.updateJump(t); }
+  function tryClimb(t) { engine.tryClimb(t); }
   function walkAlong(t) {
-    running = true;   // бег по умолчанию
-    const sp = SPEED * speedMul * userSpeed * RUN_MUL;
+    if (resting) { running = false; return; }            // спит/без сил — стоит на месте
+    if (t > nextRunDecide) {
+      nextRunDecide = t + 3500 + Math.random() * 4000;
+      const canRun = currentEnergy() >= ENERGY_TIRED && currentMood() > MOOD_BAD;   // бегает только бодрая и в норм. настроении
+      const chance = ambient === 'playful' ? 0.34 : (canRun ? 0.12 : 0);
+      running = Math.random() < chance;
+      runUntil = running ? t + 900 + Math.random() * 1200 : 0;
+    }
+    if (running && t > runUntil) running = false;
+    const sp = SPEED * speedMul * userSpeed * (running ? RUN_MUL : 1);
     const dx = walkTargetX - px;
-    if (Math.abs(dx) <= sp) px = walkTargetX;
-    else { px += Math.sign(dx) * sp; face = dx > 0 ? 1 : -1; }
+    if (Math.abs(dx) <= sp) {
+      px = walkTargetX;
+      if (comeUntil) { comeUntil = 0; running = false; setMode('happy'); happyKind = 'wave'; happyUntil = now() + 1000; }   // прибежала на зов -> машет «привет»
+    } else { px += Math.sign(dx) * sp; face = dx > 0 ? 1 : -1; }
     px = clamp(px, 0, window.innerWidth - PET_W);   // по краю экрана; за край ОПОРЫ выходить можно -> упадёт
   }
+  // достижим ли прыжок с полки A на полку B — чистая функция вынесена в core/physics.js (там же юнит-тесты, tests/physics.test.js)
+  function ledgeJumpable(A, B) { return Yasia.physics.ledgeJumpable(A, B, { W: PET_W, dx: PLAT_JUMP_DX, up: PLAT_JUMP_UP }); }
+  function watchClimbDecide(t) {   // ПОИСК ПУТИ к видео (BFS по полкам): прыгает вверх/вбок/вниз через разрывы; идёт по кратчайшему маршруту к ближайшей к видео достижимой полке; если лучше не добраться -> watchStuck (просит подсадить)
+    if (!standLedge) return;
+    const W = PET_W, cx = px + W / 2, goalCx = watchClimbCx, goalY = watchClimbY;
+    const minLedgeY = PET_H * Math.max(1, sizeMul * userScale);             // полки за верхом экрана — игнор
+    const nearCx = (L) => clamp(goalCx, L.x1 + W / 2, L.x2 - W / 2);        // точка на L, ближайшая к центру видео
+    const wd = (L) => Math.abs(L.y - goalY) + Math.abs(nearCx(L) - goalCx) * 0.8;   // «насколько эта полка близка к видео» (высота + горизонт)
+    const start = standLedge;
+    const nodes = [];                                                       // достижимые-для-стояния полки текущего снимка
+    for (const L of ledges) { if ((L.x2 - L.x1) >= W && L.y >= minLedgeY && !(L.el && start.el && L.el === start.el)) nodes.push(L); }
+    // BFS от текущей полки: кратчайший (по числу прыжков) маршрут; среди ВСЕХ достижимых берём самую близкую к видео
+    const prev = new Map(), seen = new Set([start]); let queue = [start], head = 0;
+    let bestNode = null, bestD = wd(start) - 2;                             // цель должна быть СТРОГО ближе к видео (-2 -> без дрожи)
+    while (head < queue.length) {
+      const curN = queue[head++];
+      for (const nb of nodes) {
+        if (seen.has(nb) || !ledgeJumpable(curN, nb)) continue;
+        seen.add(nb); prev.set(nb, curN); queue.push(nb);
+        const d = wd(nb); if (d < bestD) { bestD = d; bestNode = nb; }
+      }
+    }
+    if (!bestNode) { if (!watchStuck) watchStuckT = t; watchStuck = true; return; }   // никуда ближе к видео не добраться -> отсюда просит подсадить (запоминаем момент первого застревания для дебаунса)
+    let step = bestNode; while (prev.get(step) && prev.get(step) !== start) step = prev.get(step);   // первый прыжок маршрута (сосед текущей полки)
+    watchStuck = false; watchStuckT = 0;
+    if (step !== bestNode && step.el && watchFromEl && step.el === watchFromEl) {   // АНТИ-ПИНГ-ПОНГ: не прыгать ОБРАТНО на только что покинутую полку как «крюк» (дальняя цель мерцает в снимке)
+      if (!watchPingT) watchPingT = t;
+      if (t - watchPingT > 900) { watchFromEl = null; watchPingT = 0; }     // заблокировано надолго -> снять анти-крюк: значит это НАСТОЯЩИЙ обратный путь (не зависаем; иначе дальше beg)
+      else { walkTargetX = px; nextJumpDecide = t + 140; return; }          // короткое мерцание -> переждать и перепланировать
+    }
+    const sMin = start.x1 + W / 2, sMax = start.x2 - W / 2, pMin = step.x1 + W / 2, pMax = step.x2 - W / 2;
+    const offC = clamp(clamp((sMin + sMax) / 2, pMin, pMax), sMin, sMax);   // точка ОТРЫВА на текущей полке (ближе всего к следующей)
+    if (Math.abs(cx - offC) > 6) { walkTargetX = clamp(offC - W / 2, start.x1, start.x2 - W); nextJumpDecide = t + 80; return; }   // ещё идём к точке отрыва -> прыгнем, дойдя
+    const landC = clamp(goalCx, Math.max(pMin, offC - PLAT_JUMP_DX), Math.min(pMax, offC + PLAT_JUMP_DX));   // приземление на следующую полку, как можно ближе к видео в пределах прыжка
+    watchFromEl = start.el; watchPingT = 0;                                 // запоминаем покинутую полку (анти-крюк) и сбрасываем его таймер на успешном прыжке
+    startJump(step, landC, t);                                              // прыжок к следующей полке маршрута (вверх/вбок/вниз)
+  }
   function platformerTick(t, dt) {
-    if (t - lastLedgeScan > 140) { lastLedgeScan = t; ledges = collectLedges(); reacquireFloor(); }
+    if (t - lastLedgeScan > 140) { lastLedgeScan = t; ledges = engine.scan(); engine.reacquireFloor(); drawLedgeDebug(); }   // снимок полок ведёт движок; ledges — та же ссылка (маршруты к видео/игре читают её)
     if (standLedge && standLedge.el) {                 // едем вместе с прокруткой, пока стоим на элементе
       const r = standLedge.el.getBoundingClientRect();
       if (!r || r.width < 30 || r.top < 0 || r.top > window.innerHeight) standLedge = null;
@@ -1298,34 +1790,85 @@
     if (standLedge) {
       falling = false; thrown = false;
       py = standLedge.y - PET_H;
+      if (watchHelp) { walkTargetX = px; running = false; }   // просит подсадить -> стоит на месте, не блуждает и не лезет
+      else if (watchClimbing) { running = false; }            // лезет к видео -> walkTargetX задаёт поиск пути (watchClimbDecide), не перетираем тут
+      else if (gameClimb) { running = false; }                // лезет к игровой цели -> walkTargetX задаёт gameClimbDecide
       walkAlong(t);
-      if (t > nextJumpDecide) { nextJumpDecide = t + 2200 + Math.random() * 2600; tryClimb(t); }
+      if (watchClimbing) { if (t > nextJumpDecide) { nextJumpDecide = t + 320; watchClimbDecide(t); } }   // поиск пути к видео: прыжок к следующей полке маршрута (или watchStuck)
+      else if (gameClimb) { if (t > nextJumpDecide) { nextJumpDecide = t + 300; gameClimbDecide(t); } }   // лазание к игровой цели: жадный прыжок вверх к точке
+      else if (!watchHelp && t > nextJumpDecide) { nextJumpDecide = t + 1000 + Math.random() * 1800; if (!resting) tryClimb(t); }   // живой темп прыжков по блокам (свободный платформер); resting (сон/без сил) -> не скачет
       const cxf = px + PET_W / 2;
       if (cxf < standLedge.x1 - 2 || cxf > standLedge.x2 + 2) standLedge = null;   // сошла с края опоры -> падает
-    } else {                                            // падаем/летим, ловим ближайшую полку под ногами
-      falling = true;                                   // -> показываем позу climb (руки вверх, «летит/цепляется»)
-      const f = Math.min(dt / 16, 3);
-      if (Math.abs(vx) > 0.05) {                         // ИНЕРЦИЯ броска: летит вбок, тормозит воздухом
-        px += vx * f;
-        vx *= Math.pow(0.90, f);                         // трение
-        if (Math.abs(vx) > 1) face = vx < 0 ? -1 : 1;    // смотрит туда, куда летит
-        if (px <= 0) { px = 0; vx = -vx * 0.35; }                                   // мягкий отскок от краёв
-        else if (px >= window.innerWidth - PET_W) { px = window.innerWidth - PET_W; vx = -vx * 0.35; }
-        if (Math.abs(vx) < 0.3) vx = 0;
-      }
-      vy = Math.min(vy + PLAT_GRAVITY * f, 26);
-      const prevFoot = py + PET_H;
-      py += vy * f;
-      const foot = py + PET_H, cx = px + PET_W / 2;
-      let landed = null;
-      for (const L of ledges) {
-        if (cx < L.x1 || cx > L.x2) continue;
-        if (L.y >= prevFoot - 1 && L.y <= foot + 1) { if (!landed || L.y < landed.y) landed = L; }
-      }
-      if (landed) { falling = false; thrown = false; vx = 0; standLedge = landed; py = landed.y - PET_H; vy = 0; walkTargetX = px; nextJumpDecide = t + 1200; }
-      // если в колонке ничего нет — продолжает лететь/падать до пола, потом сама запрыгнет наверх
+    } else {                                            // падаем/летим: инерция броска + гравитация + ловля полки — в движке (core/platformer.js fallStep)
+      engine.fallStep(t, dt);
     }
     py = clamp(py, PET_H * Math.max(0, sizeMul * userScale - 1), window.innerHeight - PET_H);   // держим в пределах экрана
+  }
+
+  // ---------- дебаг-оверлей полок (РЕЖИМ РАЗРАБОТЧИКА, тумблер в попапе): как Яся видит страницу ----------
+  let ledgeDebug = false, ledgeDebugBox = null;
+  function drawLedgeDebug() {
+    if (!ledgeDebug) return;
+    if (!ledgeDebugBox) { ledgeDebugBox = document.createElement('div'); ledgeDebugBox.className = 'twtr-ledges-dbg'; root.appendChild(ledgeDebugBox); }
+    const ls = engine.ledges(), cx = px + PET_W / 2;
+    const candSet = new Set();   // зелёное: куда допрыгнет С ТЕКУЩЕЙ позиции (та же физика, что в tryClimb)
+    if (standLedge) for (const c of Yasia.physics.climbCandidates(ls, standLedge, cx, { W: PET_W, dx: PLAT_JUMP_DX, up: PLAT_JUMP_UP, minY: PET_H * Math.max(1, sizeMul * userScale), lastLeftEl: null })) candSet.add(c.L);
+    ledgeDebugBox.innerHTML = ls.map((L) => {
+      let cls = 'no';
+      if (L === standLedge) cls = 'on';
+      else if (candSet.has(L)) cls = 'ok';
+      else if (standLedge && L.y >= PET_H * Math.max(1, sizeMul * userScale) && ledgeJumpable(standLedge, L)) cls = 'plan';   // жёлтое: допрыгнет, если ДОЙДЁТ до точки отрыва на краю — так маршрутизирует планировщик похода к видео (BFS полка->полка)
+      else if (L.floor) cls = 'floor';
+      return '<i class="' + cls + '" style="left:' + L.x1 + 'px;top:' + L.y + 'px;width:' + Math.max(0, L.x2 - L.x1) + 'px"></i>';
+    }).join('');
+  }
+  function setLedgeDebug(on) {
+    ledgeDebug = !!on;
+    if (!ledgeDebug) { if (ledgeDebugBox) { try { ledgeDebugBox.remove(); } catch (_) {} ledgeDebugBox = null; } return; }
+    engine.scan(); drawLedgeDebug();   // показать сразу, даже если гуляние выключено и тиков скана нет
+  }
+  // тумблер живёт в попапе (storage.sync 'devLedges') — подхватываем при старте и вживую
+  try { Yasia.storage.syncGet({ devLedges: false }, (s) => setLedgeDebug(s && s.devLedges)); } catch (_) {}
+  try { Yasia.storage.onChanged((ch, area) => { if (area === 'sync' && ch && ch.devLedges) setLedgeDebug(ch.devLedges.newValue); }); } catch (_) {}
+
+  // ---------- ручная проверка действий (кнопки в настройках) ----------
+  function startTest(kind) {
+    testDir = (kind === 'left') ? -1 : 1;
+    if (kind.indexOf('emo:') === 0) {            // тест эмоции: проигрываем её кадры на месте
+      const st = kind.slice(4); testKind = 'emo'; testEmo = st; testUntil = now() + 3400;
+      setMode('idle'); climbing = false; jumping = false;
+      const e = EMOTIONS.find((x) => x.key === st); say(e ? e.emo + ' ' + e.name : st, 1600);
+      return;
+    }
+    if (kind === 'fire') {                       // тест ОГНЕННОЙ формы (как при скачивании): стоит и горит ~3.4с
+      startDownloading();
+      if (dlHoldT) clearTimeout(dlHoldT);
+      dlHoldT = setTimeout(() => { dlHoldT = null; setDownloading(false); }, 3400);
+      say(tr().sFire, 1800); return;
+    }
+    if (kind === 'watch') {                      // тест «смотрит видео»: идёт в низ-центр, садится, смотрит ~5с (как при реальном видео)
+      watchTestUntil = now() + 5000; watchDismissed = false; setWatching(true);
+      setTimeout(refreshWatching, 5060);         // по истечении окна вернёмся к реальному состоянию (играет ли видео)
+      say(tr().sCinema, 1800); return;
+    }
+    if (kind === 'jump') {                       // прыжок на месте
+      if (!engine.jumpUp(now())) engine.testHop(now(), 95);   // как в живом платформере: на достижимую полку ВЫШЕ; некуда -> подпрыг на месте
+      testKind = 'jump'; testUntil = now() + PLAT_JUMP_MS + 60; return;
+    }
+    testKind = kind; testUntil = now() + 2600;
+    if (kind === 'wave') { setMode('happy'); happyUntil = testUntil; say(pick(SP('idle')), 1600); }
+    else if (kind === 'climb') { climbing = true; say(pick(SP('climb')), 1600); }
+    else if (kind === 'idle') { setMode('idle'); }
+    else { say(testDir < 0 ? tr().sGoLeft : tr().sGoRight, 1400); }
+  }
+  function runTest(t) {
+    if (testKind === 'jump') { updateJump(t); return; }
+    if (testKind === 'left' || testKind === 'right') {
+      face = testDir; px = clamp(px + testDir * SPEED * userSpeed * 1.3, 0, window.innerWidth - PET_W);
+    } else if (testKind === 'climb') {
+      climbing = true; py = clamp(py - 0.9, 0, window.innerHeight - PET_H);
+    }
+    // wave/idle — поза держится через mode/anim, двигаться не нужно
   }
 
   // ---------- главный цикл ----------
@@ -1339,17 +1882,17 @@
     const dt = lastTick ? Math.min(t - lastTick, 64) : 16; lastTick = t;
 
     if (sayUntil && t > sayUntil) { bubble.classList.remove('show', 'talk'); sayUntil = 0; }
-    if (flung) updateFling();
     if (busy) { render(); return; }
 
-    if (location.href !== lastHref) { lastHref = location.href; resetToWander(); }
+    if (location.href !== lastHref) { lastHref = location.href; if (gameActive) { try { Yasia.events.emit('game:stop'); } catch (_) {} } resetToWander(); }
 
     runMul = running ? RUN_MUL : 1;
+    if (testKind && t >= testUntil && !jumping) { testKind = null; climbing = false; }
 
     if (dragging) {
       px = clamp(mouseX - dragOffX, 0, window.innerWidth - PET_W);
       py = clamp(mouseY - dragOffY, 0, window.innerHeight - PET_H);
-      if (Math.hypot(px - grabPx, py - grabPy) > 5) didDrag = true;
+      if (Math.hypot(px - grabPx, py - grabPy) > 5) { didDrag = true; if (hiding) unhide(); if (watching && watchArrived) { watchDismissed = true; setWatching(false); addMoodBias(-15); saveCare(); pendingMad = true; } }   // потащили: спрятанную -> вылезает; СИДЯЩУЮ от кино -> падает настроение, больше не подходит, и ЗЛИТСЯ на отпускании (pendingMad). Просящую подсадить — тащим к видео (помощь, не прогон)
       const fdt = Math.max(dt, 1) / 16;                  // нормируем к кадру 16мс
       const ivx = (px - lastDragX) / fdt, ivy = (py - lastDragY) / fdt;
       dragVx = dragVx * 0.4 + ivx * 0.6;                 // отзывчивее — ловим даже быстрый лёгкий флик
@@ -1357,36 +1900,133 @@
       peakVx = Math.abs(ivx) > Math.abs(peakVx) ? ivx : peakVx * 0.85;   // пик скорости кисти (чтобы лёгкий толчок не терялся в сглаживании)
       peakVy = Math.abs(ivy) > Math.abs(peakVy) ? ivy : peakVy * 0.85;
       lastDragX = px; lastDragY = py;
+    } else if (paused) {                                 // ⏸ пауза: стоит на месте; перетаскивание и явные клики работают, автодействия спят
+      if (mode === 'happy' && t > happyUntil) setMode('idle');
+    } else if (gameActive) {                             // идёт мини-игра -> ведём питомца к игровой цели и шлём 'game:tick' (логика в systems/games.js)
+      gameTick(t, dt);
+    } else if (downloading) {                            // качается видео -> стоит на месте и горит (огненная форма)
+      if (mode === 'happy' && t > happyUntil) setMode('idle');
+    } else if (watching && watchAnim()) {                // играет видео -> идёт/лезет под него и смотрит; застряв — просит подсадить
+      thrown = false; vx = 0;                            // смотрит видео -> гасим инерцию броска (после «подсадить» не улетает вбок)
+      const wasClimbing = watchClimbing;                 // детект ВХОДА в режим лазания (сброс ниже стирает флаг каждый кадр)
+      watchClimbing = false;                             // включается только в ветке лазания ниже (иначе обычный платформер не лезет целенаправленно)
+      const v = playingVideo();
+      const isTest = t < watchTestUntil;                 // ручной тест без реального видео
+      let tX = 0, tY = 0, vcx = 0, vBottom = 0, hasVid = false, reachable = true;
+      if (v) {
+        const r = v.getBoundingClientRect(); hasVid = true; vcx = r.left + r.width / 2; vBottom = r.bottom;
+        if (v !== watchVid) { watchVid = v; watchArrived = false; watchHelp = false; watchHelpSayT = 0; watchStuck = false; watchStuckT = 0; watchClimbing = false; }   // сменилось целевое видео -> заново оценить достижимость (не телепортироваться к новому со старым «дошла»)
+        tX = clamp(vcx - PET_W / 2, 0, window.innerWidth - PET_W);
+        tY = clamp(r.bottom - PET_H, 0, window.innerHeight - PET_H);
+        const floorPy = window.innerHeight - PLAT_FLOOR - PET_H;
+        const standPy = (standLedge && !falling) ? standLedge.y - PET_H : floorPy;   // мой текущий уровень ног (полка под ногами или пол)
+        reachable = tY >= Math.min(standPy, floorPy) - PLAT_JUMP_UP * 1.3;   // низ видео в пределах прыжка от ПОЛА или от ТЕКУЩЕЙ полки -> подходит вбок и допрыгивает (уже на высоте видео -> не лезет дальше и не просит подсадить); высоко над головой -> лезет по полкам вверх
+      } else if (isTest) { tX = clamp((window.innerWidth - PET_W) / 2, 0, window.innerWidth - PET_W); tY = window.innerHeight - PET_H - 6; }   // тест без видео -> низ-центр экрана
+      const sp = SPEED * userSpeed * 2.6;
+      if (watchArrived) {                                // села под видео -> держимся под ним (едем за скроллом)
+        watchHelp = false;
+        if (hasVid) { px = tX; py = tY; }                // ре-пин только когда видео есть; во время буфера/паузы держим позицию, не телепортируемся к центру
+        face = 1; running = false; standLedge = null; falling = false; jumping = false; vy = 0;
+        if (mode === 'happy' && t > happyUntil) setMode('idle');
+        if (t > watchMoodT) { watchMoodT = t + 2500; addMoodBias(2); }   // смотрит фильм -> настроение потихоньку растёт
+      } else if (!hasVid && !isTest) {                    // видео на миг пропало (буфер/пауза/виртуализация ленты) -> держим позицию, не бежим к центру
+        walkTargetX = px; nextJumpDecide = Math.max(nextJumpDecide, t + 800);   // замри на месте: не блуждать и не лезть, пока видео не вернётся
+        platformerTick(t, dt);                            // стоит на опоре/падает на пол; гистерезис 1400мс сам выключит, если видео встало
+      } else if (!reachable) {                            // не достать с пола -> ЛЕЗЕТ к видео по полкам ВВЕРХ (ходьба/прыжки с полки на полку/лазание/падение — всё по физике и дистанции)
+        watchClimbCx = hasVid ? vcx : (window.innerWidth / 2);
+        watchClimbY = hasVid ? vBottom : (window.innerHeight - PLAT_FLOOR);   // целевой уровень ног = ИСТИННЫЙ нижний край видео (не клампленный)
+        if (!wasClimbing) { walkTargetX = px; nextJumpDecide = 0; watchFromEl = null; watchPingT = 0; }   // ВХОД в лазание: первый поиск пути сразу, чистый маршрут
+        watchClimbing = true;
+        platformerTick(t, dt);                            // целенаправленно идёт/перепрыгивает с полки на полку вверх к видео (watchClimbDecide, BFS) + физика
+        const cx2 = px + PET_W / 2, foot2 = py + PET_H;
+        if (!jumping && hasVid && Math.abs(cx2 - vcx) <= Math.max(PET_W * 0.6, 70) && Math.abs(foot2 - vBottom) <= Math.max(PET_H * 0.5, 80)) {
+          watchArrived = true; watchStuck = false; watchHelp = false;   // долезла под видео (или её поднесли рукой) -> садится (попкорн)
+        } else if (watchStuck && standLedge && !jumping && watchStuckT && t - watchStuckT > 900) {
+          watchHelp = true;                               // долезла на САМУЮ БЛИЖНЮЮ достижимую полку и застряла НАДОЛГО (дебаунс 900мс отсекает мерцание снимка полок по пути) -> стоит и ПРОСИТ подсадить
+          if (hasVid) face = vcx < cx2 ? -1 : 1;          // смотрит в сторону видео
+          if (t > watchHelpSayT) { watchHelpSayT = t + 6000; say(pick(SP('lift')), 2200); }   // изредка просит подсадить (троттл)
+        } else {
+          watchHelp = false;                              // ещё идёт/прыгает по полкам -> поза ходьбы/прыжка, НЕ просит
+        }
+      } else {                                            // достижимо -> идёт под видео (ходьба) + ДОПРЫГИВАЕТ дугой/падает, БЕЗ всплытия вверх
+        watchHelp = false;
+        if (jumping) { updateJump(t); }                   // завершает дугу «допрыгивания» к нижнему краю видео
+        else {
+          const adx = tX - px;
+          if (Math.abs(adx) > 4) { px += clamp(adx, -sp, sp); face = adx < 0 ? -1 : 1; }   // идёт по горизонтали под видео
+          if (py < tY - 2) { vy = Math.min(vy + PLAT_GRAVITY, 26); py = Math.min(py + vy, tY); falling = py < tY - 2; }   // выше цели -> падает вниз (гравитация)
+          else if (py > tY + 2 && Math.abs(adx) <= PLAT_JUMP_DX) { startJump({ el: null, x1: tX, x2: tX + PET_W, y: tY + PET_H }, vcx, t); }   // ниже цели в пределах прыжка -> ДОПРЫГИВАЕТ (дуга прыжка), не всплывает
+          else { vy = 0; falling = false; }
+          standLedge = null;
+          if (Math.abs(adx) <= 4 && Math.abs(py - tY) <= 3) watchArrived = true;   // дошла/допрыгнула под видео -> садится
+        }
+      }
     } else if (dialog.classList.contains('show')) {      // окно открыто -> Яся замерла, не ходит
+      if (mode === 'happy' && t > happyUntil) setMode('idle');
+    } else if (hiding && !thrown) {                      // «спрятана» — стоит, ждёт пока позовут/кликнут (но брошенную пускаем в физику)
       if (mode === 'happy' && t > happyUntil) setMode('idle');
     } else if (thrown) {
       platformerTick(t, dt);                             // летит по инерции и падает, пока не приземлится
+    } else if (testKind && t < testUntil) {
+      runTest(t);
+    } else if (!roam) {
+      if (mode === 'happy' && t > happyUntil) setMode('idle');
+      // стоит на месте (ходьба выключена в настройках); только перетаскивание
     } else if (mode === 'happy') {
       if (t > happyUntil) { bubble.textContent = '❤?'; bubble.classList.remove('show'); setMode('idle'); }
     } else {
       platformerTick(t, dt);            // живёт по структуре страницы: стоит на элементах, прыгает по полкам
-      if (t > nextChatter) { nextChatter = t + 9000 + Math.random() * 12000; say(Math.random() < 0.32 ? pick(says('event')) : pick(says('idle')), 2000); }
+      if (t > nextChatter) { nextChatter = t + 9000 + Math.random() * 12000; if (!Yasia.guard || Yasia.guard.allows('chatter')) say(Math.random() < 0.32 ? pick(SP('event')) : pick(SP('idle')), 2000); }   // болтовня — по режиму (страж)
+    }
+
+    if (!paused) {
+      careTick(t, dt);    // статы: затухание/восстановление, амбиент, авто-сохранение, реплики по состоянию
+      popcornTick(t);     // пока играет видео — поток зёрнышек попкорна (вылетают, падают, лежат ~2с, тают)
     }
 
     // голодный — иногда просит мяса
-    if (!busy && mode !== 'happy' && currentHunger() > 78 && Math.random() < 0.003) {
+    if (!paused && !busy && mode !== 'happy' && currentHunger() > 78 && Math.random() < 0.003) {
       bubble.textContent = '🍖'; bubble.classList.add('show');
       setTimeout(() => { if (bubble.textContent === '🍖') bubble.classList.remove('show'); }, 1600);
     }
 
     updateHop();
-    if (hero === 'catgirl' && !dragging) {        // переключаем слой-кадр по состоянию (без смены src -> без мерцания)
+    if (isFramed() && !dragging) {        // переключаем слой-кадр по состоянию (без смены src -> без мерцания)
       const mv = pet.classList.contains('is-moving');
       let setName, ms;
-      if (mode === 'happy') { setName = 'wave'; ms = CAT_IDLE_MS; }  // гладят/здороваются — машет
-      else if (jumping) { setName = 'jump'; ms = CAT_JUMP_MS; }
-      else if (falling) { setName = 'climb'; ms = CAT_CLIMB_MS; }         // падает сверху — руки вверх (поза climb)
-      else if (mv) { setName = 'walk'; ms = (running ? CAT_RUN_MS : CAT_WALK_MS) / userSpeed; }   // медленнее идёт -> медленнее кадры (ноги не скользят)
+      if (downloading) { const hasFire = !!CAT_SETS.fire; setName = hasFire ? 'fire' : 'angry'; ms = hasFire ? CAT_FIRE_MS : emoMs('angry'); }   // качается видео -> огненная форма у героя с fire в манифесте, иначе злость
+      else if (testKind === 'emo' && t < testUntil) { setName = testEmo; ms = emoMs(testEmo) / userSpeed; }   // тест/действие эмоции (скорость — общий ползунок)
+      else if (watching && watchAnim() && watchArrived) { setName = watchAnim(); ms = emoMs(setName); }   // села под видео -> попкорн (выше mv: не мигает ходьбой при езде за скроллом)
+      else if (jumping && !engine.isDrop()) { setName = 'jump'; ms = CAT_JUMP_MS; }   // дуга прыжка вверх/вбок (ВЫШЕ happy: иначе «помочь» не покажет прыжок)
+      else if (falling || jumping) { setName = 'fall'; ms = CAT_FALL_MS; }     // падение ИЛИ спуск-дроп (jumpDrop): кадры падения. У Яси fall=1 кадр (поза climb), у Noema 5
+      else if (mode === 'happy') { setName = happyKind; ms = happyKind === 'wave' ? CAT_WAVE_MS : emoMs('happy'); }  // радость: подпрыг (happy) или приветствие (wave)
+      else if (climbing && mv) { setName = 'climb'; ms = CAT_CLIMB_MS; }   // лезет вверх
+      else if (mv) { setName = (running ? 'run' : 'walk'); ms = (running ? CAT_RUN_MS : CAT_WALK_MS) / userSpeed; }   // бег -> кадры бега; медленнее идёт -> медленнее кадры
+      else if (watching && watchHelp) { setName = 'wave'; ms = CAT_WAVE_MS; }   // долезла на ближнюю полку, дальше прыжка к видео нет -> машет/просит подсадить (НИЖЕ ходьбы/прыжка/падения -> в движении не показывается)
+      else if (ambientEmo) { setName = ambientEmo; ms = emoMs(ambientEmo); }   // стоит -> поза по состоянию (спит/голод/грусть/злость)
       else { setName = 'idle'; ms = CAT_IDLE_MS; }
-      const frames = CAT_SETS[setName];
-      sprite.classList.toggle('xf', !!EMO_XFADE[setName]);       // кросс-фейд кадров — только для эмоций-поз
-      if (catAct !== setName) { catAct = setName; catIdx = 0; showFrame(frames[0]); lastFrameT = t; }
-      else if (frames.length > 1 && t - lastFrameT > ms) { lastFrameT = t; catIdx = (catIdx + 1) % frames.length; showFrame(frames[catIdx]); }
+      const frames = CAT_SETS[setName] || CAT_SETS.idle;   // фолбэк на idle, если манифест героя не содержит запрошенную анимацию (не падаем)
+      if (frames) {
+        sprite.classList.toggle('xf', !!EMO_XFADE[setName]);       // кросс-фейд кадров — только для эмоций-поз
+        if (catAct !== setName) { catAct = setName; catIdx = 0; catStep = 0; showFrame(frames[0]); lastFrameT = t; }
+        else if (setName === 'jump' && jumping && frames.length > 1) {        // прыжок: кадр привязан к ФАЗЕ дуги, а не к таймеру
+          const jk = engine.jumpPhase(t);                                     // присед -> взлёт -> апекс -> спуск (фаза дуги — у движка)
+          const ji = Math.min(frames.length - 1, jk < 0.18 ? 0 : jk < 0.5 ? 1 : jk < 0.82 ? 2 : 3);
+          if (ji !== catIdx) { catIdx = ji; showFrame(frames[ji]); }
+        }
+        else if (frames.length > 1 && !STATIC_HOLD[setName] && t - lastFrameT > ms) {   // STATIC_HOLD (покой) -> держим кадр[0], не циклим: «одна картинка», живёт за счёт CSS-дыхания
+          lastFrameT = t;
+          if (PING_PONG[setName]) {                                           // туда-обратно: 0..n-1..1 -> бесшовный цикл «начало->пик->начало»
+            const period = 2 * (frames.length - 1);
+            catStep = (catStep + 1) % period;
+            catIdx = catStep < frames.length ? catStep : period - catStep;
+          } else catIdx = (catIdx + 1) % frames.length;
+          showFrame(frames[catIdx]);
+        }
+      }
+      // РАДОСТЬ — подпрыгивает на месте (пружинистый хоп поверх кадров happy; hopY рисуется в render). И в тесте, и в реальной happy-ветке.
+      const happyHop = (testKind === 'emo' && testEmo === 'happy' && t < testUntil) || (mode === 'happy' && happyKind === 'happy' && !jumping && !falling);
+      if (happyHop) hopY = -Math.abs(Math.sin(t * Math.PI / HAPPY_HOP_MS)) * HAPPY_HOP_PX;
     }
     pet.classList.toggle('is-run', running && pet.classList.contains('is-moving'));
     render();
@@ -1399,7 +2039,7 @@
     const moved = Math.hypot(px - prevPx, py - prevPy); prevPx = px; prevPy = py;
     const walking = !dragging && moved > 0.4;   // при перетаскивании не «идёт», а болтается
     pet.classList.toggle('is-moving', walking);
-    if (hero === 'catgirl') { hopY = 0; }        // у кошки настоящий цикл ходьбы — процедурный подпрыг убираем (он давал рывки вверх-вниз)
+    if (isFramed()) { hopY = 0; }        // настоящий цикл ходьбы — процедурный подпрыг убираем (он давал рывки вверх-вниз)
     else if (walking) { hopPhase += moved * 0.35; hopY = -Math.abs(Math.sin(hopPhase)) * 5; }
     else { hopY *= 0.8; if (Math.abs(hopY) < 0.2) hopY = 0; }
   }
@@ -1410,7 +2050,41 @@
     inner.style.transform = `translateY(${hopY.toFixed(1)}px) scaleX(${(face * s).toFixed(3)}) scaleY(${s.toFixed(3)})`;
     // спрайт растёт вверх от низа — поднимаем облачко над реальной макушкой, чтобы не заслоняло
     bubble.style.marginBottom = (12 + PET_H * Math.max(0, s - 1)).toFixed(0) + 'px';
+    if (sign && !sign.hidden) sign.style.marginBottom = (34 + PET_H * Math.max(0, s - 1)).toFixed(0) + 'px';
   }
+
+  // ---------- табличка с кодом входа над Ясей (видна на ЛЮБОЙ странице, т.к. управляется storage; клик — копирует) ----------
+  const sign = root.querySelector('#twtr-pet-sign');
+  let signCode = '';
+  const signL = () => ((tr().lang || 'ru') === 'en')
+    ? { ttl: '🔑 Sign-in code', copy: 'click to copy', copied: '✓ copied' }
+    : { ttl: '🔑 Код входа', copy: 'клик — копировать', copied: '✓ скопировано' };
+  function renderSign(st) {
+    const pending = !!(st && st.status === 'pending' && st.userCode && (now() - (st.startedAt || 0) < 15 * 60 * 1000 || !st.startedAt));
+    if (pending) {
+      const l = signL();
+      if (signCode !== st.userCode || sign.hidden) {
+        signCode = st.userCode;
+        sign.innerHTML = '<span class="twtr-sign-ttl"></span><span class="twtr-sign-code"></span><span class="twtr-sign-hint"></span>';
+        sign.querySelector('.twtr-sign-ttl').textContent = l.ttl;
+        sign.querySelector('.twtr-sign-code').textContent = st.userCode;
+        sign.querySelector('.twtr-sign-hint').textContent = l.copy;
+      }
+      sign.hidden = false;
+    } else {
+      if (signCode && st && st.status === 'ok') { bubble.textContent = '🟢'; bubble.classList.add('show'); setTimeout(() => { if (bubble.textContent === '🟢') bubble.classList.remove('show'); }, 1600); }
+      signCode = ''; sign.hidden = true;
+    }
+  }
+  if (sign) sign.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!signCode) return;
+    const done = () => { const h = sign.querySelector('.twtr-sign-hint'); if (h) { h.textContent = signL().copied; setTimeout(() => { const h2 = sign.querySelector('.twtr-sign-hint'); if (h2) h2.textContent = signL().copy; }, 1500); } };
+    try { navigator.clipboard.writeText(signCode).then(done, () => { try { const ta = document.createElement('textarea'); ta.value = signCode; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); } catch (_) {} }); }
+    catch (_) { try { const ta = document.createElement('textarea'); ta.value = signCode; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); } catch (_) {} }
+  });
+  try { Yasia.storage.localGet({ _codexLogin: null }, (s) => renderSign(s && s._codexLogin)); } catch (_) {}
+  try { chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch._codexLogin) renderSign(ch._codexLogin.newValue); }); } catch (_) {}
 
   // ---------- переход между вкладками ----------
   function saveState() { Yasia.storage.localSet({ [STATE_KEY]: { x: px, y: py, face } }); }
@@ -1421,31 +2095,41 @@
       if (done) done();
     });
   }
-  function arrive() { render(); pet.style.opacity = '1'; setMode('happy'); happyUntil = now() + 700; bubble.textContent = '🟩'; bubble.classList.add('show'); setTimeout(() => { if (bubble.textContent === '🟩') { bubble.classList.remove('show'); bubble.textContent = '❤?'; } }, 1200); }
+  function arrive() { render(); if (!isFramed() || firstFrameReady) pet.style.opacity = '1'; else pendingReveal = true; setMode('happy'); happyKind = 'wave'; happyUntil = now() + 700; bubble.textContent = '🟩'; bubble.classList.add('show'); setTimeout(() => { if (bubble.textContent === '🟩') { bubble.classList.remove('show'); bubble.textContent = '❤?'; } }, 1200); }
 
   // ---------- настройки / игровое состояние ----------
   function applyEnabled() {
     pet.style.display = enabled ? '' : 'none';
-    if (enabled) pet.style.opacity = '1';
+    if (enabled) { if (!isFramed() || firstFrameReady) pet.style.opacity = '1'; else pendingReveal = true; }   // не показывать пустой квадрат до загрузки первого кадра
     toggle.classList.toggle('off', !enabled);
-    toggle.title = enabled ? tr().hide : tr().show;
+    toggle.title = enabled ? tr().ttHide : tr().ttShow;
   }
   toggle.addEventListener('click', (e) => { e.stopPropagation(); enabled = !enabled; applyEnabled(); Yasia.storage.syncSet({ enabled }); });
   applyEnabled();
   applyHero();
+  applyRoam();
 
   const isTwitter = (() => { const h = location.hostname; return h === 'x.com' || h.endsWith('.x.com') || h === 'twitter.com' || h.endsWith('.twitter.com'); })();
 
   try {
-    Yasia.storage.syncGet({ enabled: true, hero: 'catgirl', scale: 1.8 }, (s) => { enabled = s.enabled; hero = s.hero; userScale = s.scale || 1.8; applyEnabled(); applyHero(); applyScale(); });
-    Yasia.storage.localGet({ hunger: 0, hungerAt: Date.now(), xp: 0 }, (s) => {
-      hungerBase = s.hunger; hungerAt = s.hungerAt; xp = s.xp; applyAbilities();
+    Yasia.storage.syncGet({ enabled: true, paused: false, hero: 'catgirl', scale: 1, roam: true, walkSpeed: 1, throwPower: 1 }, (s) => { enabled = s.enabled; paused = !!s.paused; hero = s.hero; userScale = s.scale || 1; roam = s.roam; userSpeed = s.walkSpeed || 1; throwMul = (typeof s.throwPower === 'number') ? s.throwPower : 1; applyEnabled(); applyHero(); applyScale(); applySpeed(); applyInertia(); applyRoam(); applyPaused(); });
+    Yasia.storage.localGet({
+      hunger: 0, hungerAt: Date.now(), xp: 0,
+      energy: ENERGY_START, energyAt: Date.now(), energyResting: false, bond: BOND_START, bondAt: Date.now(), moodBias: 0, moodBiasAt: Date.now(),
+    }, (s) => {
+      hungerBase = s.hunger; hungerAt = s.hungerAt; xp = s.xp;
+      energyBase = s.energy; energyAt = s.energyAt; energyResting = !!s.energyResting; bondBase = s.bond; bondAt = s.bondAt; moodBiasBase = s.moodBias; moodBiasAt = s.moodBiasAt;
+      resting = energyResting;   // восстанавливаем флаг покоя -> гистерезис и setEnergyResting примирят знак корректно
+      applyAbilities(); setAmbient(computeAmbient());
     });
     Yasia.storage.onChanged((ch) => {
       if (ch.enabled) { enabled = ch.enabled.newValue; applyEnabled(); }
+      if (ch.paused) { paused = !!ch.paused.newValue; applyPaused(); }
       if (ch.hero) { hero = ch.hero.newValue; applyHero(); }
       if (ch.scale) { userScale = ch.scale.newValue || 1; applyScale(); }
-      if (ch.dlgLang) { dlgLang = ch.dlgLang.newValue === 'ru' ? 'ru' : 'en'; renderDlgLang(); }   // язык переключили из попапа
+      if (ch.walkSpeed) { userSpeed = ch.walkSpeed.newValue || 1; applySpeed(); }
+      if (ch.throwPower) { throwMul = (typeof ch.throwPower.newValue === 'number') ? ch.throwPower.newValue : 1; applyInertia(); }
+      if (ch.roam) { roam = ch.roam.newValue; applyRoam(); }
       if (ch.xp) {
         const prev = level;
         xp = ch.xp.newValue; applyAbilities();
@@ -1453,24 +2137,76 @@
       }
       if (ch.hunger) hungerBase = ch.hunger.newValue;
       if (ch.hungerAt) hungerAt = ch.hungerAt.newValue;
-      if (ch.feedPing) feedEat();   // покормили из попапа
+      if (ch.energy) energyBase = ch.energy.newValue;
+      if (ch.energyAt) energyAt = ch.energyAt.newValue;
+      if (ch.energyResting) energyResting = ch.energyResting.newValue;
+      if (ch.bond) bondBase = ch.bond.newValue;
+      if (ch.bondAt) bondAt = ch.bondAt.newValue;
+      if (ch.moodBias) moodBiasBase = ch.moodBias.newValue;
+      if (ch.moodBiasAt) moodBiasAt = ch.moodBiasAt.newValue;
+      if (ch.feedPing) feedEat();   // покормили из попапа (статы попап уже записал -> придут своими ключами выше)
     });
   } catch (_) {}
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { hiddenAt = now(); saveState(); }
+    if (document.hidden) { hiddenAt = now(); awayAt = Date.now(); saveState(); saveCare(); }
     else {
-      if (hiddenAt) { const d = now() - hiddenAt; hiddenAt = 0; begUntil += d; happyUntil += d; wanderUntil += d; }
+      if (hiddenAt) { const d = now() - hiddenAt; hiddenAt = 0; happyUntil += d; wanderUntil += d; }
+      const away = awayAt ? Date.now() - awayAt : 0; awayAt = 0;
       pet.style.opacity = '0'; restoreState(arrive);
+      setAmbient(computeAmbient());
+      if (away > GREET_AWAY_MS && currentBond() >= BOND_FRIEND) {   // соскучилась — приветствует (только при доверии)
+        setTimeout(() => { unhide(); setMode('happy'); happyKind = 'wave'; happyUntil = now() + 1600; say(pick(SP('greet')), 2400); }, 1400);
+      }
     }
   });
 
   window.addEventListener('resize', () => { px = clamp(px, 0, window.innerWidth - PET_W - 8); py = clamp(py, 0, window.innerHeight - PET_H - 8); });
 
   window.addEventListener('mousemove', (e) => {
-    if (boomActive && Math.hypot(e.clientX - mouseX, e.clientY - mouseY) > 4) clearBoom(); // взмахнул — всё развеялось
     mouseX = e.clientX; mouseY = e.clientY;
   });
+
+  // ---------- системы-плагины (см. src/core/registry.js + src/systems/*) ----------
+  // pet.js — оркестратор: раздаёт системам общий контекст и стартует те, чей флаг включён.
+  // Добавить фичу = новый файл systems/* + флаг; сломанная система гасит свой флаг и НЕ роняет питомца.
+  // API над питомцем для мини-игр (systems/games.js): только то, что играм можно трогать (без доступа к внутренностям)
+  const petApi = {
+    claim: gameClaim, release: gameRelease,                 // забрать/вернуть управление питомцем
+    active: () => gameActive, id: () => gameId,
+    walkTo: (x, run) => { gameClimb = false; gameTargetX = clamp(x, 0, window.innerWidth - PET_W); gameRun = !!run; },   // наземная ходьба к X
+    climbTo: (x, y) => { gameClimb = true; gameClimbCx = x; gameClimbY = y; },   // лезть по полкам к точке (запрыгнуть к высокому курсору)
+    stop: () => { gameClimb = false; gameTargetX = px; gameRun = false; },   // встать на месте
+    hop: (x) => { if (jumping) return; const fy = window.innerHeight - PLAT_FLOOR; startJump({ el: null, floor: true, x1: 0, x2: window.innerWidth, y: fy }, clamp(x, 0, window.innerWidth), now()); },   // баллистический прыжок к X с возвратом на пол (стомп зомби)
+    airborne: () => jumping || falling,                     // в прыжке/падении (окно для стомпа)
+    ground: (on) => { gameFloor = on !== false; },          // false -> позицию ведёт игра вручную (прятки за элементами)
+    place: (x, y) => { px = clamp(x, 0, window.innerWidth - PET_W); py = clamp(y, 0, window.innerHeight - PET_H); },   // поставить вручную (только при ground(false))
+    appear: (on) => { pet.style.opacity = on ? '1' : '0'; pet.style.pointerEvents = on ? '' : 'none'; },   // спрятать/показать спрайт (прятки)
+    pos: () => ({ x: px, y: py, w: PET_W, h: PET_H, cx: px + PET_W / 2, cy: py + PET_H / 2 }),
+    cursor: () => ({ x: mouseX, y: mouseY }),
+    face: (d) => { face = d < 0 ? -1 : 1; },
+    say: (txt, ms) => say(txt, ms),
+    emote: (emo, ms) => playEmote(emo, ms),
+    happy: (ms) => { setMode('happy'); happyUntil = now() + (ms || 1000); },
+    particles: (c, n) => spawnParticles(c, n),
+    addXp: (n) => gainXp(n),                                // XP -> onChanged сам покажет левелап
+    addMood: (d) => { addMoodBias(d); saveCare(); },
+    addHunger: (d) => { addHunger(d); saveCare(); },
+    stats: () => ({ level, xp, mood: currentMood(), hunger: currentHunger(), energy: currentEnergy() }),
+    root, vw: () => window.innerWidth, vh: () => window.innerHeight,
+  };
+  const yasiaCtx = {
+    root, storage: Yasia.storage, events: Yasia.events,
+    config: (window.Yasia && Yasia.config) || {},
+    tr, say, hero: () => hero, pet: petApi,
+  };
+  try {
+    if (Yasia.systems) {
+      Yasia.systems.watchFlags();   // вкл/выкл флага в рантайме -> старт/стоп системы
+      if (Yasia.flags) Yasia.flags.load(() => Yasia.systems.boot(yasiaCtx));
+      else Yasia.systems.boot(yasiaCtx);
+    }
+  } catch (_) {}
 
   pickWanderTarget();
   nextMischief = now() + 9000 + Math.random() * 8000;

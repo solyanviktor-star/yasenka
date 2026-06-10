@@ -1,76 +1,99 @@
-<p align="center">
-  <img src="assets/banner.png" alt="Yasenka — Browser Pet" width="320">
-</p>
+# 🐾 Yasenka — Browser Pet with an AI Brain
 
-# 🐾 Yasenka — Browser Pet
+![Yasenka banner](assets/banner.png)
 
-A tiny catgirl named **Yasia** lives right on top of any web page. She walks and
-runs along the page structure, can be dragged around and thrown, and you can pet
-and feed her. Two real superpowers under the hood:
+Yasya is a catgirl who lives on top of any web page: she treats the page itself as a
+platformer level — walking along headings, images and buttons, jumping between them,
+climbing up to watch videos with you. Feed her, pet her, play mini-games with her,
+ask her things — and she remembers you.
 
-- **📥 Download videos from the page** — YouTube, TikTok, Twitter / X and Instagram.
-- **📝 Notes & links** — jot down quick notes and links, saved locally in your browser.
+> **Safety first:** the extension performs **no automated actions** on any site.
+> A central guard (`core/guard.js`) enforces the hard rules: no likes, follows,
+> comments or deletions without an explicit user confirmation (there is no such
+> automation in the code at all — any future code must go through the guard);
+> rapid downloads require confirmation; page text goes to the AI only after a
+> per-site permission prompt — and in Safe mode it never leaves the browser.
 
-> The interface is **English by default**. Press the **RU** button (in Yasia's
-> speech bubble or in the popup) to switch to Russian — and back.
+### 🎚 Behavior modes
+Five modes (⚙ settings) gate her autonomous behavior — your clicks always work:
+**🎮 Game** (everything on) · **😌 Calm** (no pranks/chatter) · **💼 Work**
+(never distracts, doesn't run to videos) · **🤖 AI** (assistant first) ·
+**🛡 Safe** (AI off, site journal paused — nothing leaves the browser).
 
----
+## What she can do
 
-## ✨ Features
+### 🕹 Lives on the page like a platformer
+- DOM elements (posts, headings, images, buttons) become **ledges**: she walks them,
+  jumps gaps, drops down with gravity, climbs toward a playing video and sits to watch.
+- Drag her, throw her, scroll — she rides the elements and lands on her feet.
+- If the video is too high to reach, she asks you to lift her up.
 
-### 📥 Video downloader
-Click Yasia → **Download video from the page**. She grabs the video from the
-current page:
+### 🤖 AI brain (Hermes Agent or OpenAI GPT)
+- Connect a local [Hermes Agent](https://github.com/NousResearch/hermes-agent) server,
+  an OpenAI API key, or sign in with a ChatGPT subscription (device-code flow).
+- **Intent router:** type a request in her window — she figures out whether one of her
+  own tools fits (“download this video” → opens the downloader) or answers directly.
+- **Live tool status** (Hermes): while the agent searches the web or runs code,
+  Yasya narrates what is happening (“🔍 searching the web…”).
+- **Text-selection menu:** explain, translate, summarize, draft replies — on any site.
+- Page context (URL, title, visible text, optional screenshot) is attached so she
+  always knows where she is.
 
-| Platform | Notes |
-|----------|-------|
-| **YouTube** | Quality = whatever the player has loaded (set 1080p in the player, let it buffer a bit, then download). |
-| **TikTok** | The active clip from the feed, **without watermark**. |
-| **Twitter / X** | The video from the open post. |
-| **Instagram** | The active reel / post video. |
-| Other sites | Any direct video on the page (best-effort). |
+### 🧠 Memory — works with ANY provider
+- **User model:** durable facts and preferences extracted from your conversations
+  (a small follow-up LLM call), merged and deduplicated over time.
+- **Site journal:** she remembers which sites you visited together — ask
+  “remember that site about X?” and she finds it. No LLM involved, fully local.
+- Everything is stored in `chrome.storage.local`, viewable and erasable from her panel.
 
-For TikTok / Instagram you can also paste a clip link into the field and download
-exactly that one.
+### ⏰ Reminders
+- “Remind me in 10 minutes to check the build” — she pops up on the page and says it.
+- Powered by `chrome.alarms`; missed reminders are delivered when a page next opens.
 
-### 📝 Notes & links
-Click Yasia → **Notes & links**. Type any text or link, hit **Save** — it stays
-in `chrome.storage.local`. Links become clickable.
+### 📥 Video downloads
+- Downloads videos from X/Twitter, TikTok, Instagram and YouTube
+  (with watermark-free TikTok and experimental YouTube paths).
 
-### 🐱 The pet itself
-- Lives on **any site**, walks and **runs** across the page by default.
-- **Drag & throw** her around — she flies with inertia and lands on page elements.
-- **Feed** her meat from the popup; she gains XP and **levels up** (bigger & livelier).
-- On **X (Twitter)** she walks up to posts and asks for a like — the like is placed
-  **only when you click the pet**. No auto-actions, no automation.
-- One setting: **Size** (default 180%). EN / RU language toggle.
+### 🐱 Tamagotchi care, games and moods
+- Hunger, energy, mood, bond and XP; feed her, pet her, wake her up.
+- Mini-games: chase the cursor, catch food, zombie archer, hide & seek.
+- Two playable heroes with full frame animation (Yasya and Noema), manifest-driven.
 
----
+## Install (developer mode)
 
-## 🚀 Install (developer mode)
+1. Clone the repo and open `chrome://extensions`.
+2. Enable **Developer mode** → **Load unpacked** → select the repo folder.
+3. Click the pet — her window opens. AI features are optional and live under the
+   🤖 panel (Hermes address/key, OpenAI key, or ChatGPT sign-in).
 
-### Firefox (Mozilla)
-1. Type `about:debugging` in the address bar.
-2. Open **This Firefox**.
-3. Click **Load Temporary Add-on…**
-4. Select the **`manifest.json`** file in this folder.
+## Architecture
 
-### Chrome
-1. Open **Manage extensions** (top-right menu → Extensions).
-2. Turn on **Developer mode** (top-left toggle).
-3. Click **Load unpacked**, open this folder and confirm.
-4. **Reload any already-open tabs** — the extension is injected on page load, so it
-   won't appear in old tabs until you refresh them.
+```
+src/
+  core/        config, storage, events (pub/sub bus), flags (feature toggles),
+               registry (plugin system with crash isolation), heroes, physics,
+               i18n (RU/EN dictionary)
+  systems/     notes, games, memory, ai — independent plugins; a crashed system
+               disables its own flag, the pet keeps living
+  pet.js       the pet itself: platformer state machine, care, dialog window
+  background.js service worker: downloads, AI proxy (CORS), streaming port,
+               reminders, ChatGPT device-code auth
+```
 
-A **🐾** button shows up at the bottom-right of the page — click it to show/hide Yasia.
+- Systems talk to each other **only** through the event bus and a narrow pet API.
+- All LLM traffic goes through the background service worker (no CORS issues,
+  localhost Hermes works from HTTPS pages).
+- Keys are stored locally (`chrome.storage.local`) and never synced.
 
-> After editing the code: on `chrome://extensions` hit **↻** on the extension card,
-> then **reload the website tab**.
+## Development
 
----
+```bash
+npm test    # unit tests (node:test, zero dependencies)
+```
 
-## 🔒 Safety principle
+Branches: `main` is stable, `dev` is active development; features land in `main`
+via PR after live testing.
 
-Real actions on X happen **only** as a direct response to your click on the pet
-(one click = one deliberate like, at human speed). Everything else is a visual
-layer on top of the page — it never changes content and never sends anything out.
+## License
+
+No license yet — all rights reserved for now.

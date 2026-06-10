@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
   <meta charset="utf-8">
   <style>
-    body { width: 270px; margin: 0; padding: 14px; font: 14px/1.4 system-ui, -apple-system, sans-serif; color: #0f1419; }
-    .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 12px; }
+    body { width: 280px; margin: 0; padding: 14px; font: 14px/1.4 system-ui, -apple-system, sans-serif; color: #0f1419; }
+    .hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
     h1 { font-size: 15px; margin: 0; }
-    .lang { border: none; border-radius: 8px; background: #eaeef2; color: #536471; cursor: pointer; font: 700 12px system-ui; padding: 5px 10px; transition: background .12s, color .12s; }
-    .lang:hover { background: #1d9bf0; color: #fff; }
+    .lang { border: none; border-radius: 8px; background: #eaeef2; color: #536471; cursor: pointer; font: 700 12px system-ui; padding: 5px 10px; }
+    .lang:hover { background: #dfe6ea; }
     .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
     input[type="checkbox"] { width: 18px; height: 18px; accent-color: #5cba47; }
     .label { font-size: 12px; color: #536471; margin-bottom: 6px; }
@@ -21,6 +21,9 @@
     .bar__fill { height: 100%; width: 0; border-radius: 6px; transition: width .3s ease; }
     .bar__fill.hunger { background: linear-gradient(90deg, #ffce4d, #ff8a3d); }
     .bar__fill.xp { background: linear-gradient(90deg, #6cba43, #3f8f33); }
+    .bar__fill.mood { background: linear-gradient(90deg, #ffd0e7, #ff5fa2); }
+    .bar__fill.energy { background: linear-gradient(90deg, #7fd2ff, #2f8fe0); }
+    .bar__fill.bond { background: linear-gradient(90deg, #ff9aa2, #e0245e); }
     .level { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-weight: 700; }
     .level .badge { background: #5cba47; color: #fff; border-radius: 8px; padding: 2px 9px; font-size: 13px; }
     .feed { width: 100%; border: none; border-radius: 12px; background: #5cba47; color: #fff; font: 700 14px system-ui; padding: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform .1s, background .15s; }
@@ -28,26 +31,105 @@
     .feed:active { transform: scale(.97); }
     .feed img { width: 22px; height: 22px; object-fit: contain; }
     .hint { margin: 12px 0 0; font-size: 12px; color: #536471; }
+
+    /* ===== AI brain (Hermes / GPT) ===== */
+    .ai-box { border: 1.5px solid #e1e8ed; border-radius: 12px; padding: 10px 11px; margin-bottom: 14px; background: #f7f9fa; }
+    .ai-head { display: flex; align-items: center; gap: 8px; }
+    .ai-logo { width: 22px; height: 22px; flex: none; border-radius: 6px; overflow: hidden; display: inline-flex; }
+    .ai-logo svg { width: 100%; height: 100%; display: block; }
+    .ai-title { font: 800 13px system-ui; color: #0f1419; flex: 1; }
+    .ai-status { font: 700 11px system-ui; color: #536471; margin: 8px 0 0; }
+    .ai-status.ok { color: #0c7a3e; }
+    .ai-toggle { width: 100%; border: none; border-radius: 9px; background: #eaeef2; color: #536471; cursor: pointer; font: 700 12px system-ui; padding: 8px; margin-top: 9px; }
+    .ai-toggle:hover { background: #dfe6ea; }
+    .ai-cfg { margin-top: 10px; }
+    .ai-cfg[hidden] { display: none; }
+    .dev { margin-top: 10px; border: 1.5px solid #e1e8ed; border-radius: 12px; padding: 8px 12px; }
+    .dev summary { cursor: pointer; font: 700 12px system-ui, -apple-system, sans-serif; color: #536471; list-style-position: inside; }
+    .dev .row { margin-top: 6px; }
+    .dev .hint { margin-top: 4px; }
+    .ai-prov { display: flex; gap: 6px; margin-bottom: 9px; }
+    .ai-prov-b { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1.5px solid #e1e8ed; border-radius: 10px; background: #fff; color: #536471; cursor: pointer; font: 700 12px system-ui; padding: 7px 6px; }
+    .ai-prov-b .ai-logo { width: 18px; height: 18px; }
+    .ai-prov-b.on { background: #e8f5fe; border-color: #1d9bf0; color: #1d9bf0; }
+    .ai-f { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+    .ai-f span { font: 600 11px system-ui; color: #536471; }
+    .ai-in { width: 100%; box-sizing: border-box; border: 1.5px solid #e1e8ed; border-radius: 9px; padding: 8px 9px; font: 13px system-ui; color: #0f1419; background: #fff; }
+    .ai-in:focus { outline: none; border-color: #1d9bf0; }
+    .ai-row { display: flex; gap: 7px; margin: 4px 0 7px; }
+    .ai-test { flex: 1; border: 1.5px solid #1d9bf0; border-radius: 10px; background: #fff; color: #1d9bf0; cursor: pointer; font: 700 12px system-ui; padding: 9px; }
+    .ai-test:hover { background: #e8f5fe; }
+    .ai-save { flex: 1; border: none; border-radius: 10px; background: #1d9bf0; color: #fff; cursor: pointer; font: 700 12px system-ui; padding: 9px; }
+    .ai-save:hover { background: #1a8cd8; }
+    .ai-msg { font: 600 12px system-ui; min-height: 1px; }
+    .ai-msg.ok { color: #0c7a3e; }
+    .ai-msg.err { color: #e0245e; }
+    .ai-hint { font: 11px/1.4 system-ui; color: #8a97a3; margin-top: 7px; }
+    .ai-f-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .ai-getkey { font: 600 11px system-ui; color: #1d9bf0; text-decoration: none; cursor: pointer; }
+    .ai-getkey:hover { text-decoration: underline; }
+    .ai-mode[hidden], .ai-signin[hidden], #ai-keyfields[hidden] { display: none; }
+    .ai-signin { margin-bottom: 8px; }
+    .ai-signin-btn { width: 100%; border: none; border-radius: 10px; background: #10a37f; color: #fff; cursor: pointer; font: 700 12px system-ui; padding: 9px; }
+    .ai-signin-btn:hover { background: #0e8e6f; }
+    .ai-signin-st { font: 12px/1.4 system-ui; color: #536471; margin-top: 7px; }
+    .ai-signin-st.ok { color: #0c7a3e; font-weight: 700; }
+    .ai-signin-st.err { color: #e0245e; }
+    .ai-signin-st b { font-size: 17px; letter-spacing: 2px; color: #0f1419; }
+    .ai-signin-sub { color: #8a97a3; font-size: 11px; word-break: break-all; }
   </style>
 </head>
 <body>
-  <div class="head">
-    <h1 id="title">🟩 Browser Pet</h1>
+  <div class="hdr">
+    <h1 id="t-title">🟩 Twitter-Pet</h1>
     <button class="lang" id="lang" type="button">RU</button>
   </div>
 
   <label class="row">
-    <span id="lbl-enabled">Pet enabled</span>
+    <span id="t-enabled">Pet enabled</span>
     <input type="checkbox" id="enabled">
   </label>
 
-  <div class="label" id="lbl-hero">Hero:</div>
-  <div class="heroes" id="heroes">
-    <button class="hero" data-hero="catgirl">
-      <img src="heroes/catgirl/idle/idle.png" alt="">
-      <span>Yasia</span>
-    </button>
+  <label class="row">
+    <span id="t-paused">Pause (freeze in place)</span>
+    <input type="checkbox" id="paused">
+  </label>
+
+  <!-- AI brain (Hermes / GPT) -->
+  <div class="ai-box">
+    <div class="ai-head">
+      <span class="ai-logo" id="ai-logo"></span>
+      <span class="ai-title" id="t-ai">AI brain (Hermes / GPT)</span>
+    </div>
+    <div class="ai-status" id="ai-status"></div>
+    <button class="ai-toggle" id="ai-toggle" type="button"></button>
+    <div class="ai-cfg" id="ai-cfg" hidden>
+      <div class="ai-prov">
+        <button class="ai-prov-b" id="prov-hermes" data-p="hermes" type="button"><span class="ai-logo"></span><span>Hermes</span></button>
+        <button class="ai-prov-b" id="prov-gpt" data-p="gpt" type="button"><span class="ai-logo"></span><span>GPT</span></button>
+      </div>
+      <div class="ai-prov ai-mode" id="ai-mode" hidden>
+        <button class="ai-prov-b" id="mode-sub" data-am="chatgpt" type="button"></button>
+        <button class="ai-prov-b" id="mode-key" data-am="key" type="button"></button>
+      </div>
+      <label class="ai-f"><span id="t-cfg-model">Model</span><input class="ai-in" id="cfg-model" type="text" list="cfg-models" autocomplete="off"><datalist id="cfg-models"></datalist></label>
+      <div class="ai-signin" id="ai-signin" hidden>
+        <button class="ai-signin-btn" id="signin-btn" type="button"></button>
+        <div class="ai-signin-st" id="signin-st"></div>
+      </div>
+      <div id="ai-keyfields">
+        <label class="ai-f"><span id="t-cfg-url">Address</span><input class="ai-in" id="cfg-url" type="text"></label>
+        <label class="ai-f"><span class="ai-f-row"><span id="t-cfg-key">Key</span><a class="ai-getkey" id="cfg-getkey" target="_blank" rel="noopener"></a></span><input class="ai-in" id="cfg-key" type="password"></label>
+        <div class="ai-row"><button class="ai-test" id="cfg-test" type="button">Test</button></div>
+      </div>
+      <div class="ai-row"><button class="ai-save" id="cfg-save" type="button">Save</button></div>
+      <div class="ai-msg" id="cfg-msg"></div>
+      <div class="ai-hint" id="cfg-hint"></div>
+    </div>
   </div>
+
+  <div class="label" id="t-hero">Character:</div>
+  <div class="heroes" id="heroes"></div><!-- кнопки строятся из реестра core/config.js HEROES в popup.js -->
 
   <div class="level">
     <span class="badge" id="level">Lv. 1</span>
@@ -55,19 +137,68 @@
   </div>
 
   <div class="stat">
-    <div class="stat__label"><span id="lbl-xp">XP</span><span id="xpText">0</span></div>
+    <div class="stat__label"><span id="t-xp">XP</span><span id="xpText">0</span></div>
     <div class="bar"><div class="bar__fill xp" id="xpBar"></div></div>
   </div>
 
   <div class="stat">
-    <div class="stat__label"><span id="lbl-hunger">Hunger</span><span id="hungerText">0%</span></div>
+    <div class="stat__label"><span id="t-hunger">Hunger</span><span id="hungerText">0%</span></div>
     <div class="bar"><div class="bar__fill hunger" id="hungerBar"></div></div>
   </div>
 
-  <button class="feed" id="feed"><img src="items/meat.png" alt=""><span id="feed-tx">Feed meat</span></button>
+  <div class="stat">
+    <div class="stat__label"><span id="t-mood">Mood</span><span id="moodText">0%</span></div>
+    <div class="bar"><div class="bar__fill mood" id="moodBar"></div></div>
+  </div>
 
-  <p class="hint" id="hint">Hunger grows over time. Feeding gives XP — with each level the pet is bigger and livelier. A like is only placed by your click on the pet.</p>
+  <div class="stat">
+    <div class="stat__label"><span id="t-energy">Energy</span><span id="energyText">0%</span></div>
+    <div class="bar"><div class="bar__fill energy" id="energyBar"></div></div>
+  </div>
 
+  <div class="stat">
+    <div class="stat__label"><span id="t-bond">Bond</span><span id="bondText">0%</span></div>
+    <div class="bar"><div class="bar__fill bond" id="bondBar"></div></div>
+  </div>
+
+  <button class="feed" id="feed"><img src="items/meat.png" alt=""><span id="t-feed">Feed meat</span></button>
+
+  <!-- фиче-флаги: способности можно включать/выключать (core/flags.js, storage.sync yasiaFlags) -->
+  <details class="dev">
+    <summary id="t-flags">🧩 Features</summary>
+    <div id="flags"></div>
+    <p class="hint" id="t-flags-hint"></p>
+  </details>
+
+  <!-- экспорт/импорт состояния: статы, заметки, память, настройки. Ключи ИИ (yasiaAI) НЕ выгружаются. -->
+  <details class="dev">
+    <summary id="t-backup">💾 Backup</summary>
+    <div class="ai-row" style="margin-top:8px">
+      <button class="ai-test" id="exportBtn" type="button">Export</button>
+      <button class="ai-test" id="importBtn" type="button">Import</button>
+    </div>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+    <div class="ai-msg" id="backup-msg"></div>
+    <p class="hint" id="t-backup-hint"></p>
+  </details>
+
+  <!-- режим разработчика: служебные тумблеры (не способности питомца) -->
+  <details class="dev">
+    <summary id="t-dev">🛠 Developer</summary>
+    <label class="row">
+      <span id="t-devledges">Ledge overlay</span>
+      <input type="checkbox" id="devLedges">
+    </label>
+    <p class="hint" id="t-devledges-hint"></p>
+  </details>
+
+  <p class="hint" id="t-hint"></p>
+
+  <script src="core/config.js"></script>
+  <script src="core/storage.js"></script>
+  <script src="core/events.js"></script>
+  <script src="core/flags.js"></script>
+  <script src="core/heroes.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
