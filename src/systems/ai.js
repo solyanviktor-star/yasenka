@@ -146,7 +146,7 @@
       const storage = (ctx && ctx.storage) || Yasia.storage;
       const flags = Yasia.flags || { enabled: function () { return true; } };   // доступность инструментов для маршрутизатора
       const L = () => AL[(tr() && tr().lang) || 'ru'] || AL.ru;
-      const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');   // и кавычки: esc используется в HTML-атрибутах (data-id="...") — без &quot; строка с кавычкой рвёт атрибут (XSS-паттерн, как в notes.js)
 
       // ---------- конфиг подключения (в storage.local — ключи остаются на устройстве, не синкаются в облако) ----------
       // структура: { provider:'hermes'|'gpt', sessionKey, hermes:{baseUrl,apiKey,model}, gpt:{baseUrl,apiKey,model} }
