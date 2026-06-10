@@ -2,7 +2,7 @@
 
 ![Yasenka banner](assets/banner.png)
 
-Yasia is a catgirl who lives on top of any web page: she treats the page itself as a
+Yasya is a catgirl who lives on top of any web page: she treats the page itself as a
 platformer level — walking along headings, images and buttons, jumping between them,
 climbing up to watch videos with you. Feed her, pet her, play mini-games with her,
 ask her things — and she remembers you.
@@ -24,7 +24,7 @@ ask her things — and she remembers you.
 - **Intent router:** type a request in her window — she figures out whether one of her
   own tools fits (“download this video” → opens the downloader) or answers directly.
 - **Live tool status** (Hermes): while the agent searches the web or runs code,
-  Yasia narrates what is happening (“🔍 searching the web…”).
+  Yasya narrates what is happening (“🔍 searching the web…”).
 - **Text-selection menu:** explain, translate, summarize, draft replies — on any site.
 - Page context (URL, title, visible text, optional screenshot) is attached so she
   always knows where she is.
@@ -47,7 +47,7 @@ ask her things — and she remembers you.
 ### 🐱 Tamagotchi care, games and moods
 - Hunger, energy, mood, bond and XP; feed her, pet her, wake her up.
 - Mini-games: chase the cursor, catch food, zombie archer, hide & seek.
-- Two playable heroes with full frame animation (Yasia and Noema), manifest-driven.
+- Two playable heroes with full frame animation (Yasya and Noema), manifest-driven.
 
 ## Install (developer mode)
 

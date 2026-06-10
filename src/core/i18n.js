@@ -6,6 +6,7 @@
   const Yasia = (window.Yasia = window.Yasia || {});
   const L = {
     ru: {
+      dlgTitle: '🐱 Яся',
       greet: 'Привет! Я Яся — живу у тебя на ленте, гуляю по странице, можно меня погладить и покормить. Вот что я умею:',
       dl: 'Скачать видео со страницы', notes: 'Заметки и ссылки', back: 'Назад',
       save: 'Сохранить', ph: 'Вставь любой текст или ссылку…', empty: 'Заметок пока нет', notesOff: 'Заметки выключены.',
@@ -51,7 +52,8 @@
       other: 'EN',
     },
     en: {
-      greet: "Hi! I'm Yasia — I live on your feed, walk around the page, you can pet and feed me. Here's what I can do:",
+      dlgTitle: '🐱 Yasya',
+      greet: "Hi! I'm Yasya — I live on your feed, walk around the page, you can pet and feed me. Here's what I can do:",
       dl: 'Download video from the page', notes: 'Notes & links', back: 'Back',
       save: 'Save', ph: 'Paste any text or link…', empty: 'No notes yet', notesOff: 'Notes are off.',
       novideo: "I don't see a video on this page. Open a clip (TikTok / Instagram / YouTube / X) and check again.",

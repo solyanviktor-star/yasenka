@@ -63,7 +63,7 @@
     },
     en: {
       act: { explain: 'Explain', translate: 'Translate', compress: 'Compress', reply: 'Reply', advice: 'Advice', save: 'Save' },
-      title: { explain: '💡 Explaining', translate: '🌐 Translation', summarizePost: '✂️ Summary', summarizeThread: '🧵 Thread summary', reply: '💬 Reply options', comment: '💬 Comment options', advice: '🧭 Advice', find: '🔎 Search', ask: '🐱 Yasia thinking', explainPage: '📄 About page' },
+      title: { explain: '💡 Explaining', translate: '🌐 Translation', summarizePost: '✂️ Summary', summarizeThread: '🧵 Thread summary', reply: '💬 Reply options', comment: '💬 Comment options', advice: '🧭 Advice', find: '🔎 Search', ask: '🐱 Yasya thinking', explainPage: '📄 About page' },
       think: {
         explain: ['Let me break it down…', "Okay, what's going on here…"],
         translate: ['Translating, mrr…', 'One sec, translating…'],
@@ -105,7 +105,7 @@
     dl:    { flag: 'mediaDownload', ru: 'скачать видео/гиф/медиа с этой страницы (X, YouTube, TikTok и т.п.)', en: 'download a video/gif/media from this page (X, YouTube, TikTok, etc.)' },
     notes: { flag: 'notes',         ru: 'сохранить заметку, цитату или ссылку', en: 'save a note, quote or link' },
     games: { flag: 'games',         ru: 'запустить мини-игру (догонялки, ловля еды, прятки)', en: 'start a mini-game (chase, catch food, hide & seek)' },
-    care:  { flag: 'tamagotchi',    ru: 'забота о Ясе: покормить, погладить, поиграть (тамагочи)', en: 'care for Yasia: feed, pet, play (tamagotchi)' },
+    care:  { flag: 'tamagotchi',    ru: 'забота о Ясе: покормить, погладить, поиграть (тамагочи)', en: 'care for Yasya: feed, pet, play (tamagotchi)' },
   };
 
   // ---------- инструкции под каждое действие (что именно просим у Hermes) ----------
@@ -124,7 +124,7 @@
 
   function sysPersona(lang) {
     return lang === 'en'
-      ? "You are Yasia — a witty, friendly cat-girl who lives INSIDE the user's web browser as a pet-assistant sitting on top of whatever page they're viewing (X/Twitter, GitHub, YouTube, any site). "
+      ? "You are Yasya — a witty, friendly cat-girl who lives INSIDE the user's web browser as a pet-assistant sitting on top of whatever page they're viewing (X/Twitter, GitHub, YouTube, any site). "
         + "You are a BROWSER AGENT: you can see the current page whenever its context (URL, title, visible text, and sometimes a list of on-page controls) is included in the message — rely on that to answer about the page, find things on it, and tell the user exactly where to click. "
         + "You act THROUGH the browser, not the OS: you cannot run programs or touch files, and you never click or perform actions yourself — you guide and the user clicks. "
         + "If a request needs page context that wasn't provided, briefly say what you'd need. Stay in character but be genuinely useful: concise, direct, plain text, no markdown headings."
@@ -528,7 +528,7 @@
         const sys = (lang === 'en'
           ? 'Extract 0-3 DURABLE facts/preferences about the USER worth remembering long-term (identity, interests, ongoing projects, how they like answers). Ignore one-off/transient details and anything about the assistant. Reply with STRICT JSON array of short strings (English), [] if nothing.'
           : 'Извлеки 0-3 ДОЛГОВЕЧНЫХ факта/предпочтения о ПОЛЬЗОВАТЕЛЕ, которые стоит помнить долго (кто он, интересы, текущие проекты, как любит ответы). Игнорируй разовое/сиюминутное и всё про ассистента. Ответь СТРОГО JSON-массивом коротких строк (по-русски), [] если нечего.');
-        const user = 'User: ' + clipTxt(qq).slice(0, 1200) + '\n\nYasia: ' + clipTxt(String(answer || '')).slice(0, 1200);
+        const user = 'User: ' + clipTxt(qq).slice(0, 1200) + '\n\nYasya: ' + clipTxt(String(answer || '')).slice(0, 1200);
         let res; try { res = await chat([{ role: 'system', content: sys }, { role: 'user', content: user }]); } catch (_) { return; }
         if (!res || !res.ok) return;
         const facts = parseJsonArray(res.content); if (!facts || !facts.length) return;

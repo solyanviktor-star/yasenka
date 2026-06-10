@@ -8,7 +8,7 @@
     // герои (скины/персонажи). Добавить персонажа = запись здесь + папка src/heroes/<id>/ с manifest.json и спрайтами.
     // popup строит пикер из этого списка, pet.js берёт его как список framed-героев — без правки логики.
     HEROES: [
-      { id: 'catgirl', name: 'Yasia' },
+      { id: 'catgirl', name: 'Yasya' },
       { id: 'noema', name: 'Noema', cssClass: 'is-noema' },
     ],
 

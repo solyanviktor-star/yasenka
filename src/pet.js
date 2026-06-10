@@ -1417,6 +1417,7 @@
   function renderDlgLang() {
     const t = tr();
     renderSettingsLang();
+    setTxt('.twtr-dlg-title', t.dlgTitle);   // заголовок окна тоже локализуем: «🐱 Яся» / «🐱 Yasya» (был жёстко зашит в HTML)
     setTxt('#twtr-dlg-greet', t.greet);
     setTxt('#twtr-cap-ai-tx', t.ai);
     setTxt('#twtr-cap-care-tx', t.care);
