@@ -1703,15 +1703,12 @@
     for (const el of els) {
       if (root.contains(el)) continue;
       const r = el.getBoundingClientRect();
-      if (r.width < 44 || r.height < 14) continue;
-      if (r.top < 6 || r.top > vh - 10) continue;
-      const x1 = Math.max(4, r.left), x2 = Math.min(vw - 4, r.right);
-      if (x2 - x1 < Math.max(40, petW() * 0.8)) continue;   // узкая для её ХИТБОКСА (растёт с размером) -> не встать/не запрыгнуть
-      if (x2 - x1 > vw * 0.40) continue;          // слишком широкое — это контейнер/фон, а не «полка»
-      if (x2 - x1 > vw * 0.22 && el.querySelector(SEL)) continue;   // широковатый ЭЛЕМЕНТ-ОБЁРТКА (внутри лежат другие блоки) — его box залезает в ПУСТОТУ между ними; полом не считаем, иначе «идёт по пустоте». Полкой станут сами внутренние блоки (текст/картинка)
-      const key = Math.round(r.top / 6) + ':' + Math.round(x1 / 24);
+      // все фильтры «годится ли прямоугольник в полку» — в core/physics.js (там же тесты); querySelector зовётся лениво
+      const lg = Yasia.physics.ledgeFromRect(r, vw, vh, petW(), () => !!el.querySelector(SEL));
+      if (!lg) continue;
+      const key = Math.round(lg.y / 6) + ':' + Math.round(lg.x1 / 24);
       if (seen.has(key)) continue; seen.add(key);
-      out.push({ el, x1, x2, y: Math.round(r.top) });
+      out.push({ el, x1: lg.x1, x2: lg.x2, y: lg.y });
       if (out.length > 70) break;
     }
     out.push({ el: null, floor: true, x1: 0, x2: vw, y: vh - PLAT_FLOOR });   // пол внизу: падает до него, если в её колонке нет элемента, потом запрыгивает наверх
@@ -1728,9 +1725,9 @@
     jumpFromX = px; jumpFromY = py;
     jumpToX = clamp(tgtCenterX - PET_W / 2, L.x1, L.x2 - PET_W);
     jumpToY = L.y - PET_H;
-    jumpDrop = (jumpToY - jumpFromY) > PLAT_JUMP_UP * 0.6;   // блок заметно ниже -> СПУСК падением (гравитация), а не медленный глайд дугой
+    jumpDrop = Yasia.physics.isDropJump(jumpFromY, jumpToY, PLAT_JUMP_UP);   // блок заметно ниже -> СПУСК падением (гравитация), а не медленный глайд дугой
     if (jumpDrop) vy = 0;                                    // чистое падение от текущей высоты
-    jumpPeak = Math.max(46, (jumpFromY - jumpToY) + 50);   // дуга всегда выше обеих точек (для прыжков вверх/вбок)
+    jumpPeak = Yasia.physics.jumpPeakFor(jumpFromY, jumpToY);   // дуга всегда выше обеих точек (для прыжков вверх/вбок)
     if (jumpToX !== px) face = jumpToX > px ? 1 : -1;
     pet.classList.add('is-jump');
     if (Math.random() < 0.35) say(pick(SP('jump')), 1100);
@@ -1749,8 +1746,8 @@
       return;
     }
     const k = clamp((t - jumpT) / PLAT_JUMP_MS, 0, 1);
-    px = jumpFromX + (jumpToX - jumpFromX) * k;
-    py = (jumpFromY + (jumpToY - jumpFromY) * k) - Math.sin(Math.PI * k) * jumpPeak;
+    const ap = Yasia.physics.jumpArcPos(jumpFromX, jumpFromY, jumpToX, jumpToY, jumpPeak, k);   // дуга — в core/physics.js
+    px = ap.x; py = ap.y;
     const minTop = PET_H * Math.max(0, sizeMul * userScale - 1);
     if (py < minTop) py = minTop;                 // не выше верхнего края экрана
     if (k >= 1) {
@@ -1762,20 +1759,12 @@
   function tryClimb(t) {   // СВОБОДНЫЙ ПЛАТФОРМЕР: в обычном гулянии живо перескакивает с блока на блок в ЛЮБУЮ сторону (вверх/вниз/вбок через разрывы) — по той же физике, что и поход к видео (ledgeJumpable)
     const cx = px + PET_W / 2;
     climbing = false;
-    const minLedgeY = PET_H * Math.max(1, sizeMul * userScale);   // полки выше этого — за верхом экрана, игнор
-    const cand = [];
-    for (const L of ledges) {
-      if (L === standLedge || L.y < minLedgeY) continue;
-      if (!ledgeJumpable(standLedge, L)) continue;                // достижимо прыжком (вверх/вбок/вниз) в пределах физики
-      const tgtX = clamp(cx, L.x1 + PET_W / 2, L.x2 - PET_W / 2);
-      const horiz = Math.abs(tgtX - cx), drop = Math.max(0, L.y - standLedge.y);   // насколько блок НИЖЕ текущего
-      if (horiz > PLAT_JUMP_DX) continue;                          // фактическая горизонталь прыжка от ТЕКУЩЕЙ позиции (не только разрыв полок) — иначе с широкой полки/пола сигает через пол-экрана
-      let w = 1 / (1 + horiz / PLAT_JUMP_DX);                      // ближе по горизонтали -> охотнее (плавные, не всегда предельные прыжки)
-      if (drop > PLAT_JUMP_UP) w *= 1 / (1 + (drop - PLAT_JUMP_UP) / (PLAT_JUMP_UP * 2));   // далёкий спуск возможен, но выбирается чуть реже (не сигает на самый низ постоянно)
-      if (L.el && lastLeftEl && L.el === lastLeftEl) w *= 0.22;    // анти-пинг-понг: не скакать сразу обратно на покинутый блок
-      if (L.floor) w *= 0.55;                                      // на пол спрыгивает реже, чем скачет по блокам страницы
-      cand.push({ L, tgtX, w });
-    }
+    // отбор и взвешивание достижимых полок — в core/physics.js climbCandidates (там же тесты)
+    const cand = Yasia.physics.climbCandidates(ledges, standLedge, cx, {
+      W: PET_W, dx: PLAT_JUMP_DX, up: PLAT_JUMP_UP,
+      minY: PET_H * Math.max(1, sizeMul * userScale),              // полки выше — за верхом экрана, игнор
+      lastLeftEl,                                                  // анти-пинг-понг: не скакать сразу обратно
+    });
     if (cand.length && Math.random() < 0.78) {                    // свободный платформер: чаще прыгает по блокам, иногда просто гуляет по текущему
       let sum = 0; for (const c of cand) sum += c.w;
       let r = Math.random() * sum, chosen = cand[cand.length - 1];
