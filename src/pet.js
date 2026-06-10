@@ -110,6 +110,14 @@
         <span id="twtr-l-roam">Ходит и бегает</span>
         <button class="twtr-set-switch" id="twtr-roam-sw" type="button" role="switch" aria-checked="true"><span class="twtr-set-knob"></span></button>
       </div>
+      <div class="twtr-set-sub" id="twtr-l-mode">Режим:</div><!-- режимы поведения (страж, v0.9): гейтят автономные действия -->
+      <div class="twtr-mode-row">
+        <button class="twtr-mode-btn" data-mode="game" type="button">🎮</button>
+        <button class="twtr-mode-btn" data-mode="calm" type="button">😌</button>
+        <button class="twtr-mode-btn" data-mode="work" type="button">💼</button>
+        <button class="twtr-mode-btn" data-mode="ai" type="button">🤖</button>
+        <button class="twtr-mode-btn" data-mode="safe" type="button">🛡</button>
+      </div>
       <div class="twtr-set-sub">Проверить действие:</div>
       <div class="twtr-test-grid">
         <button class="twtr-test-btn" data-test="idle" type="button">🐾 Стоять</button>
@@ -668,7 +676,7 @@
       const realPlaying = anyVideoPlaying();
       if (!realPlaying) watchDismissed = false;   // видео встало -> снимаем «прогнали» (новый запуск снова заинтересует)
       const playing = (realPlaying && !watchDismissed) || now() < watchTestUntil;   // прогнали от видео -> не подходим, пока это видео не остановится
-      if (playing) { if (watchOffT) { clearTimeout(watchOffT); watchOffT = null; } setWatching(true); }
+      if (playing) { if (Yasia.guard && !Yasia.guard.allows('watch') && now() >= watchTestUntil) return; if (watchOffT) { clearTimeout(watchOffT); watchOffT = null; } setWatching(true); }   // рабочий/безопасный режим: сама к видео не бежит (ручной тест — можно)
       else if (watching && !watchOffT) { watchOffT = setTimeout(() => { watchOffT = null; setWatching(false); }, 1400); }   // видео встало -> уходит не сразу
     }, 120);
   }
@@ -725,6 +733,7 @@
 
   // ---------- пакости (визуальные) ----------
   function maybeMischief(t) {
+    if (Yasia.guard && !Yasia.guard.allows('mischief')) return;   // режимы (страж): пакости только в игровом
     if (busy || gameActive || t < nextMischief || isTyping() || dialogOpen()) return;
     nextMischief = t + 13000 + Math.random() * 15000;
     if (isTwitter && Math.random() < 0.5) stealLetter(); else glassCrack();
@@ -1413,6 +1422,7 @@
     setEl('.twtr-set-sub', t.setTest);
     const map = { idle: t.tbIdle, wave: t.tbWave, left: t.tbLeft, right: t.tbRight, jump: t.tbJump, climb: t.tbClimb, 'emo:fall': t.tbFall, 'emo:run': t.tbRun };
     root.querySelectorAll('.twtr-test-btn[data-test]').forEach((b) => { const k = b.getAttribute('data-test'); if (map[k]) b.textContent = map[k]; });
+    renderModeRow();   // подписи режимов тоже зависят от языка
   }
   function renderDlgLang() {
     const t = tr();
@@ -1605,6 +1615,12 @@
       const tip = (plat0 === 'tiktok' || plat0 === 'instagram') ? T.stNoClip : T.stNoVideo;
       setStatus('err', tip); btn.disabled = false; return;
     }
+    // СТРАЖ: много скачиваний подряд (или безопасный режим) -> явное подтверждение пользователя
+    if (Yasia.guard && Yasia.guard.needDownloadConfirm()) {
+      const ok = await Yasia.guard.confirm({ text: tr().gdDlMany, yes: tr().gdYes, no: tr().gdNo });
+      if (!ok) { setStatus('', ''); btn.disabled = false; return; }
+    }
+    if (Yasia.guard) Yasia.guard.noteDownload();
     setStatus('', T.stDownloading);
     try {
       // validate: прогнать через fetch+проверку content-type (YouTube/обычные сайты могут отдать html/текст -> иначе сохранится .txt)
@@ -1646,6 +1662,25 @@
     const wrap = root.querySelector('.twtr-skill[data-skill="' + which + '"]');
     if (wrap && !wrap.classList.contains('open')) toggleSkill(which);   // toggleSkill — переключатель: открываем только если ещё закрыт
   }); } catch (_) {}
+  // режимы поведения (страж): кнопки в настройках; подсветка активного + тултип с названием
+  function renderModeRow() {
+    const t = tr(); const names = { game: t.mGame, calm: t.mCalm, work: t.mWork, ai: t.mAi, safe: t.mSafe };
+    const cur = Yasia.guard ? Yasia.guard.mode() : 'game';
+    root.querySelectorAll('.twtr-mode-btn').forEach((b) => {
+      const m = b.getAttribute('data-mode');
+      b.classList.toggle('on', m === cur);
+      if (names[m]) b.title = names[m];
+    });
+    const lbl = root.querySelector('#twtr-l-mode'); if (lbl && t.setMode) lbl.textContent = t.setMode + (names[cur] ? ' · ' + names[cur] : '');
+  }
+  root.querySelectorAll('.twtr-mode-btn').forEach((b) => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (Yasia.guard) Yasia.guard.setMode(b.getAttribute('data-mode'));
+    renderModeRow();
+  }));
+  try { if (Yasia.guard) Yasia.guard.onMode(() => renderModeRow()); } catch (_) {}   // смена из другой вкладки -> подсветка вживую
+  renderModeRow();
+
   // сработала напоминалка (фон, chrome.alarms) -> Яся произносит её прямо на странице
   function showReminder(text) {
     const tx = String(text || '').slice(0, 200).trim(); if (!tx) return false;
@@ -1979,7 +2014,7 @@
       if (t > happyUntil) { bubble.textContent = '❤?'; bubble.classList.remove('show'); setMode('idle'); }
     } else {
       platformerTick(t, dt);            // живёт по структуре страницы: стоит на элементах, прыгает по полкам
-      if (t > nextChatter) { nextChatter = t + 9000 + Math.random() * 12000; say(Math.random() < 0.32 ? pick(SP('event')) : pick(SP('idle')), 2000); }
+      if (t > nextChatter) { nextChatter = t + 9000 + Math.random() * 12000; if (!Yasia.guard || Yasia.guard.allows('chatter')) say(Math.random() < 0.32 ? pick(SP('event')) : pick(SP('idle')), 2000); }   // болтовня — по режиму (страж)
     }
 
     careTick(t, dt);    // статы: затухание/восстановление, амбиент, авто-сохранение, реплики по состоянию

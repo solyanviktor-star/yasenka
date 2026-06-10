@@ -46,6 +46,9 @@
       remTitle: '⏰ Напоминания', remEmpty: 'Пока нет напоминаний.', remDel: 'Удалить', remFiredPrefix: '⏰ Напоминаю:',
       memFactsTitle: '🧠 Что я о тебе помню', memPlacesTitle: '🗺 Где мы были', memEmptyFacts: 'Пока ничего не запомнила.', memEmptyPlaces: 'Сайтов пока нет.', memForgetFacts: 'Забыть всё', memForgetPlaces: 'Очистить журнал',
       sklTitle: '🛠 Мои навыки', sklEmpty: 'Навыков пока нет — скажи «выучи навык: …» или я сама предложу после задач.', sklLearned: 'Выучила навык', sklImproved: 'Докрутила навык', sklNoSkill: 'Не нашла такой навык — глянь список в панели ИИ.', sklHermesOnly: 'Этот навык исполняет мозг Hermes, а сейчас подключён GPT. Переключись на Hermes в настройках ИИ-мозга — и сделаю.',
+      gdAiSafe: '🛡 Безопасный режим: ИИ выключен — текст страницы не покидает браузер. Смени режим в настройках (⚙), чтобы спросить.',
+      gdAiAskHost: 'Отправить текст этой страницы ({host}) в ИИ (Hermes/GPT), чтобы я могла ответить? Запомню разрешение для этого сайта.',
+      gdAiYes: 'Отправлять', gdAiNo: 'Отмена',
       connected: '🟢 Подключено к Hermes', notConnected: '⚪ Hermes не настроен',
       settingsBtn: '⚙ Подключение к Hermes', qExplainPage: '📄 Объяснить страницу', qSummThread: '🧵 Сжать тред',
       quickTitle: 'Быстрые действия:',
@@ -83,6 +86,9 @@
       remTitle: '⏰ Reminders', remEmpty: 'No reminders yet.', remDel: 'Delete', remFiredPrefix: '⏰ Reminder:',
       memFactsTitle: '🧠 What I remember about you', memPlacesTitle: '🗺 Where we have been', memEmptyFacts: 'Nothing remembered yet.', memEmptyPlaces: 'No sites yet.', memForgetFacts: 'Forget all', memForgetPlaces: 'Clear journal',
       sklTitle: '🛠 My skills', sklEmpty: 'No skills yet — say “learn a skill: …” or I will suggest one after tasks.', sklLearned: 'Learned a skill', sklImproved: 'Improved the skill', sklNoSkill: 'No such skill — check the list in the AI panel.', sklHermesOnly: 'That skill runs on the Hermes brain, but GPT is connected now. Switch to Hermes in the AI-brain settings and I will do it.',
+      gdAiSafe: '🛡 Safe mode: AI is off — page text never leaves the browser. Change the mode in settings (⚙) to ask.',
+      gdAiAskHost: 'Send the text of this page ({host}) to the AI (Hermes/GPT) so I can answer? I will remember the permission for this site.',
+      gdAiYes: 'Send', gdAiNo: 'Cancel',
       connected: '🟢 Connected to Hermes', notConnected: '⚪ Hermes not set up',
       settingsBtn: '⚙ Hermes connection', qExplainPage: '📄 Explain page', qSummThread: '🧵 Summarize thread',
       quickTitle: 'Quick actions:',
@@ -480,6 +486,7 @@
         const lang = (tr() && tr().lang) || 'ru';
         const t = AL[lang] || AL.ru;
         if (!isConfigured()) { renderSetup(el); return; }
+        if (!(await aiGate(el))) return;   // СТРАЖ: безопасный режим / нет разрешения на отправку текста с этого сайта
         text = clipTxt(text);
         const think = pick((t.think[actionId]) || t.think.default);
         renderThinking(el, think);
@@ -538,6 +545,21 @@
         const i = s.indexOf('['), j = s.lastIndexOf(']'); if (i === -1 || j === -1 || j <= i) return null;
         try { const a = JSON.parse(s.slice(i, j + 1)); return Array.isArray(a) ? a : null; } catch (_) { return null; }
       }
+      // ---------- СТРАЖ (v0.9): текст страницы уходит в ИИ только с РАЗРЕШЕНИЯ; в безопасном режиме — никогда ----------
+      let aiHosts = {};   // {host: true} — сайты, для которых пользователь разрешил отправку текста в ИИ
+      try { storage.localGet({ yasiaAiHosts: {} }, (s) => { if (s && s.yasiaAiHosts && typeof s.yasiaAiHosts === 'object') aiHosts = s.yasiaAiHosts; }); } catch (_) {}
+      async function aiGate(el) {                             // true = можно слать; false = отказ (карточка уже показана)
+        const t = L();
+        if (Yasia.guard && !Yasia.guard.allows('ai')) { if (el) renderError(el, t.gdAiSafe); return false; }   // безопасный режим: ИИ выключен полностью
+        let host = ''; try { host = location.hostname.replace(/^www\./, ''); } catch (_) {}
+        if (!host || aiHosts[host]) return true;              // уже разрешал для этого сайта
+        if (!Yasia.guard) return true;                        // стража нет (старый билд) — поведение как раньше
+        const ok = await Yasia.guard.confirm({ text: (t.gdAiAskHost || '').replace('{host}', host), yes: t.gdAiYes, no: t.gdAiNo });
+        if (!ok) { if (el) renderError(el, t.gdAiNo); return false; }
+        aiHosts[host] = true; try { storage.localSet({ yasiaAiHosts: aiHosts }); } catch (_) {}   // запоминаем согласие на сайт
+        return true;
+      }
+
       // ---------- НАВЫКИ (skills.js): релевантный плейбук в промпт; создание — рефлексия в learnFrom или команда в роутере ----------
       const sklOn = () => { try { return !!(Yasia.skills && flags.enabled('skills')); } catch (_) { return false; } };
       function skillBlock(q, lang) {                          // лучший подходящий навык под запрос -> блок с плейбуком в system
@@ -554,6 +576,7 @@
       }
       let lastLearnT = 0, compacting = false;
       async function learnFrom(q, answer) {                   // фоном, ОДИН вызов-рефлексия (learning loop как у Hermes): факты о пользователе + «была ли переиспользуемая процедура?» -> навык
+        if (Yasia.guard && !Yasia.guard.allows('ai')) return;   // страж: в безопасном режиме ничего не уходит из браузера
         if (!memOn() && !sklOn()) return;
         const qq = String(q || '').trim(); if (qq.length < 8) return;
         const tnow = Date.now(); if (tnow - lastLearnT < 15000) return; lastLearnT = tnow;   // троттл: не чаще раза в 15с (бережём токены/латентность)
@@ -671,6 +694,7 @@
         const lang = (tr() && tr().lang) || 'ru';
         const t = AL[lang] || AL.ru;
         if (!isConfigured()) { renderSetup(el); return; }
+        if (!(await aiGate(el))) return;   // СТРАЖ: безопасный режим / нет разрешения на отправку текста с этого сайта
         const think = pick(t.think.default);
         renderThinking(el, think);
         if (pet) { try { pet.say(think, 2600); pet.emote('happy', 1400); } catch (_) {} }

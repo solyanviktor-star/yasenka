@@ -409,6 +409,23 @@
 .twtr-ledges-dbg i.on { border-top-color: rgba(255, 175, 40, 1); border-top-width: 4px; }
 .twtr-ledges-dbg i.floor { border-top-color: rgba(70, 150, 255, .85); }
 
+/* СТРАЖ (v0.9): карточка подтверждения опасного действия — единственный путь для них */
+.twtr-guard-card { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); z-index: 2147483200; pointer-events: auto;
+  background: #fff; border: 1.5px solid #e1e8ed; border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .22); padding: 12px 14px; max-width: 360px; }
+.twtr-guard-tx { font: 600 13px/1.45 system-ui, -apple-system, sans-serif; color: #0f1419; margin-bottom: 10px; }
+.twtr-guard-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.twtr-guard-btns button { border: none; border-radius: 10px; cursor: pointer; pointer-events: auto; font: 700 12px system-ui, -apple-system, sans-serif; padding: 8px 14px; }
+.twtr-guard-yes { background: #1d9bf0; color: #fff; }
+.twtr-guard-yes:hover { background: #1a8cd8; }
+.twtr-guard-no { background: #eaeef2; color: #536471; }
+.twtr-guard-no:hover { background: #dfe6ea; }
+
+/* режимы поведения (страж): ряд кнопок в настройках */
+.twtr-mode-row { display: flex; gap: 6px; margin-bottom: 10px; }
+.twtr-mode-btn { flex: 1; border: 1.5px solid #e1e8ed; border-radius: 10px; background: #f7f9fa; cursor: pointer; pointer-events: auto; font: 400 16px system-ui, sans-serif; padding: 6px 0; transition: background .12s, border-color .12s; }
+.twtr-mode-btn:hover { background: #eef3f6; }
+.twtr-mode-btn.on { background: #e8f5fe; border-color: #1d9bf0; }
+
 /* форма подключения (вкладки провайдеров + поля) */
 .twtr-ai-prov { display: flex; gap: 6px; margin-bottom: 10px; }
 .twtr-ai-prov-b { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; border: 1.5px solid #e1e8ed; border-radius: 10px; background: #f7f9fa; color: #536471; cursor: pointer; pointer-events: auto; font: 700 12px system-ui, -apple-system, sans-serif; padding: 8px; transition: background .12s, border-color .12s, color .12s; }

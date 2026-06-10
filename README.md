@@ -8,7 +8,17 @@ climbing up to watch videos with you. Feed her, pet her, play mini-games with he
 ask her things — and she remembers you.
 
 > **Safety first:** the extension performs **no automated actions** on any site.
-> Anything that touches page content happens only as a direct response to your click.
+> A central guard (`core/guard.js`) enforces the hard rules: no likes, follows,
+> comments or deletions without an explicit user confirmation (there is no such
+> automation in the code at all — any future code must go through the guard);
+> rapid downloads require confirmation; page text goes to the AI only after a
+> per-site permission prompt — and in Safe mode it never leaves the browser.
+
+### 🎚 Behavior modes
+Five modes (⚙ settings) gate her autonomous behavior — your clicks always work:
+**🎮 Game** (everything on) · **😌 Calm** (no pranks/chatter) · **💼 Work**
+(never distracts, doesn't run to videos) · **🤖 AI** (assistant first) ·
+**🛡 Safe** (AI off, site journal paused — nothing leaves the browser).
 
 ## What she can do
 

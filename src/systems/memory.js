@@ -40,6 +40,7 @@
       } catch (_) { loaded = true; }
 
       function noteVisit(url, title) {
+        try { if (Yasia.guard && !Yasia.guard.allows('journal')) return; } catch (_) {}   // страж: в безопасном режиме журнал сайтов на паузе
         if (!url) return;
         if (!loaded) { pendingVisit = { url, title }; return; }   // ждём загрузку хранилища, иначе перезапишем
         let host = ''; try { host = new URL(url).hostname.replace(/^www\./, ''); } catch (_) { return; }

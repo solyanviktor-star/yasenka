@@ -17,6 +17,8 @@
       hintYt: 'Качество = то, что загрузил плеер. Нужен 1080p — выставь его в плеере (⚙) и дай доиграться пару секунд, потом «Скачать».',
       lang: 'ru', ai: 'ИИ-мозг (Hermes / GPT)',
       lvl: 'Ур.', ttHide: 'Спрятать питомца', ttShow: 'Показать питомца',
+      setMode: 'Режим', mGame: 'Игровой', mCalm: 'Спокойный', mWork: 'Рабочий', mAi: 'ИИ-режим', mSafe: 'Безопасный',
+      gdYes: 'Разрешить', gdNo: 'Отмена', gdDlMany: 'Уже несколько скачиваний подряд. Скачать ещё один файл?',
       setTitle: 'Настройки питомца', setSize: 'Размер', setSpeed: 'Скорость', setInertia: 'Инерция', setRoam: 'Ходит и бегает', setTest: 'Проверить действие:',
       tbIdle: '🐾 Стоять', tbWave: '👋 Помахать', tbLeft: '← Идёт', tbRight: 'Идёт →', tbJump: '⬆ Прыжок', tbClimb: '⛰ Карабкаться', tbFall: '😱 Падение', tbRun: '🏃 Бег', tbFire: '🔥 Огонь', tbPopcorn: '🍿 Попкорн',
       say: {
@@ -63,6 +65,8 @@
       hintYt: 'Quality = what the player loaded. Want 1080p — set it in the player (⚙), let it play a couple seconds, then «Download».',
       lang: 'en', ai: 'AI brain (Hermes / GPT)',
       lvl: 'Lv.', ttHide: 'Hide the pet', ttShow: 'Show the pet',
+      setMode: 'Mode', mGame: 'Game', mCalm: 'Calm', mWork: 'Work', mAi: 'AI mode', mSafe: 'Safe',
+      gdYes: 'Allow', gdNo: 'Cancel', gdDlMany: 'Several downloads in a row already. Download one more file?',
       setTitle: 'Pet settings', setSize: 'Size', setSpeed: 'Speed', setInertia: 'Inertia', setRoam: 'Walks and runs', setTest: 'Test an action:',
       tbIdle: '🐾 Idle', tbWave: '👋 Wave', tbLeft: '← Walk', tbRight: 'Walk →', tbJump: '⬆ Jump', tbClimb: '⛰ Climb', tbFall: '😱 Fall', tbRun: '🏃 Run', tbFire: '🔥 Fire', tbPopcorn: '🍿 Popcorn',
       say: {
