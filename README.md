@@ -1,106 +1,89 @@
-# 🐾 Твиттер-Питомец
+# 🐾 Yasenka — Browser Pet with an AI Brain
 
-Маленький проказливый питомец, который живёт прямо на ленте X (Twitter): ходит,
-шалит и подбегает к постам, выпрашивая лайк. **Лайк ставится только когда ты сам
-кликаешь по питомцу** — никаких авто-действий, никакой накрутки.
+![Yasenka banner](assets/banner.png)
 
-![героев четыре: бесёнок, блоб, гоблин-кот, дракончик](art/concepts/4_imp.jpg)
+Yasia is a catgirl who lives on top of any web page: she treats the page itself as a
+platformer level — walking along headings, images and buttons, jumping between them,
+climbing up to watch videos with you. Feed her, pet her, play mini-games with her,
+ask her things — and she remembers you.
 
-## Что умеет
+> **Safety first:** the extension performs **no automated actions** on any site.
+> Anything that touches page content happens only as a direct response to your click.
 
-### ❤️ Лайк по клику (безопасно)
-1. Питомец гуляет по экрану поверх ленты.
-2. Замечает пост, который ты ещё не лайкнул, подбегает к кнопке ❤ и канючит (`❤?`).
-3. Кликаешь по питомцу — ставится **настоящий лайк**. Питомец радуется и убегает.
-4. Не хочешь — проскролль; через пару секунд он отстанет и больше не пристанет к этому посту.
+## What she can do
 
-Под капотом (после ревью селекторов X):
-- Цель привязана к **status ID поста** (Snowflake), а не к DOM-узлу → лайк уходит
-  именно на тот пост, у которого стоит питомец, даже при переиспользовании узлов виртуализацией.
-- Лайк **подтверждается** по факту мутации кнопки `like → unlike` — никакого ложного «❤!».
-- Блок лайка во время активного скролла, пауза при открытой модалке/композере и при наборе текста.
+### 🕹 Lives on the page like a platformer
+- DOM elements (posts, headings, images, buttons) become **ledges**: she walks them,
+  jumps gaps, drops down with gravity, climbs toward a playing video and sits to watch.
+- Drag her, throw her, scroll — she rides the elements and lands on her feet.
+- If the video is too high to reach, she asks you to lift her up.
 
-### 😈 Пакости (только визуальные, данные X не трогаем)
-- **Бьёт «стекло»** — на экране расползаются трещины, потом тают.
-- **Ворует букву** — выдёргивает букву из поста и носит её. Это **визуальная копия**:
-  реальный текст поста не меняется. Через пару секунд возвращает на место.
+### 🤖 AI brain (Hermes Agent or OpenAI GPT)
+- Connect a local [Hermes Agent](https://github.com/NousResearch/hermes-agent) server,
+  an OpenAI API key, or sign in with a ChatGPT subscription (device-code flow).
+- **Intent router:** type a request in her window — she figures out whether one of her
+  own tools fits (“download this video” → opens the downloader) or answers directly.
+- **Live tool status** (Hermes): while the agent searches the web or runs code,
+  Yasia narrates what is happening (“🔍 searching the web…”).
+- **Text-selection menu:** explain, translate, summarize, draft replies — on any site.
+- Page context (URL, title, visible text, optional screenshot) is attached so she
+  always knows where she is.
 
-Пакости случаются нечасто («умеренная злость») и не мешают читать/печатать.
+### 🧠 Memory — works with ANY provider
+- **User model:** durable facts and preferences extracted from your conversations
+  (a small follow-up LLM call), merged and deduplicated over time.
+- **Site journal:** she remembers which sites you visited together — ask
+  “remember that site about X?” and she finds it. No LLM involved, fully local.
+- Everything is stored in `chrome.storage.local`, viewable and erasable from her panel.
 
-## Герои
+### ⏰ Reminders
+- “Remind me in 10 minutes to check the build” — she pops up on the page and says it.
+- Powered by `chrome.alarms`; missed reminders are delivered when a page next opens.
 
-Четыре персонажа на выбор (переключаются в попапе расширения):
-**Бесёнок** (по умолчанию), **Блоб**, **Гоблин-кот**, **Дракончик**.
+### 📥 Video downloads
+- Downloads videos from X/Twitter, TikTok, Instagram and YouTube
+  (with watermark-free TikTok and experimental YouTube paths).
 
-Питомец живёт **на любом сайте** (если включён), но взаимодействовать с контентом
-(лайки, кража буквы) пока умеет только на X — другие сервисы добавим позже. На
-остальных сайтах он просто гуляет и иногда бьёт «стекло».
+### 🐱 Tamagotchi care, games and moods
+- Hunger, energy, mood, bond and XP; feed her, pet her, wake her up.
+- Mini-games: chase the cursor, catch food, zombie archer, hide & seek.
+- Two playable heroes with full frame animation (Yasia and Noema), manifest-driven.
 
-**Один питомец на все вкладки.** Переключаешься на другую вкладку — питомец
-«переходит» туда: появляется там же, где был, с короткой анимацией прихода
-(🐾). Позиция общая через `chrome.storage.local`. Видимая вкладка всегда одна,
-поэтому это ощущается как один зверёк, бегающий за тобой по вкладкам.
+## Install (developer mode)
 
-## Установка (режим разработчика)
+1. Clone the repo and open `chrome://extensions`.
+2. Enable **Developer mode** → **Load unpacked** → select the repo folder.
+3. Click the pet — her window opens. AI features are optional and live under the
+   🤖 panel (Hermes address/key, OpenAI key, or ChatGPT sign-in).
 
-1. Открой `chrome://extensions`.
-2. Включи **«Режим разработчика»** (правый верхний угол).
-3. **«Загрузить распакованное расширение»** → выбери эту папку.
-4. **Перезагрузи уже открытые вкладки** — расширение внедряется только при загрузке
-   страницы, в старые вкладки само не попадёт (частая причина «ничего не происходит»).
-5. На странице справа снизу появится кнопка **🐾** — нажми, чтобы показать/спрятать питомца.
-6. Иконка расширения на панели: вкл/выкл + выбор героя (синхронизировано с кнопкой 🐾).
+## Architecture
 
-> После любой правки кода: на `chrome://extensions` жми **↻** на карточке расширения,
-> **затем перезагрузи вкладку** сайта.
+```
+src/
+  core/        config, storage, events (pub/sub bus), flags (feature toggles),
+               registry (plugin system with crash isolation), heroes, physics,
+               i18n (RU/EN dictionary)
+  systems/     notes, games, memory, ai — independent plugins; a crashed system
+               disables its own flag, the pet keeps living
+  pet.js       the pet itself: platformer state machine, care, dialog window
+  background.js service worker: downloads, AI proxy (CORS), streaming port,
+               reminders, ChatGPT device-code auth
+```
 
-## Как поменять / добавить арт
+- Systems talk to each other **only** through the event bus and a narrow pet API.
+- All LLM traffic goes through the background service worker (no CORS issues,
+  localhost Hermes works from HTTPS pages).
+- Keys are stored locally (`chrome.storage.local`) and never synced.
 
-Персонажи лежат в `src/heroes/<имя>.png` (прозрачный фон). Чтобы сделать своих:
+## Development
 
 ```bash
-# 1) сгенерировать концепты (nano-banana-2). Правь промпты в файле под себя.
-python art/gen_concepts.py        # -> art/concepts/*.jpg
-
-# 2) убрать фон заливкой от краёв (нужен Pillow: pip install Pillow)
-python art/process_sprites.py     # -> art/sprites/*.png
-
-# 3) скопировать нужный спрайт в src/heroes/<имя>.png
-#    и при необходимости добавить <имя> в список HEROES в src/pet.js
-#    + кнопку в src/popup.html
+npm test    # unit tests (node:test, zero dependencies)
 ```
 
-## Структура
+Branches: `main` is stable, `dev` is active development; features land in `main`
+via PR after live testing.
 
-```
-manifest.json         — манифест расширения (MV3) + web_accessible_resources для спрайтов
-src/pet.js            — движок: поведение, движение, лайк по ID поста, пакости
-src/pet.css           — стили героя, анимации состояний, оверлеи пакостей
-src/popup.html/js     — вкл/выкл + выбор героя
-src/heroes/*.png      — спрайты персонажей (прозрачный фон)
-art/gen_concepts.py   — генерация концептов через nano-banana-2
-art/process_sprites.py— удаление фона + обрезка
-art/concepts/*.jpg    — исходные концепты
-art/sprites/*.png     — обработанные спрайты
-```
+## License
 
-## Дорожная карта
-
-Полная концепция (core loop, настроение/связь, v1, анти-Clippy, открытые вопросы) —
-в **[CONCEPT.md](CONCEPT.md)**. Кратко, ближайшее:
-
-- [ ] **Шкала дикости**: связать пакости с сытостью/настроением (голодный → чаще пакостит, глаженый → смирный).
-- [ ] **Поглаживание-приручение** (возишь курсором по зверю → мурлык, +связь).
-- [ ] **Drag-and-throw** — хватать и швырять зверя (лайк выключен во время drag).
-- [ ] Богатые idle-ритуалы (сон в углу, умывание, крадётся за курсором, прячется за аватаркой).
-- [ ] Лестница доверия (bond) + ежедневное приветствие/стрик; эволюция и скины.
-- [ ] Новые пакости: угон иконки, каляки на аватарках, подмена цифр статистики.
-- [ ] Настоящий спрайт-лист (walk / jump / hit / happy / sleep) вместо CSS-трансформов.
-- [ ] Twitter-нативные обёртки (тот же human-initiated паттерн): Crack→reply, угон автора→follow.
-- [ ] Перед публичным релизом (из ревью): дневной лимит лайков + онбординг-дисклеймер.
-
-## Принцип безопасности
-
-Реальные действия в X — **только** прямой ответ на твой клик по питомцу (один клик = один
-осознанный лайк, в человеческом темпе). Пакости — визуальный слой поверх страницы, они не
-меняют контент и не отправляют ничего в X. Поэтому «палиться» тут нечему: бота нет.
+No license yet — all rights reserved for now.
