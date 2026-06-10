@@ -18,7 +18,7 @@
       lang: 'ru', ai: 'ИИ-мозг (Hermes / GPT)',
       lvl: 'Ур.', ttHide: 'Спрятать питомца', ttShow: 'Показать питомца',
       setTitle: 'Настройки питомца', setSize: 'Размер', setSpeed: 'Скорость', setInertia: 'Инерция', setRoam: 'Ходит и бегает', setTest: 'Проверить действие:',
-      tbIdle: '🐾 Стоять', tbWave: '👋 Помахать', tbLeft: '← Идёт', tbRight: 'Идёт →', tbJump: '⬆ Прыжок', tbClimb: '⛰ Карабкаться', tbFall: '😱 Падение', tbRun: '🏃 Бег', tbFire: '🔥 Огонь', tbPopcorn: '🍿 Попкорн',
+      tbIdle: '🐾 Стоять', tbWave: '👋 Помахать', tbLeft: '← Идёт', tbRight: 'Идёт →', tbJump: '⬆ Прыжок', tbClimb: '⛰ Карабкаться', tbFall: '😱 Падение', tbRun: '🏃 Бег', tbFire: '🔥 Огонь', tbPopcorn: '🍿 Попкорн', tbLedges: '🧱 Полки',
       say: {
         idle: ['Привет! 🐾', 'Чем занят?', 'Мяу~', 'Погладь меня!', 'Я тут живу 😺', 'Скучно...'],
         jump: ['Опа!', 'Хоп!', 'Ня!', 'Прыг!', 'Лечу! ✨'],
@@ -64,7 +64,7 @@
       lang: 'en', ai: 'AI brain (Hermes / GPT)',
       lvl: 'Lv.', ttHide: 'Hide the pet', ttShow: 'Show the pet',
       setTitle: 'Pet settings', setSize: 'Size', setSpeed: 'Speed', setInertia: 'Inertia', setRoam: 'Walks and runs', setTest: 'Test an action:',
-      tbIdle: '🐾 Idle', tbWave: '👋 Wave', tbLeft: '← Walk', tbRight: 'Walk →', tbJump: '⬆ Jump', tbClimb: '⛰ Climb', tbFall: '😱 Fall', tbRun: '🏃 Run', tbFire: '🔥 Fire', tbPopcorn: '🍿 Popcorn',
+      tbIdle: '🐾 Idle', tbWave: '👋 Wave', tbLeft: '← Walk', tbRight: 'Walk →', tbJump: '⬆ Jump', tbClimb: '⛰ Climb', tbFall: '😱 Fall', tbRun: '🏃 Run', tbFire: '🔥 Fire', tbPopcorn: '🍿 Popcorn', tbLedges: '🧱 Ledges',
       say: {
         idle: ['Hi! 🐾', 'Whatcha doing?', 'Mew~', 'Pet me!', 'I live here 😺', 'Bored...'],
         jump: ['Whee!', 'Hop!', 'Nya!', 'Boing!', 'Flying! ✨'],

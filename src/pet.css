@@ -400,6 +400,13 @@
 .twtr-ai-mem-clr { float: right; border: none; background: none; color: #1d9bf0; cursor: pointer; pointer-events: auto; font: 700 10px system-ui, -apple-system, sans-serif; text-transform: none; letter-spacing: 0; }
 .twtr-ai-mem-clr:hover { text-decoration: underline; }
 
+/* дебаг-оверлей полок (🧱 в настройках): как Яся видит страницу. Цвета: оранж = стоит тут, зелёный = допрыгнет отсюда, красный = видит, но не допрыгнуть, синий = пол */
+.twtr-ledges-dbg { position: absolute; inset: 0; pointer-events: none; }
+.twtr-ledges-dbg i { position: absolute; height: 0; border-top: 3px solid rgba(255, 70, 70, .6); box-shadow: 0 1px 5px rgba(0, 0, 0, .45); }
+.twtr-ledges-dbg i.ok { border-top-color: rgba(40, 210, 95, .95); }
+.twtr-ledges-dbg i.on { border-top-color: rgba(255, 175, 40, 1); border-top-width: 4px; }
+.twtr-ledges-dbg i.floor { border-top-color: rgba(70, 150, 255, .85); }
+
 /* форма подключения (вкладки провайдеров + поля) */
 .twtr-ai-prov { display: flex; gap: 6px; margin-bottom: 10px; }
 .twtr-ai-prov-b { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; border: 1.5px solid #e1e8ed; border-radius: 10px; background: #f7f9fa; color: #536471; cursor: pointer; pointer-events: auto; font: 700 12px system-ui, -apple-system, sans-serif; padding: 8px; transition: background .12s, border-color .12s, color .12s; }

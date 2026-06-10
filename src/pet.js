@@ -121,6 +121,7 @@
         <span id="twtr-test-emos" style="display:contents"></span><!-- кнопки эмоций строятся из манифеста героя (renderTestEmos) -->
         <button class="twtr-test-btn" data-test="emo:fall" type="button">😱 Падение</button>
         <button class="twtr-test-btn" data-test="emo:run" type="button">🏃 Бег</button>
+        <button class="twtr-test-btn" data-test="ledges" type="button">🧱 Полки</button><!-- дебаг-оверлей: как Яся видит страницу (полки и достижимость) -->
       </div>
     </div>
     <div class="twtr-pet-dialog" id="twtr-dialog">
@@ -1411,7 +1412,7 @@
     setEl('.twtr-set-title', t.setTitle);
     setEl('#twtr-l-size', t.setSize); setEl('#twtr-l-speed', t.setSpeed); setEl('#twtr-l-inertia', t.setInertia); setEl('#twtr-l-roam', t.setRoam);
     setEl('.twtr-set-sub', t.setTest);
-    const map = { idle: t.tbIdle, wave: t.tbWave, left: t.tbLeft, right: t.tbRight, jump: t.tbJump, climb: t.tbClimb, 'emo:fall': t.tbFall, 'emo:run': t.tbRun };
+    const map = { idle: t.tbIdle, wave: t.tbWave, left: t.tbLeft, right: t.tbRight, jump: t.tbJump, climb: t.tbClimb, 'emo:fall': t.tbFall, 'emo:run': t.tbRun, ledges: t.tbLedges };
     root.querySelectorAll('.twtr-test-btn[data-test]').forEach((b) => { const k = b.getAttribute('data-test'); if (map[k]) b.textContent = map[k]; });
   }
   function renderDlgLang() {
@@ -1784,7 +1785,7 @@
     startJump(step, landC, t);                                              // прыжок к следующей полке маршрута (вверх/вбок/вниз)
   }
   function platformerTick(t, dt) {
-    if (t - lastLedgeScan > 140) { lastLedgeScan = t; ledges = engine.scan(); engine.reacquireFloor(); }   // снимок полок ведёт движок; ledges — та же ссылка (маршруты к видео/игре читают её)
+    if (t - lastLedgeScan > 140) { lastLedgeScan = t; ledges = engine.scan(); engine.reacquireFloor(); drawLedgeDebug(); }   // снимок полок ведёт движок; ledges — та же ссылка (маршруты к видео/игре читают её)
     if (standLedge && standLedge.el) {                 // едем вместе с прокруткой, пока стоим на элементе
       const r = standLedge.el.getBoundingClientRect();
       if (!r || r.width < 30 || r.top < 0 || r.top > window.innerHeight) standLedge = null;
@@ -1809,8 +1810,28 @@
     py = clamp(py, PET_H * Math.max(0, sizeMul * userScale - 1), window.innerHeight - PET_H);   // держим в пределах экрана
   }
 
+  // ---------- дебаг-оверлей полок: как Яся видит страницу (🧱 в настройках) ----------
+  let ledgeDebug = false, ledgeDebugBox = null;
+  function drawLedgeDebug() {
+    if (!ledgeDebug) return;
+    if (!ledgeDebugBox) { ledgeDebugBox = document.createElement('div'); ledgeDebugBox.className = 'twtr-ledges-dbg'; root.appendChild(ledgeDebugBox); }
+    const ls = engine.ledges(), cx = px + PET_W / 2;
+    const candSet = new Set();   // куда реально допрыгнет С ТЕКУЩЕЙ позиции (та же физика, что в tryClimb)
+    if (standLedge) for (const c of Yasia.physics.climbCandidates(ls, standLedge, cx, { W: PET_W, dx: PLAT_JUMP_DX, up: PLAT_JUMP_UP, minY: PET_H * Math.max(1, sizeMul * userScale), lastLeftEl: null })) candSet.add(c.L);
+    ledgeDebugBox.innerHTML = ls.map((L) => {
+      const cls = L === standLedge ? 'on' : (candSet.has(L) ? 'ok' : (L.floor ? 'floor' : 'no'));
+      return '<i class="' + cls + '" style="left:' + L.x1 + 'px;top:' + L.y + 'px;width:' + Math.max(0, L.x2 - L.x1) + 'px"></i>';
+    }).join('');
+  }
+  function setLedgeDebug(on) {
+    ledgeDebug = on;
+    if (!on) { if (ledgeDebugBox) { try { ledgeDebugBox.remove(); } catch (_) {} ledgeDebugBox = null; } return; }
+    engine.scan(); drawLedgeDebug();   // показать сразу, даже если гуляние выключено и тиков скана нет
+  }
+
   // ---------- ручная проверка действий (кнопки в настройках) ----------
   function startTest(kind) {
+    if (kind === 'ledges') { setLedgeDebug(!ledgeDebug); return; }   // тоггл оверлея, питомца не трогаем
     testDir = (kind === 'left') ? -1 : 1;
     if (kind.indexOf('emo:') === 0) {            // тест эмоции: проигрываем её кадры на месте
       const st = kind.slice(4); testKind = 'emo'; testEmo = st; testUntil = now() + 3400;
