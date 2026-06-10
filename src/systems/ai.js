@@ -45,6 +45,7 @@
       remindOk: 'Поняла, напомню! ⏰', remindBad: 'А когда напомнить? Скажи время — «через 10 минут», «завтра в 9».', remindFail: 'Хм, не вышло поставить напоминание.',
       remTitle: '⏰ Напоминания', remEmpty: 'Пока нет напоминаний.', remDel: 'Удалить', remFiredPrefix: '⏰ Напоминаю:',
       memFactsTitle: '🧠 Что я о тебе помню', memPlacesTitle: '🗺 Где мы были', memEmptyFacts: 'Пока ничего не запомнила.', memEmptyPlaces: 'Сайтов пока нет.', memForgetFacts: 'Забыть всё', memForgetPlaces: 'Очистить журнал',
+      sklTitle: '🛠 Мои навыки', sklEmpty: 'Навыков пока нет — скажи «выучи навык: …» или я сама предложу после задач.', sklLearned: 'Выучила навык', sklImproved: 'Докрутила навык', sklNoSkill: 'Не нашла такой навык — глянь список в панели ИИ.', sklHermesOnly: 'Этот навык исполняет мозг Hermes, а сейчас подключён GPT. Переключись на Hermes в настройках ИИ-мозга — и сделаю.',
       connected: '🟢 Подключено к Hermes', notConnected: '⚪ Hermes не настроен',
       settingsBtn: '⚙ Подключение к Hermes', qExplainPage: '📄 Объяснить страницу', qSummThread: '🧵 Сжать тред',
       quickTitle: 'Быстрые действия:',
@@ -81,6 +82,7 @@
       remindOk: 'Got it, I will remind you! ⏰', remindBad: 'When should I remind you? Give a time — “in 10 minutes”, “tomorrow at 9”.', remindFail: 'Hmm, could not set the reminder.',
       remTitle: '⏰ Reminders', remEmpty: 'No reminders yet.', remDel: 'Delete', remFiredPrefix: '⏰ Reminder:',
       memFactsTitle: '🧠 What I remember about you', memPlacesTitle: '🗺 Where we have been', memEmptyFacts: 'Nothing remembered yet.', memEmptyPlaces: 'No sites yet.', memForgetFacts: 'Forget all', memForgetPlaces: 'Clear journal',
+      sklTitle: '🛠 My skills', sklEmpty: 'No skills yet — say “learn a skill: …” or I will suggest one after tasks.', sklLearned: 'Learned a skill', sklImproved: 'Improved the skill', sklNoSkill: 'No such skill — check the list in the AI panel.', sklHermesOnly: 'That skill runs on the Hermes brain, but GPT is connected now. Switch to Hermes in the AI-brain settings and I will do it.',
       connected: '🟢 Connected to Hermes', notConnected: '⚪ Hermes not set up',
       settingsBtn: '⚙ Hermes connection', qExplainPage: '📄 Explain page', qSummThread: '🧵 Summarize thread',
       quickTitle: 'Quick actions:',
@@ -197,8 +199,11 @@
         if (sk && sk.ok && sk.data) {
           const arr = Array.isArray(sk.data) ? sk.data : (sk.data.skills || sk.data.data || []);
           hermesSkills = (arr || []).map((s) => (typeof s === 'string' ? { name: s, desc: '' } : { name: s.name || s.id || '', desc: s.description || s.desc || '' })).filter((s) => s.name).slice(0, 40);
+          if (hermesSkills.length) { knownHermesSkills = hermesSkills.map((s) => s.name); try { storage.localSet({ yasiaHermesSkills: knownHermesSkills }); } catch (_) {} }   // запоминаем: на GPT честно скажем «это умеет только Hermes»
         }
       }
+      let knownHermesSkills = [];                               // последний известный список навыков Hermes (живёт и когда подключён GPT)
+      try { storage.localGet({ yasiaHermesSkills: [] }, (s) => { if (Array.isArray(s && s.yasiaHermesSkills)) knownHermesSkills = s.yasiaHermesSkills; }); } catch (_) {}
       // иконка кнопки навыка «ИИ-мозг» = логотип активного провайдера (Hermes/GPT)
       function updateCapIcon() { try { const ic = root.querySelector('#twtr-cap-ai .twtr-cap-ic'); if (ic && LOGOS[cfg.provider]) ic.innerHTML = LOGOS[cfg.provider]; } catch (_) {} }
       // popup пишет тот же storage.local 'yasiaAI' -> подхватываем смену конфига вживую (без перезагрузки страницы)
@@ -318,6 +323,7 @@
               : '\n\nВарианты публикуются ОТ ИМЕНИ ПОЛЬЗОВАТЕЛЯ. Пиши под ЕГО голос, интересы и предпочтения (из твоей памяти о нём):\n- ') + prefs.join('\n- ');
           }
         }
+        system = applySkill(system, text || '', lang);   // есть подходящий выученный навык -> его плейбук в системный промпт
         return { system: system, user: user, variants: !!task.variants };
       }
       function parseVariants(s) {
@@ -532,21 +538,39 @@
         const i = s.indexOf('['), j = s.lastIndexOf(']'); if (i === -1 || j === -1 || j <= i) return null;
         try { const a = JSON.parse(s.slice(i, j + 1)); return Array.isArray(a) ? a : null; } catch (_) { return null; }
       }
+      // ---------- НАВЫКИ (skills.js): релевантный плейбук в промпт; создание — рефлексия в learnFrom или команда в роутере ----------
+      const sklOn = () => { try { return !!(Yasia.skills && flags.enabled('skills')); } catch (_) { return false; } };
+      function skillBlock(q, lang) {                          // лучший подходящий навык под запрос -> блок с плейбуком в system
+        if (!sklOn()) return { text: '', skill: null };
+        let m = []; try { m = Yasia.skills.find(q || '', 1); } catch (_) {}
+        if (!m.length) return { text: '', skill: null };
+        const s = m[0];
+        return { skill: s, text: '\n\n' + (lang === 'en' ? 'YOUR LEARNED SKILL «' + s.name + '» — follow this playbook:\n' : 'ТВОЙ ВЫУЧЕННЫЙ НАВЫК «' + s.name + '» — следуй этому плейбуку:\n') + s.playbook };
+      }
+      function applySkill(systemStr, q, lang) {               // подмешать плейбук + засчитать использование
+        const sb = skillBlock(q, lang);
+        if (sb.skill) try { Yasia.skills.used(sb.skill.id); } catch (_) {}
+        return systemStr + sb.text;
+      }
       let lastLearnT = 0, compacting = false;
-      async function learnFrom(q, answer) {                   // фоном: извлечь 0-3 долговечных факта о пользователе из обмена и запомнить
-        if (!memOn()) return;
+      async function learnFrom(q, answer) {                   // фоном, ОДИН вызов-рефлексия (learning loop как у Hermes): факты о пользователе + «была ли переиспользуемая процедура?» -> навык
+        if (!memOn() && !sklOn()) return;
         const qq = String(q || '').trim(); if (qq.length < 8) return;
         const tnow = Date.now(); if (tnow - lastLearnT < 15000) return; lastLearnT = tnow;   // троттл: не чаще раза в 15с (бережём токены/латентность)
         const lang = (tr() && tr().lang) || 'ru';
         const sys = (lang === 'en'
-          ? 'Extract 0-3 DURABLE facts/preferences about the USER worth remembering long-term (identity, interests, ongoing projects, how they like answers). Ignore one-off/transient details and anything about the assistant. Reply with STRICT JSON array of short strings (English), [] if nothing.'
-          : 'Извлеки 0-3 ДОЛГОВЕЧНЫХ факта/предпочтения о ПОЛЬЗОВАТЕЛЕ, которые стоит помнить долго (кто он, интересы, текущие проекты, как любит ответы). Игнорируй разовое/сиюминутное и всё про ассистента. Ответь СТРОГО JSON-массивом коротких строк (по-русски), [] если нечего.');
+          ? 'Post-task reflection. Reply with STRICT JSON only: {"facts": [...], "skill": null | {"name": "...", "when": "...", "playbook": "..."}}.\nfacts: 0-3 DURABLE facts/preferences about the USER worth remembering long-term (identity, interests, projects, how they like answers); ignore one-off details and anything about the assistant; [] if nothing.\nskill: ONLY if this exchange contains a clearly REUSABLE procedure/template the user will want again (post format, checklist, workflow) — short name, when = when to apply, playbook = concrete steps. A one-off question is NOT a skill -> null.'
+          : 'Рефлексия после задачи. Ответь СТРОГО одним JSON: {"facts": [...], "skill": null | {"name": "...", "when": "...", "playbook": "..."}}.\nfacts: 0-3 ДОЛГОВЕЧНЫХ факта/предпочтения о ПОЛЬЗОВАТЕЛЕ (кто он, интересы, проекты, как любит ответы); разовое и про ассистента — игнорируй; [] если нечего.\nskill: ТОЛЬКО если в обмене есть явно ПЕРЕИСПОЛЬЗУЕМАЯ процедура/шаблон, который пользователь захочет снова (формат поста, чек-лист, воркфлоу) — короткое имя, when = когда применять, playbook = конкретные шаги. Разовый вопрос — НЕ навык -> null.');
         const user = 'User: ' + clipTxt(qq).slice(0, 1200) + '\n\nYasya: ' + clipTxt(String(answer || '')).slice(0, 1200);
         let res; try { res = await chat([{ role: 'system', content: sys }, { role: 'user', content: user }]); } catch (_) { return; }
         if (!res || !res.ok) return;
-        const facts = parseJsonArray(res.content); if (!facts || !facts.length) return;
-        try { Yasia.memory.addFacts(facts.map((x) => String(x))); } catch (_) {}
-        compactMemory();
+        const obj = parseRoute(res.content);
+        const facts = (obj && Array.isArray(obj.facts)) ? obj.facts : parseJsonArray(res.content);   // фолбэк: модель ответила старым форматом-массивом
+        if (memOn() && facts && facts.length) { try { Yasia.memory.addFacts(facts.map((x) => String(x))); } catch (_) {} compactMemory(); }
+        if (sklOn() && obj && obj.skill && obj.skill.name) {   // САМА придумала навык из опыта -> сохраняем и говорим об этом
+          let it = null; try { it = Yasia.skills.add(obj.skill); } catch (_) {}
+          if (it && pet) try { pet.say('🛠 ' + (AL[lang] || AL.ru).sklLearned + ': «' + it.name + '»', 3200); } catch (_) {}
+        }
       }
       async function compactMemory() {                        // при переполнении профиля — слить/дедуп одним LLM-вызовом (как context_compressor Hermes, но для памяти)
         if (!memOn() || compacting) return;
@@ -562,12 +586,27 @@
           if (res && res.ok) { const merged = parseJsonArray(res.content); if (merged && merged.length) Yasia.memory.setProfileTexts(merged.map((x) => String(x)).slice(0, 40)); }
         } catch (_) {} finally { compacting = false; }
       }
-      function abilitiesBlock(lang) {                         // динамический список умений мозга (Hermes) -> модель знает, что можно отдать агенту (agent=true)
-        if (!hermesSkills.length) return '';
-        const head = lang === 'en'
-          ? '\nThrough your "brain" (Hermes agent) you can ALSO do these — set agent=true to use them (web search, code, etc.): '
-          : '\nЧерез свой «мозг» (агент Hermes) ты ТАКЖЕ умеешь это — ставь agent=true, чтобы задействовать (веб-поиск, код и т.п.): ';
-        return head + hermesSkills.map((s) => s.name).join(', ');
+      function abilitiesBlock(lang) {                         // умения мозга: на Hermes — «доступно, ставь agent=true»; на GPT — «знаю, но СЕЙЧАС недоступно, предложи переключиться»
+        if (cfg.provider === 'hermes' && hermesSkills.length) {
+          return (lang === 'en'
+            ? '\nThrough your "brain" (Hermes agent) you can ALSO do these — set agent=true to use them (web search, code, etc.): '
+            : '\nЧерез свой «мозг» (агент Hermes) ты ТАКЖЕ умеешь это — ставь agent=true, чтобы задействовать (веб-поиск, код и т.п.): ') + hermesSkills.map((s) => s.name).join(', ');
+        }
+        if (cfg.provider !== 'hermes' && knownHermesSkills.length) {
+          return (lang === 'en'
+            ? '\nYour Hermes brain has these skills, but GPT is connected NOW so they are UNAVAILABLE: '
+            : '\nУ твоего мозга Hermes есть эти навыки, но СЕЙЧАС подключён GPT и они НЕДОСТУПНЫ: ') + knownHermesSkills.join(', ') +
+            (lang === 'en'
+              ? '. If the request needs one of them -> tool=null and in answer say honestly it needs the Hermes brain (switch in the AI-brain settings).'
+              : '. Если запрос требует один из них -> tool=null и в answer честно скажи, что нужен мозг Hermes (переключить в настройках ИИ-мозга).');
+        }
+        return '';
+      }
+      function learnedSkillsLine(lang) {                      // выученные плейбук-навыки самой Яси (для роутера: знает, что у неё есть)
+        if (!sklOn()) return '';
+        let ls = []; try { ls = Yasia.skills.list().slice(-10); } catch (_) {}
+        if (!ls.length) return '';
+        return (lang === 'en' ? '\nYour LEARNED playbook skills: ' : '\nТвои ВЫУЧЕННЫЕ плейбук-навыки: ') + ls.map((s) => s.name + (s.when ? ' (' + s.when + ')' : '')).join('; ');
       }
       function statusLine(m, lang) {                          // событие выполнения инструмента -> милый статус Яси
         const s = (String(m.tool || '') + ' ' + String(m.label || '')).toLowerCase();
@@ -601,13 +640,31 @@
         const user = (lang === 'en' ? 'Current page:\n' : 'Текущая страница:\n') + pageCtx() + '\n\n---\n' + (lang === 'en' ? 'Request: ' : 'Запрос: ') + q;
         let acc = '';
         const s = ensureStreamEl(el); if (s.line) s.line.textContent = pick(t.think.find) || pick(t.think.default);
-        const ctrl = chatStream([{ role: 'system', content: withMemory(sys, q, lang) }, { role: 'user', content: user }], {
+        const ctrl = chatStream([{ role: 'system', content: applySkill(withMemory(sys, q, lang), q, lang) }, { role: 'user', content: user }], {
           onProgress: (m) => { const ss = ensureStreamEl(el); if (ss.line) ss.line.textContent = statusLine(m, lang); if (pet) try { pet.say(statusLine(m, lang), 2400); } catch (_) {} },
           onDelta: (txt) => { acc += txt; const ss = ensureStreamEl(el); if (ss.text) ss.text.textContent = acc; },
           onDone: (content) => { const fin = String(content || acc).trim(); if (fin) { renderResult(el, fin, null); learnFrom(q, fin); } else renderError(el, t.errNoServer); if (pet) try { pet.happy(900); } catch (_) {} },
           onError: () => { perform('ask', q, el); },   // стрим не задался -> честный фолбэк на обычный (нестримовый) ответ
         });
         if (!ctrl) await perform('ask', q, el);        // порт не открылся -> обычный ответ
+      }
+      async function improveSkill(imp, el, lang) {            // ДОКРУТКА навыка (само-улучшение, как у Hermes): текущий плейбук + правка -> переписанный плейбук (ver++)
+        const t = AL[lang] || AL.ru;
+        let s = null; try { s = Yasia.skills.byName(String((imp && imp.name) || '')); } catch (_) {}
+        if (!s) { renderResult(el, t.sklNoSkill, null); return; }
+        renderThinking(el, pick(t.think.default));
+        const sys = lang === 'en'
+          ? 'Rewrite the skill playbook applying the requested change. Keep it concrete and short. Reply with STRICT JSON only: {"playbook": "..."}'
+          : 'Перепиши плейбук навыка с учётом правки. Конкретно и коротко. Ответь СТРОГО одним JSON: {"playbook": "..."}';
+        const user = (lang === 'en' ? 'Skill «' : 'Навык «') + s.name + '»\n' + (lang === 'en' ? 'Current playbook:\n' : 'Текущий плейбук:\n') + s.playbook + '\n\n' + (lang === 'en' ? 'Change request: ' : 'Правка: ') + String((imp && imp.note) || '');
+        const res = await chat([{ role: 'system', content: sys }, { role: 'user', content: user }]);
+        if (!res || !res.ok) { renderError(el, friendlyErr(res, t)); return; }
+        const obj = parseRoute(res.content);
+        const pb = obj && String(obj.playbook || '').trim();
+        if (!pb) { renderError(el, t.errNoServer); return; }
+        try { Yasia.skills.add({ name: s.name, when: s.when, playbook: pb }); } catch (_) {}   // одноимённый add = обновление (ver++)
+        if (pet) try { pet.say('🛠 ' + t.sklImproved + ': «' + s.name + '»', 2600); pet.happy(800); } catch (_) {}
+        renderResult(el, t.sklImproved + ': «' + s.name + '»\n\n' + pb, null);
       }
       async function routeAsk(q, el) {
         if (!el) return;
@@ -622,11 +679,18 @@
         const sys = sysPersona(lang) + '\n\n' +
           (lang === 'en' ? 'You are ALSO an intent router for your OWN built-in tools. Your tools:\n' : 'Ты ТАКЖЕ маршрутизатор к СВОИМ встроенным инструментам. Твои инструменты:\n') +
           toolList(lang) +
-          (lang === 'en' ? '\n- remind: set a reminder; fill "remind" with the text and EITHER inMinutes (number) OR atISO (ISO 8601). Available always.' : '\n- remind: поставить напоминание; заполни "remind" текстом и ЛИБО inMinutes (число), ЛИБО atISO (ISO 8601). Доступно всегда.') +
+          (lang === 'en'
+            ? '\n- remind: set a reminder; fill "remind" with the text and EITHER inMinutes (number) OR atISO (ISO 8601). Available always.'
+              + '\n- learn_skill: the user TEACHES you a skill («learn a skill: …») — fill "skill" {name, when, playbook}.'
+              + '\n- improve_skill: the user asks to refine an existing skill («improve skill X: …») — fill "improve" {name, note}.'
+            : '\n- remind: поставить напоминание; заполни "remind" текстом и ЛИБО inMinutes (число), ЛИБО atISO (ISO 8601). Доступно всегда.'
+              + '\n- learn_skill: пользователь УЧИТ тебя навыку («выучи навык: …») — заполни "skill" {name, when, playbook}.'
+              + '\n- improve_skill: пользователь просит докрутить существующий навык («улучши/докрути навык X: …») — заполни "improve" {name, note}.') +
+          learnedSkillsLine(lang) +
           abilitiesBlock(lang) + '\n\n' +
           (lang === 'en'
-            ? 'Reply with STRICT JSON only (no markdown, no extra text):\n{"tool": "<id or null>", "say": "<short in-character line>", "answer": "<plain answer if no tool, else null>", "agent": <true|false>, "remind": {"text":"...","inMinutes":<n|null>,"atISO":"<iso|null>"}}\nUse a tool only if available and clearly matching. [DISABLED] tool -> tool=null and explain in answer.' + agentHint
-            : 'Ответь СТРОГО одним JSON (без markdown и лишнего текста):\n{"tool": "<id или null>", "say": "<короткая реплика в образе>", "answer": "<обычный ответ, если инструмента нет, иначе null>", "agent": <true|false>, "remind": {"text":"...","inMinutes":<n|null>,"atISO":"<iso|null>"}}\nИспользуй инструмент только если он доступен и явно подходит. [ВЫКЛЮЧЕН] -> tool=null и объясни в answer.' + agentHint);
+            ? 'Reply with STRICT JSON only (no markdown, no extra text):\n{"tool": "<id or null>", "say": "<short in-character line>", "answer": "<plain answer if no tool, else null>", "agent": <true|false>, "remind": {"text":"...","inMinutes":<n|null>,"atISO":"<iso|null>"}, "skill": <null|{"name":"...","when":"...","playbook":"..."}>, "improve": <null|{"name":"...","note":"..."}>}\nUse a tool only if available and clearly matching. [DISABLED] tool -> tool=null and explain in answer.' + agentHint
+            : 'Ответь СТРОГО одним JSON (без markdown и лишнего текста):\n{"tool": "<id или null>", "say": "<короткая реплика в образе>", "answer": "<обычный ответ, если инструмента нет, иначе null>", "agent": <true|false>, "remind": {"text":"...","inMinutes":<n|null>,"atISO":"<iso|null>"}, "skill": <null|{"name":"...","when":"...","playbook":"..."}>, "improve": <null|{"name":"...","note":"..."}>}\nИспользуй инструмент только если он доступен и явно подходит. [ВЫКЛЮЧЕН] -> tool=null и объясни в answer.' + agentHint);
         const user = (lang === 'en' ? 'Now: ' : 'Сейчас: ') + nowISO + '\n' + (lang === 'en' ? 'Page: ' : 'Страница: ') + pageHint() + '\n\n' + (lang === 'en' ? 'Request: ' : 'Запрос: ') + clipTxt(q);
         const res = await chat([{ role: 'system', content: withMemory(sys, q, lang) }, { role: 'user', content: user }]);
         if (!res || !res.ok) { renderError(el, friendlyErr(res, t)); if (pet) try { pet.emote('sad', 1400); } catch (_) {} return; }
@@ -639,6 +703,17 @@
           const line = (String(parsed.say || '').trim()) || (ok ? t.remindOk : t.remindFail);
           if (pet && ok) try { pet.say(line, 2600); pet.happy(800); } catch (_) {}
           renderResult(el, line + (ok ? '\n' + fmtWhen(fireAt, lang) : ''), null);
+          return;
+        }
+        if (parsed && parsed.tool === 'learn_skill' && sklOn()) {              // пользователь УЧИТ навыку -> сохраняем плейбук
+          let it = null; try { it = Yasia.skills.add(parsed.skill || {}); } catch (_) {}
+          const line = it ? (t.sklLearned + ': «' + it.name + '» 🛠') : t.errNoServer;
+          if (it && pet) try { pet.say('🛠 ' + t.sklLearned + ': «' + it.name + '»', 2800); pet.happy(900); } catch (_) {}
+          renderResult(el, it ? line + (it.when ? '\n' + it.when : '') : t.errNoServer, null);
+          return;
+        }
+        if (parsed && parsed.tool === 'improve_skill' && sklOn()) {            // докрутка существующего навыка: второй вызов переписывает плейбук
+          await improveSkill(parsed.improve || {}, el, lang);
           return;
         }
         if (parsed && parsed.tool && TOOLS[parsed.tool] && flags.enabled(TOOLS[parsed.tool].flag)) {   // нашёлся ДОСТУПНЫЙ инструмент -> открываем его в окне Яси
@@ -773,6 +848,17 @@
         box2.querySelectorAll('.twtr-ai-mem-delf').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); try { Yasia.memory.removeFact(b.getAttribute('data-fid')); } catch (_) {} fillMemory(box2); }));
         box2.querySelectorAll('.twtr-ai-mem-clr').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); try { if (b.getAttribute('data-clr') === 'facts') Yasia.memory.clearProfile(); else Yasia.memory.clearPlaces(); } catch (_) {} fillMemory(box2); }));
       }
+      function fillSkills(box2) {   // выученные навыки: имя + когда применять + версия, с удалением
+        if (!box2) return; const t = L();
+        if (!sklOn()) { box2.innerHTML = ''; return; }
+        let ls = []; try { ls = Yasia.skills.list().slice().reverse(); } catch (_) {}
+        const items = ls.length
+          ? ls.map((s) => '<div class="twtr-ai-rem-i"><span class="twtr-ai-rem-tx" data-sid="' + esc(s.id) + '"></span><span class="twtr-ai-rem-when">v' + (s.ver || 1) + (s.uses ? ' ×' + s.uses : '') + '</span><button class="twtr-ai-rem-del" data-sid="' + esc(s.id) + '" type="button">✕</button></div>').join('')
+          : '<div class="twtr-dlg-empty">' + t.sklEmpty + '</div>';
+        box2.innerHTML = '<div class="twtr-ai-rem-h">' + t.sklTitle + '</div>' + items;
+        box2.querySelectorAll('.twtr-ai-rem-tx[data-sid]').forEach((el2) => { const s = ls.find((x) => x.id === el2.getAttribute('data-sid')); if (s) el2.textContent = s.name + (s.when ? ' — ' + s.when : ''); });
+        box2.querySelectorAll('.twtr-ai-rem-del[data-sid]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); try { Yasia.skills.remove(b.getAttribute('data-sid')); } catch (_) {} fillSkills(box2); }));
+      }
       function renderPanel(box) {
         updateCapIcon();
         if (!box) return; const t = L();
@@ -786,10 +872,12 @@
             '<button class="twtr-ai-q" data-q="summarizeThread" type="button">' + t.qSummThread + '</button>' +
           '</div>' +
           '<div class="twtr-ai-rem"></div>' +
+          '<div class="twtr-ai-skl" style="margin-bottom:10px"></div>' +
           '<div class="twtr-ai-mem"></div>' +
           '<button class="twtr-ai-cfg-toggle" type="button">' + t.settingsBtn + '</button>' +
           '<div class="twtr-ai-cfg" hidden></div>';
         fillReminders(box.querySelector('.twtr-ai-rem'));
+        fillSkills(box.querySelector('.twtr-ai-skl'));
         fillMemory(box.querySelector('.twtr-ai-mem'));
         const out = root.querySelector('#twtr-dlg-ai');
         box.querySelectorAll('.twtr-ai-q').forEach((b) => b.addEventListener('click', (e) => {
