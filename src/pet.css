@@ -400,10 +400,12 @@
 .twtr-ai-mem-clr { float: right; border: none; background: none; color: #1d9bf0; cursor: pointer; pointer-events: auto; font: 700 10px system-ui, -apple-system, sans-serif; text-transform: none; letter-spacing: 0; }
 .twtr-ai-mem-clr:hover { text-decoration: underline; }
 
-/* дебаг-оверлей полок (🧱 в настройках): как Яся видит страницу. Цвета: оранж = стоит тут, зелёный = допрыгнет отсюда, красный = видит, но не допрыгнуть, синий = пол */
+/* дебаг-оверлей полок (режим разработчика, тумблер в попапе): как Яся видит страницу.
+   оранж = стоит тут, зелёный = допрыгнет отсюда, ЖЁЛТЫЙ = допрыгнет с края полки (так строит маршрут планировщик), красный = видит, но не достать, синий = пол */
 .twtr-ledges-dbg { position: absolute; inset: 0; pointer-events: none; }
 .twtr-ledges-dbg i { position: absolute; height: 0; border-top: 3px solid rgba(255, 70, 70, .6); box-shadow: 0 1px 5px rgba(0, 0, 0, .45); }
 .twtr-ledges-dbg i.ok { border-top-color: rgba(40, 210, 95, .95); }
+.twtr-ledges-dbg i.plan { border-top-color: rgba(255, 215, 50, .9); }
 .twtr-ledges-dbg i.on { border-top-color: rgba(255, 175, 40, 1); border-top-width: 4px; }
 .twtr-ledges-dbg i.floor { border-top-color: rgba(70, 150, 255, .85); }
 

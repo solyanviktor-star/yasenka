@@ -44,6 +44,10 @@
     .ai-toggle:hover { background: #dfe6ea; }
     .ai-cfg { margin-top: 10px; }
     .ai-cfg[hidden] { display: none; }
+    .dev { margin-top: 10px; border: 1.5px solid #e1e8ed; border-radius: 12px; padding: 8px 12px; }
+    .dev summary { cursor: pointer; font: 700 12px system-ui, -apple-system, sans-serif; color: #536471; list-style-position: inside; }
+    .dev .row { margin-top: 6px; }
+    .dev .hint { margin-top: 4px; }
     .ai-prov { display: flex; gap: 6px; margin-bottom: 9px; }
     .ai-prov-b { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1.5px solid #e1e8ed; border-radius: 10px; background: #fff; color: #536471; cursor: pointer; font: 700 12px system-ui; padding: 7px 6px; }
     .ai-prov-b .ai-logo { width: 18px; height: 18px; }
@@ -153,6 +157,16 @@
   </div>
 
   <button class="feed" id="feed"><img src="items/meat.png" alt=""><span id="t-feed">Feed meat</span></button>
+
+  <!-- режим разработчика: служебные тумблеры (не способности питомца) -->
+  <details class="dev">
+    <summary id="t-dev">🛠 Developer</summary>
+    <label class="row">
+      <span id="t-devledges">Ledge overlay</span>
+      <input type="checkbox" id="devLedges">
+    </label>
+    <p class="hint" id="t-devledges-hint"></p>
+  </details>
 
   <p class="hint" id="t-hint"></p>
 
