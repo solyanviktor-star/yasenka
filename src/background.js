@@ -2,9 +2,10 @@
 // во ВСЕ уже открытые вкладки (новые загрузки страниц подхватываются content_scripts
 // автоматически). Так «один питомец на все вкладки» работает без ручной перезагрузки.
 
-const CSS = ['src/pet.css'];
-// ВАЖНО: порядок 1:1 с manifest.json content_scripts[0].js (ре-инъекция при onInstalled — иначе на обновлении pet.js упадёт без систем/ядра)
-const JS = ['src/core/config.js', 'src/core/storage.js', 'src/core/events.js', 'src/core/flags.js', 'src/core/registry.js', 'src/core/heroes.js', 'src/systems/notes.js', 'src/systems/games.js', 'src/systems/memory.js', 'src/systems/ai.js', 'src/pet.js'];
+// списки берём ИЗ МАНИФЕСТА (content_scripts[0] — универсальный набор) -> единственный источник правды, не разъезжается с manifest.json
+const MF_CS = (chrome.runtime.getManifest().content_scripts || [])[0] || {};
+const CSS = MF_CS.css || ['src/pet.css'];
+const JS = MF_CS.js || ['src/core/config.js', 'src/pet.js'];   // фолбэк на минимум, если манифест внезапно без content_scripts
 
 function removeOld() {
   const r = document.getElementById('twtr-pet-root');
