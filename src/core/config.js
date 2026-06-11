@@ -9,7 +9,6 @@
     // popup строит пикер из этого списка, pet.js берёт его как список framed-героев — без правки логики.
     HEROES: [
       { id: 'catgirl', name: 'Yasya' },
-      { id: 'noema', name: 'Noema', cssClass: 'is-noema' },
     ],
 
     // движение

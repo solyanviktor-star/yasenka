@@ -57,7 +57,8 @@ Five modes (⚙ settings) gate her autonomous behavior — your clicks always wo
 ### 🐱 Tamagotchi care, games and moods
 - Hunger, energy, mood, bond and XP; feed her, pet her, wake her up.
 - Mini-games: chase the cursor, catch food, zombie archer, hide & seek.
-- Two playable heroes with full frame animation (Yasya and Noema), manifest-driven.
+- Full frame animation, manifest-driven: a new hero or emotion is data
+  (a sprite folder + `manifest.json`), no logic changes.
 
 ## Install (developer mode)
 
