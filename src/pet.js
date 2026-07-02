@@ -528,10 +528,14 @@
     if (Math.random() >= (IDLE_EMOTE.chance || 0.2)) return;       // 80% -> дальше ходит/прыгает по странице
     if (HERO_BEHAVIORS.length && Yasia.behavior && Yasia.behavior.pickBehavior) {
       const st = { hunger: currentHunger(), mood: currentMood(), energy: currentEnergy(), bond: currentBond(), wild: currentWildness() };
-      const cands = HERO_BEHAVIORS.filter((b) => !animOff[b.anim || b.id]);   // тумблеры анимаций (попап) гасят поведение целиком
+      // «сидит на краю» физически возможна ТОЛЬКО когда Яся реально стоит у края блока-полки (не в воздухе, не посреди полки)
+      const onEdge = !!standLedge && !falling && !jumping && (px <= standLedge.x1 + 10 || px + PET_W >= standLedge.x2 - 10);
+      let cands = HERO_BEHAVIORS.filter((b) => !animOff[b.anim || b.id]);   // тумблеры анимаций (попап) гасят поведение целиком
+      if (!onEdge) cands = cands.filter((b) => (b.anim || b.id) !== 'sit_edge');   // не на краю -> «сидеть на краю» недоступна
       const b = Yasia.behavior.pickBehavior(cands, st, recentBeh, t, Math.random, { wild: st.wild, bondFriend: BOND_FRIEND });
       if (b) {
         recentBeh[b.id] = t;
+        if ((b.anim || b.id) === 'sit_edge') face = (px <= standLedge.x1 + 10) ? -1 : 1;   // ноги свисают ЗА край: у левого края смотрит влево, у правого — вправо
         playEmote(b.anim || b.id, (b.dur || 2.4) * 1000);
         if (b.sayPool && Math.random() < 0.6) { const line = pick(SP(b.sayPool)); if (line) say(line, 2000); }   // подпись — не каждый раз (не заспамить)
         return;
@@ -601,8 +605,15 @@
     if (sickAt) { say(tr().sSickCant, 1900); return; }             // болеет — сначала полечи
     if (currentEnergy() < 12) { addMoodBias(-3); saveCare(); say(tr().sPlayTired, 1800); return; }
     applyAct(ACT_PLAY); saveCare();
-    playEmote(CAT_SETS.pounce ? 'pounce' : 'like_proud', 2600);   // игровой наскок, если спрайт есть (данные из манифеста)
+    if (CAT_SETS.pounce) startPounce(); else playEmote('like_proud', 2600);   // наскок = рывок вперёд (движение), не поза на месте
     say(tr().sPlayYay, 1800);
+  }
+  // наскок в движении: короткий рывок вперёд прыжками (кадры pounce), в сторону курсора; держится в пределах текущей полки/экрана
+  function startPounce() {
+    testKind = 'pounce'; testEmo = null; testUntil = now() + 1600;
+    face = (mouseX || window.innerWidth / 2) > px + PET_W / 2 ? 1 : -1; testDir = face;
+    climbing = false; jumping = false; falling = false; thrown = false; vx = 0; vy = 0;
+    setMode('idle');
   }
   function doHeal() {   // 💊 лечение: тамагочи-петля «заболела -> полечи -> сближение»
     if (!sickAt) { say(tr().sHealNot, 1600); return; }
@@ -789,6 +800,41 @@
     if (!(watching && watchAnim() && watchArrived) || document.hidden || dialog.classList.contains('show')) return;   // только когда уже села под видео
     if (t - lastPopcornT > POPCORN_EVERY) { lastPopcornT = t; spawnKernel(); }
   }
+  // сердечко: всплывает вверх-вбок над Ясей и тает (механика попкорна, но летит вверх). Спавнится потоком, пока играет ласка/гордость.
+  function spawnHeart() {
+    const h = document.createElement('div'); h.className = 'twtr-pet-heart'; h.textContent = '❤';
+    const s = sizeMul * userScale;
+    const headTop = py + PET_H - PET_H * s;                        // визуальная макушка (спрайт растёт вверх от низа бокса на масштаб)
+    const sx = clamp(px + PET_W / 2 - 10 + (Math.random() * 26 - 13), 0, window.innerWidth - 20);
+    const sy = clamp(headTop - 6, 0, window.innerHeight - 20);
+    h.style.left = sx + 'px'; h.style.top = sy + 'px'; h.style.opacity = '1';
+    h.style.fontSize = (15 + Math.random() * 9).toFixed(0) + 'px';
+    root.appendChild(h);
+    const dx = (Math.random() * 2 - 1) * 46, rise = 46 + Math.random() * 40, rot = Math.round(Math.random() * 40 - 20);
+    requestAnimationFrame(() => { h.style.transform = `translate(${dx.toFixed(0)}px, ${-rise.toFixed(0)}px) rotate(${rot}deg)`; h.style.opacity = '0'; });
+    setTimeout(() => h.remove(), 950);
+  }
+  let lastHeartT = 0;
+  function heartTick(t) {   // поток сердечек, пока активна эмоция ласки/гордости (мур/like_proud) — данные, а не таймер: привязан к проигрываемой эмоции
+    if (document.hidden || dragging || paused) return;
+    const emo = (testKind === 'emo' && t < testUntil) ? testEmo : null;
+    if (emo !== 'pet_purr' && emo !== 'like_proud') return;
+    if (t - lastHeartT > 380) { lastHeartT = t; spawnHeart(); }
+  }
+  // обглоданная кость: в конце еды Яся выбрасывает её НАЗАД (против взгляда); падает на пол и лежит как попкорн, пока не растает
+  function throwBone() {
+    const b = document.createElement('div'); b.className = 'twtr-pet-bone'; b.textContent = '🦴';
+    const startX = px + PET_W / 2 - 11, startY = py + PET_H * 0.4;
+    b.style.left = startX + 'px'; b.style.top = startY + 'px';
+    root.appendChild(b);
+    const back = -face;                                            // назад = против направления взгляда
+    const floorY = window.innerHeight - PLAT_FLOOR - 18;           // ложится на пол страницы
+    const dx = back * (60 + Math.random() * 70), spin = Math.round(Math.random() * 500 - 250);
+    requestAnimationFrame(() => { b.style.transform = `translate(${Math.round(dx * 0.5)}px, -${40 + Math.round(Math.random() * 24)}px) rotate(${Math.round(spin / 2)}deg)`; });   // подлёт назад-вверх
+    setTimeout(() => { b.style.transition = 'transform .5s cubic-bezier(.6,0,.9,.4)'; b.style.transform = `translate(${Math.round(dx)}px, ${Math.round(floorY - startY)}px) rotate(${spin}deg)`; }, 320);   // падение на пол
+    setTimeout(() => { b.style.transition = 'opacity .7s ease'; b.style.opacity = '0'; }, 5200);   // полежала подольше попкорна (кости накапливаются) -> тает
+    setTimeout(() => b.remove(), 6000);
+  }
   // фразы (англ.): просит подсадить наверх, когда видео в ленте и до него не допрыгнуть
   const HELP_CALLS = ['Help me up!', 'Lift me up there!', 'Boost me up!', "I can't reach… help?", 'Pull me up to watch!', 'Gimme a lift!'];
   // фразы (англ.): злится, когда её утащили от фильма
@@ -860,8 +906,9 @@
     root.appendChild(meat);
     requestAnimationFrame(() => { meat.style.transform = `translate(${(px + PET_W / 2 - 18) - startX}px, ${(py + 8) - startY}px) scale(1)`; });
     if (CAT_SETS.eat) {   // полноценная анимация еды из манифеста: мясо прилетело -> ест ножку кадрами (грызёт, облизывается)
-      setTimeout(() => { meat.remove(); playEmote('eat', 1900); bubble.textContent = '😋'; bubble.classList.add('show'); }, 520);
-      setTimeout(() => { bubble.classList.remove('show'); busy = false; setMode('wander'); }, 2450);
+      setTimeout(() => { meat.remove(); playEmote('eat', 2000); bubble.textContent = '😋'; bubble.classList.add('show'); }, 520);
+      setTimeout(throwBone, 2000);   // доела -> выбрасывает обглоданную кость назад (падает на пол, лежит как попкорн)
+      setTimeout(() => { bubble.classList.remove('show'); busy = false; setMode('wander'); }, 2550);
       return;
     }
     setTimeout(() => { setMode('happy'); happyUntil = now() + 900; bubble.textContent = '😋'; pet.classList.add('is-chomp'); }, 520);
@@ -1964,6 +2011,14 @@
       platformerTick(t, dt);
       return;
     }
+    if (testKind === 'pounce') {                    // наскок вперёд: рывок по горизонтали в пределах текущей полки (или экрана), разворот у края
+      const sp = SPEED * userSpeed * RUN_MUL;
+      const lo = standLedge ? standLedge.x1 : 0, hi = (standLedge ? standLedge.x2 : window.innerWidth) - PET_W;
+      px += testDir * sp;
+      if (px <= lo) { px = lo; testDir = 1; } else if (px >= hi) { px = hi; testDir = -1; }
+      face = testDir;
+      return;
+    }
     if (testKind === 'left' || testKind === 'right') {
       face = testDir; px = clamp(px + testDir * SPEED * userSpeed * 1.3, 0, window.innerWidth - PET_W);
     } else if (testKind === 'climb') {
@@ -2084,6 +2139,7 @@
     if (!paused) {
       careTick(t, dt);    // статы: затухание/восстановление, амбиент, авто-сохранение, реплики по состоянию
       popcornTick(t);     // пока играет видео — поток зёрнышек попкорна (вылетают, падают, лежат ~2с, тают)
+      heartTick(t);       // пока играет ласка/гордость — поток сердечек (всплывают, тают)
     }
 
     // голодный — иногда просит мяса
@@ -2117,6 +2173,7 @@
       const mv = pet.classList.contains('is-moving');
       let setName, ms;
       if (downloading) { const hasFire = !!CAT_SETS.fire; setName = hasFire ? 'fire' : 'angry'; ms = hasFire ? CAT_FIRE_MS : emoMs('angry'); }   // качается видео -> огненная форма у героя с fire в манифесте, иначе злость
+      else if (testKind === 'pounce' && t < testUntil) { setName = 'pounce'; ms = emoMs('pounce') / userSpeed; }   // наскок в движении: кадры pounce, пока летит рывок вперёд
       else if (testKind === 'emo' && t < testUntil) { setName = testEmo; ms = emoMs(testEmo) / userSpeed; }   // тест/действие эмоции (скорость — общий ползунок)
       else if (watching && watchAnim() && watchArrived) { setName = watchAnim(); ms = emoMs(setName); }   // села под видео -> попкорн (выше mv: не мигает ходьбой при езде за скроллом)
       else if (thrown && CAT_SETS.tumble) { setName = 'tumble'; ms = emoMs('tumble'); }   // бросили -> кувырок в полёте (спрайт из манифеста)
