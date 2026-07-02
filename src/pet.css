@@ -204,10 +204,12 @@
 /* зёрнышко попкорна: вылетает (подлёт), потом падает, лежит, тает (стадии переключаются из JS) */
 .twtr-popcorn-k { position: absolute; width: 22px; height: 22px; pointer-events: none; z-index: 2147482998; opacity: 1; will-change: transform, opacity; transition: transform .3s cubic-bezier(.2,.7,.4,1); image-rendering: auto; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
 
-/* сердечки: как попкорн, но всплывают вверх-в стороны и тают (мурлычет/гордится) */
-.twtr-pet-heart { position: absolute; pointer-events: none; z-index: 2147482998; font-size: 20px; line-height: 1; opacity: 0; color: #ff4d6d; will-change: transform, opacity; transition: transform .9s cubic-bezier(.3,.7,.4,1), opacity .9s ease; filter: drop-shadow(0 1px 1px rgba(0,0,0,.2)); }
-/* обглоданная кость: вылетает назад из пасти, падает на пол, лежит, тает (после еды) */
-.twtr-pet-bone { position: absolute; pointer-events: none; z-index: 2147482998; font-size: 22px; line-height: 1; opacity: 1; will-change: transform, opacity; transition: transform .34s cubic-bezier(.2,.7,.4,1); filter: drop-shadow(0 1px 1px rgba(0,0,0,.28)); }
+/* сердечки: рисованный SVG (не эмодзи — рендерится везде); разлёт вбок-вверх и опадание как попкорн (мурлычет/гордится) */
+.twtr-pet-heart { position: absolute; width: 20px; height: 20px; pointer-events: none; z-index: 2147482998; opacity: 0; will-change: transform, opacity; transition: transform .34s cubic-bezier(.2,.7,.4,1), opacity .3s ease; filter: drop-shadow(0 1px 1px rgba(0,0,0,.2)); }
+.twtr-pet-heart svg { display: block; width: 100%; height: 100%; }
+/* обглоданная кость (SVG): вылетает назад из пасти, падает на пол, лежит, тает (после еды) */
+.twtr-pet-bone { position: absolute; width: 26px; height: 16px; pointer-events: none; z-index: 2147482998; opacity: 1; will-change: transform, opacity; transition: transform .34s cubic-bezier(.2,.7,.4,1); filter: drop-shadow(0 1px 1px rgba(0,0,0,.28)); }
+.twtr-pet-bone svg { display: block; width: 100%; height: 100%; }
 
 /* ---------- пакость: трещины ---------- */
 .twtr-pet-crack { position: absolute; width: 120px; height: 120px; pointer-events: none; opacity: 0; transform: scale(.3) rotate(-8deg); transition: transform .18s cubic-bezier(.2,1.5,.4,1), opacity .18s; z-index: 2147482999; }

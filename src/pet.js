@@ -59,6 +59,7 @@
   const recentBeh = {};                             // id поведения -> когда игралось (cooldown/анти-повтор селектора)
   let fellPeakY = null;                             // самая высокая точка текущего полёта -> сквош-приземление (land) при глубоком падении
   let pendingEmote = null;                          // эмоция, отложенная до приземления: ПАДЕНИЕ В ПРИОРИТЕТЕ — сначала земля, потом чувства ({emo, ms, line, sayMs})
+  let goEdgeUntil = 0, goEdgeX = 0;                  // «идёт к краю блока, чтобы сесть» (sit_edge): цель у края текущей полки, окно времени
   let ambient = null, ambientEmo = null, resting = false;   // текущее состояние заботы (null -> первый setAmbient не короткозамкнётся)
   let happyKind = 'happy';   // что показывать в mode==='happy': 'happy' (подпрыг от ласки/еды) или 'wave' (намеренное приветствие)
   let nextAmbient = 0, nextCarePersist = 0, nextAmbSpeak = 0, nextAct = 0, awakeUntil = 0, nextIdleEmote = 0;
@@ -528,14 +529,21 @@
     if (Math.random() >= (IDLE_EMOTE.chance || 0.2)) return;       // 80% -> дальше ходит/прыгает по странице
     if (HERO_BEHAVIORS.length && Yasia.behavior && Yasia.behavior.pickBehavior) {
       const st = { hunger: currentHunger(), mood: currentMood(), energy: currentEnergy(), bond: currentBond(), wild: currentWildness() };
-      // «сидит на краю» физически возможна ТОЛЬКО когда Яся реально стоит у края блока-полки (не в воздухе, не посреди полки)
-      const onEdge = !!standLedge && !falling && !jumping && (px <= standLedge.x1 + 10 || px + PET_W >= standLedge.x2 - 10);
+      // «сидит на краю» требует опоры-полки; у края садится сразу, иначе САМА идёт к ближайшему краю и садится по прибытии
+      const onEdge = !!standLedge && !falling && !jumping && (px <= standLedge.x1 + 12 || px + PET_W >= standLedge.x2 - 12);
+      const canSitEdge = !!standLedge && !standLedge.floor && !falling && !jumping && !watching && !gameActive;   // на полу «краёв» нет — только на блоках
       let cands = HERO_BEHAVIORS.filter((b) => !animOff[b.anim || b.id]);   // тумблеры анимаций (попап) гасят поведение целиком
-      if (!onEdge) cands = cands.filter((b) => (b.anim || b.id) !== 'sit_edge');   // не на краю -> «сидеть на краю» недоступна
+      if (!canSitEdge) cands = cands.filter((b) => (b.anim || b.id) !== 'sit_edge');   // в воздухе/на полу/у видео -> «сидеть на краю» недоступна
       const b = Yasia.behavior.pickBehavior(cands, st, recentBeh, t, Math.random, { wild: st.wild, bondFriend: BOND_FRIEND });
       if (b) {
         recentBeh[b.id] = t;
-        if ((b.anim || b.id) === 'sit_edge') face = (px <= standLedge.x1 + 10) ? -1 : 1;   // ноги свисают ЗА край: у левого края смотрит влево, у правого — вправо
+        if ((b.anim || b.id) === 'sit_edge' && !onEdge) {   // выбрала «сесть на край», но стоит посреди блока -> идёт к ближайшему краю (сядет по прибытии, платформенная ветка)
+          const leftNear = (px - standLedge.x1) <= (standLedge.x2 - (px + PET_W));
+          goEdgeX = leftNear ? standLedge.x1 : (standLedge.x2 - PET_W);
+          goEdgeUntil = t + 5000;
+          return;
+        }
+        if ((b.anim || b.id) === 'sit_edge') face = (px <= standLedge.x1 + 12) ? -1 : 1;   // ноги свисают ЗА край: у левого края смотрит влево, у правого — вправо
         playEmote(b.anim || b.id, (b.dur || 2.4) * 1000);
         if (b.sayPool && Math.random() < 0.6) { const line = pick(SP(b.sayPool)); if (line) say(line, 2000); }   // подпись — не каждый раз (не заспамить)
         return;
@@ -610,7 +618,7 @@
   }
   // наскок в движении: короткий рывок вперёд прыжками (кадры pounce), в сторону курсора; держится в пределах текущей полки/экрана
   function startPounce() {
-    testKind = 'pounce'; testEmo = null; testUntil = now() + 1600;
+    testKind = 'pounce'; testEmo = null; testUntil = now() + 1600; goEdgeUntil = 0;
     face = (mouseX || window.innerWidth / 2) > px + PET_W / 2 ? 1 : -1; testDir = face;
     climbing = false; jumping = false; falling = false; thrown = false; vx = 0; vy = 0;
     setMode('idle');
@@ -639,7 +647,7 @@
   }
   function careAction(k) {
     if (now() < nextAct) return; nextAct = now() + ACT_COOLDOWN_MS;
-    const movers = { call: 1, help: 1, hide: 1 };          // действия с перемещением -> закрываем облачко, чтобы видно
+    const movers = { call: 1, help: 1, hide: 1, play: 1 };  // действия с перемещением -> закрываем облачко (иначе ветка «диалог открыт» в tick замораживает наскок)
     if (movers[k]) closeDialog();
     ({ feed: doFeed, pet: doPet, play: doPlay, call: doCall, help: doHelp, hide: hide, wake: doWake, heal: doHeal }[k] || (() => {}))();
     if (!movers[k] && dialog.classList.contains('show')) renderCareStatus();
@@ -656,7 +664,7 @@
     closeDialog();
     gameActive = true; gameId = id || null; gameTargetX = px; gameRun = false; gameVy = 0; gameFloor = true; gameClimb = false;
     thrown = false; jumping = false; climbing = false; falling = false; vy = 0; vx = 0; testKind = null; running = false;
-    pendingEmote = null;   // игра начинается с чистого листа: старая отложенная злость не должна выстрелить посреди раунда
+    pendingEmote = null; goEdgeUntil = 0;   // игра начинается с чистого листа: отложенная злость/намерение сесть на край не должны сработать посреди раунда
     pet.style.opacity = '1'; pet.style.pointerEvents = '';   // на случай, если прошлая игра прятала питомца
     setMode('idle');
     return true;
@@ -800,35 +808,42 @@
     if (!(watching && watchAnim() && watchArrived) || document.hidden || dialog.classList.contains('show')) return;   // только когда уже села под видео
     if (t - lastPopcornT > POPCORN_EVERY) { lastPopcornT = t; spawnKernel(); }
   }
-  // сердечко: всплывает вверх-вбок над Ясей и тает (механика попкорна, но летит вверх). Спавнится потоком, пока играет ласка/гордость.
+  // рисованные значки частиц (SVG — рендерятся одинаково в любом Chrome, не зависят от эмодзи-шрифта, который у части систем пустой/обрезан)
+  const HEART_SVG = '<svg viewBox="0 0 24 22" width="100%" height="100%"><path d="M12 21C12 21 1.5 13.6 1.5 6.9 1.5 3.6 4 1.5 6.8 1.5 8.9 1.5 10.9 2.7 12 4.7 13.1 2.7 15.1 1.5 17.2 1.5 20 1.5 22.5 3.6 22.5 6.9 22.5 13.6 12 21 12 21Z" fill="#ff4d6d" stroke="#c9184a" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+  const BONE_SVG = '<svg viewBox="0 0 34 20" width="100%" height="100%"><g fill="#f4eeda" stroke="#b7a271" stroke-width="1.6"><rect x="7" y="6.5" width="20" height="7" rx="3"/><circle cx="7" cy="6" r="4.6"/><circle cx="7" cy="14" r="4.6"/><circle cx="27" cy="6" r="4.6"/><circle cx="27" cy="14" r="4.6"/></g></svg>';
+  // сердечко: вылетает вбок-вверх и опадает как попкорн (разлёт + мягкое падение), пока играет ласка/гордость
   function spawnHeart() {
-    const h = document.createElement('div'); h.className = 'twtr-pet-heart'; h.textContent = '❤';
+    const h = document.createElement('div'); h.className = 'twtr-pet-heart'; h.innerHTML = HEART_SVG;
     const s = sizeMul * userScale;
     const headTop = py + PET_H - PET_H * s;                        // визуальная макушка (спрайт растёт вверх от низа бокса на масштаб)
-    const sx = clamp(px + PET_W / 2 - 10 + (Math.random() * 26 - 13), 0, window.innerWidth - 20);
-    const sy = clamp(headTop - 6, 0, window.innerHeight - 20);
+    const sz = 16 + Math.random() * 10; h.style.width = h.style.height = sz.toFixed(0) + 'px';
+    const sx = clamp(px + PET_W / 2 - sz / 2, 0, window.innerWidth - sz);
+    const sy = clamp(headTop + PET_H * 0.15, 0, window.innerHeight - sz);
     h.style.left = sx + 'px'; h.style.top = sy + 'px'; h.style.opacity = '1';
-    h.style.fontSize = (15 + Math.random() * 9).toFixed(0) + 'px';
     root.appendChild(h);
-    const dx = (Math.random() * 2 - 1) * 46, rise = 46 + Math.random() * 40, rot = Math.round(Math.random() * 40 - 20);
-    requestAnimationFrame(() => { h.style.transform = `translate(${dx.toFixed(0)}px, ${-rise.toFixed(0)}px) rotate(${rot}deg)`; h.style.opacity = '0'; });
-    setTimeout(() => h.remove(), 950);
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    const dx = dir * (26 + Math.random() * 54), upH = 34 + Math.random() * 34, rot = Math.round(Math.random() * 50 - 25);
+    const fallDY = 26 + Math.random() * 30;                        // опадает после подлёта (как попкорн, но мягче — сердечки лёгкие)
+    requestAnimationFrame(() => { h.style.transform = `translate(${Math.round(dx * 0.5)}px, ${-upH.toFixed(0)}px) rotate(${rot}deg)`; });   // разлёт вбок-вверх
+    setTimeout(() => { h.style.transition = 'transform .7s cubic-bezier(.5,0,.7,.5), opacity .7s ease'; h.style.transform = `translate(${Math.round(dx)}px, ${Math.round(fallDY)}px) rotate(${rot * 2}deg)`; h.style.opacity = '0'; }, 340);   // опадает и тает
+    setTimeout(() => h.remove(), 1150);
   }
   let lastHeartT = 0;
   function heartTick(t) {   // поток сердечек, пока активна эмоция ласки/гордости (мур/like_proud) — данные, а не таймер: привязан к проигрываемой эмоции
     if (document.hidden || dragging || paused) return;
     const emo = (testKind === 'emo' && t < testUntil) ? testEmo : null;
     if (emo !== 'pet_purr' && emo !== 'like_proud') return;
-    if (t - lastHeartT > 380) { lastHeartT = t; spawnHeart(); }
+    if (t - lastHeartT > 300) { lastHeartT = t; spawnHeart(); }
   }
   // обглоданная кость: в конце еды Яся выбрасывает её НАЗАД (против взгляда); падает на пол и лежит как попкорн, пока не растает
   function throwBone() {
-    const b = document.createElement('div'); b.className = 'twtr-pet-bone'; b.textContent = '🦴';
-    const startX = px + PET_W / 2 - 11, startY = py + PET_H * 0.4;
+    const b = document.createElement('div'); b.className = 'twtr-pet-bone'; b.innerHTML = BONE_SVG;
+    const sz = 26; b.style.width = sz + 'px'; b.style.height = (sz * 0.6).toFixed(0) + 'px';
+    const startX = clamp(px + PET_W / 2 - sz / 2, 0, window.innerWidth - sz), startY = py + PET_H * 0.4;
     b.style.left = startX + 'px'; b.style.top = startY + 'px';
     root.appendChild(b);
     const back = -face;                                            // назад = против направления взгляда
-    const floorY = window.innerHeight - PLAT_FLOOR - 18;           // ложится на пол страницы
+    const floorY = window.innerHeight - PLAT_FLOOR - 16;           // ложится на пол страницы
     const dx = back * (60 + Math.random() * 70), spin = Math.round(Math.random() * 500 - 250);
     requestAnimationFrame(() => { b.style.transform = `translate(${Math.round(dx * 0.5)}px, -${40 + Math.round(Math.random() * 24)}px) rotate(${Math.round(spin / 2)}deg)`; });   // подлёт назад-вверх
     setTimeout(() => { b.style.transition = 'transform .5s cubic-bezier(.6,0,.9,.4)'; b.style.transform = `translate(${Math.round(dx)}px, ${Math.round(floorY - startY)}px) rotate(${spin}deg)`; }, 320);   // падение на пол
@@ -1007,7 +1022,7 @@
     if (paused) {
       if (gameActive) { try { Yasia.events.emit('game:stop'); } catch (_) {} }   // игру честно завершаем (иначе зомби/мясо зависнут на экране)
       running = false; jumping = false; climbing = false; falling = false; thrown = false; vx = 0; vy = 0;
-      pendingEmote = null;   // пауза гасит и отложенную эмоцию: после снятия паузы внезапная злость выглядела бы беспричинной
+      pendingEmote = null; goEdgeUntil = 0;   // пауза гасит отложенную эмоцию и намерение сесть на край
       pet.classList.remove('is-moving', 'is-jump');
       if (mode !== 'happy') setMode('idle');
     } else {
@@ -1925,6 +1940,12 @@
       if (watchHelp) { running = false; }   // просит подсадить -> не бежит; КУДА идти (под видео) задаёт watching-ветка, не фиксируем на месте (иначе зависает где попало)
       else if (watchClimbing) { running = false; }            // лезет к видео -> walkTargetX задаёт поиск пути (watchClimbDecide), не перетираем тут
       else if (gameClimb) { running = false; }                // лезет к игровой цели -> walkTargetX задаёт gameClimbDecide
+      else if (goEdgeUntil && t < goEdgeUntil) {              // идёт к краю блока, чтобы сесть (sit_edge): ведём к краю, прыжки подавлены
+        running = false; walkTargetX = clamp(goEdgeX, standLedge.x1, standLedge.x2 - PET_W); nextJumpDecide = Math.max(nextJumpDecide, t + 500);
+        if (Math.abs(px - walkTargetX) < 6) {                 // дошла до края -> садится, ноги свисают наружу
+          goEdgeUntil = 0; face = (px <= standLedge.x1 + 12) ? -1 : 1; playEmote('sit_edge', 3600);
+        }
+      } else if (goEdgeUntil && t >= goEdgeUntil) { goEdgeUntil = 0; }   // не дошла за окно -> отменяем намерение
       walkAlong(t);
       if (watchClimbing) { if (t > nextJumpDecide) { nextJumpDecide = t + 320; watchClimbDecide(t); } }   // поиск пути к видео: прыжок к следующей полке маршрута (или watchStuck)
       else if (gameClimb) { if (t > nextJumpDecide) { nextJumpDecide = t + 300; gameClimbDecide(t); } }   // лазание к игровой цели: жадный прыжок вверх к точке
@@ -2177,6 +2198,7 @@
       else if (testKind === 'emo' && t < testUntil) { setName = testEmo; ms = emoMs(testEmo) / userSpeed; }   // тест/действие эмоции (скорость — общий ползунок)
       else if (watching && watchAnim() && watchArrived) { setName = watchAnim(); ms = emoMs(setName); }   // села под видео -> попкорн (выше mv: не мигает ходьбой при езде за скроллом)
       else if (thrown && CAT_SETS.tumble) { setName = 'tumble'; ms = emoMs('tumble'); }   // бросили -> кувырок в полёте (спрайт из манифеста)
+      else if (jumping && engine.isPounce() && CAT_SETS.pounce) { setName = 'pounce'; ms = emoMs('pounce'); }   // наскок к высокой полке -> кадры pounce
       else if (jumping && !engine.isDrop()) { setName = 'jump'; ms = CAT_JUMP_MS; }   // дуга прыжка вверх/вбок (ВЫШЕ happy: иначе «помочь» не покажет прыжок)
       else if (falling || jumping) { setName = 'fall'; ms = CAT_FALL_MS; }     // падение ИЛИ спуск-дроп (jumpDrop): кадры падения. У Яси fall=1 кадр (поза climb) — НАМЕРЕННО, не «подключать» fall0-4
       else if (mode === 'happy') { setName = happyKind; ms = happyKind === 'wave' ? CAT_WAVE_MS : emoMs('happy'); }  // радость: подпрыг (happy) или приветствие (wave)
@@ -2348,7 +2370,10 @@
       if (ch.yasiaCareSignal && ch.yasiaCareSignal.newValue) {            // сигнал заботы из попапа: {act:'pet'|'play'|'wake', ts}
         const sig = ch.yasiaCareSignal.newValue;                          // статы попап УЖЕ записал (придут ключами выше) -> здесь ТОЛЬКО реакция, без повторного ACT_*
         if (sig.act === 'pet') playEmote('pet_purr', 2200);
-        else if (sig.act === 'play') playEmote(CAT_SETS.pounce ? 'pounce' : 'like_proud', 2600);
+        else if (sig.act === 'play') {                                    // как в doPlay: наскок = рывок в движении; в воздухе — отложенная эмоция после приземления
+          if (CAT_SETS.pounce && !thrown && !falling && !jumping) startPounce();
+          else playEmote(CAT_SETS.pounce ? 'pounce' : 'like_proud', 2600);
+        }
         else if (sig.act === 'wake') { awakeUntil = now() + 20000; nextAmbient = 0; playEmote('wake', 2400); }   // окно бодрости + мгновенный пересчёт ambient (снимает гистерезис сна)
       }
     });
