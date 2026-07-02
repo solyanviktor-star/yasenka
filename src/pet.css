@@ -93,7 +93,15 @@
 .twtr-pet.is-jump:not(.is-catgirl) .twtr-pet__char { animation: none; transform: scaleY(1.09) scaleX(.93); }
 .twtr-pet.is-jump:not(.is-catgirl) .creeper__leg { animation: none !important; transform: translateY(-2px); }
 
-@media (prefers-reduced-motion: reduce) { .creeper, .creeper__leg { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .creeper, .creeper__leg,
+  .twtr-pet__char, .twtr-pet__bubble,
+  .twtr-game-exit, .twtr-game-nub { animation: none !important; }
+}
+
+/* демо: временно скрытые умения/провайдер — серым и некликабельно */
+.twtr-skill--soon { opacity: .4; filter: grayscale(.5); pointer-events: none; }
+.twtr-ai-prov-b:disabled, .twtr-ai-prov-b[disabled] { opacity: .4; filter: grayscale(.5); cursor: not-allowed; }
 
 /* ---------- табличка с кодом входа (носит над собой; клик — копирует) ---------- */
 .twtr-pet-sign {
@@ -201,8 +209,6 @@
 .twtr-pet-crack.show { opacity: .92; transform: scale(1) rotate(0); }
 .twtr-pet-crack.fade { opacity: 0; transition: opacity .8s ease; }
 
-/* ---------- пакость: украденная буква ---------- */
-.twtr-pet-letter { position: absolute; pointer-events: none; z-index: 2147482999; will-change: transform; transition: transform 1s cubic-bezier(.3,1,.4,1); text-shadow: 0 1px 3px rgba(0,0,0,.35); }
 
 /* ---------- диалоговое окно (клик по Ясе) ---------- */
 .twtr-pet-dialog { position: absolute; inset: 0; display: none; z-index: 2147483005; pointer-events: none; }

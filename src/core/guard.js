@@ -9,35 +9,36 @@
 (() => {
   'use strict';
 
-  const MODES = ['game', 'calm', 'work', 'ai', 'safe'];
+  const MODES = ['normal', 'calm'];
   // действие -> можно ли ему происходить САМОМУ в данном режиме
   // mischief = пакости; chatter = болтовня сама по себе; watch = сама бежит смотреть видео;
   // journal = журнал посещённых сайтов (память); ai = любые запросы к LLM (текст покидает браузер)
   const MATRIX = {
-    game: { mischief: 1, chatter: 1, watch: 1, journal: 1, ai: 1 },   // игровой: всё включено
-    calm: { mischief: 0, chatter: 0, watch: 1, journal: 1, ai: 1 },   // спокойный: без пакостей и болтовни
-    work: { mischief: 0, chatter: 0, watch: 0, journal: 1, ai: 1 },   // рабочий: не отвлекает вообще (и к видео не бегает)
-    ai:   { mischief: 0, chatter: 1, watch: 1, journal: 1, ai: 1 },   // ИИ: помощник на первом плане, без пакостей
-    safe: { mischief: 0, chatter: 0, watch: 0, journal: 0, ai: 0 },   // безопасный: НИЧЕГО не уходит из браузера, журнал на паузе
+    normal: { mischief: 1, chatter: 1, watch: 1, journal: 1, ai: 1 },   // обычный: ведёт себя по статам/настроению (шкала дикости)
+    calm:   { mischief: 0, chatter: 0, watch: 1, journal: 1, ai: 1 },   // спокойный: без пакостей и болтовни
   };
-  const allowsIn = (mode, action) => !!((MATRIX[mode] || MATRIX.game)[action]);
+  const allowsIn = (mode, action) => !!((MATRIX[mode] || MATRIX.normal)[action]);
 
   // ---------- браузерная часть (в node-тестах не выполняется) ----------
   if (typeof window !== 'undefined') {
     const Yasia = (window.Yasia = window.Yasia || {});
-    let mode = 'game';
+    let mode = 'normal';
     const subs = new Set();
     const notify = () => { for (const f of [...subs]) { try { f(mode); } catch (_) {} } };
-    try { Yasia.storage && Yasia.storage.syncGet({ yasiaMode: 'game' }, (s) => { if (s && MATRIX[s.yasiaMode]) { mode = s.yasiaMode; notify(); } }); } catch (_) {}
+    try { Yasia.storage && Yasia.storage.syncGet({ yasiaMode: 'normal' }, (s) => { if (s && MATRIX[s.yasiaMode]) { mode = s.yasiaMode; notify(); } }); } catch (_) {}
     try { Yasia.storage && Yasia.storage.onChanged((ch, area) => { if (area === 'sync' && ch && ch.yasiaMode && MATRIX[ch.yasiaMode.newValue]) { mode = ch.yasiaMode.newValue; notify(); } }); } catch (_) {}
 
     // подтверждение пользователя: карточка с двумя кнопками. ЕДИНСТВЕННЫЙ путь для опасных действий.
     // opts = { text, yes, no } (локализованные строки даёт вызывающий). Promise<true|false>; повторный вызов — отклоняет предыдущий.
-    let curCard = null;
+    let curCard = null, curResolve = null;
     function confirm(opts) {
       return new Promise((resolve) => {
         try {
-          if (curCard) { try { curCard.remove(); } catch (_) {} curCard = null; }
+          if (curCard) {
+            try { curCard.remove(); } catch (_) {}
+            const prev = curResolve; curCard = null; curResolve = null;
+            if (prev) { try { prev(false); } catch (_) {} }   // fail-closed: вытесненная карточка = «нет»
+          }
           const host = document.getElementById('twtr-pet-root') || document.documentElement;
           const card = document.createElement('div');
           card.className = 'twtr-guard-card';
@@ -46,10 +47,10 @@
           card.querySelector('.twtr-guard-yes').textContent = String((opts && opts.yes) || 'OK');
           card.querySelector('.twtr-guard-no').textContent = String((opts && opts.no) || '✕');
           ['mousedown', 'click'].forEach((ev) => card.addEventListener(ev, (e) => e.stopPropagation()));
-          const done = (v) => { try { card.remove(); } catch (_) {} if (curCard === card) curCard = null; resolve(v); };
+          const done = (v) => { try { card.remove(); } catch (_) {} if (curCard === card) { curCard = null; curResolve = null; } resolve(v); };
           card.querySelector('.twtr-guard-yes').addEventListener('click', () => done(true));
           card.querySelector('.twtr-guard-no').addEventListener('click', () => done(false));
-          host.appendChild(card); curCard = card;
+          host.appendChild(card); curCard = card; curResolve = resolve;
           setTimeout(() => { if (curCard === card) done(false); }, 45000);   // без ответа -> отказ (fail-closed)
         } catch (_) { resolve(false); }   // UI не построился -> ОТКАЗ, не «молчаливое да»
       });
@@ -60,7 +61,7 @@
     function needDownloadConfirm() {
       const now = Date.now();
       while (dlTimes.length && now - dlTimes[0] > 120000) dlTimes.shift();
-      return mode === 'safe' || dlTimes.length >= 3;
+      return dlTimes.length >= 3;
     }
 
     Yasia.guard = {

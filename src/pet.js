@@ -17,7 +17,7 @@
     VIEW_PAD_TOP, VIEW_PAD_BOTTOM,
     PET_W, PET_H, STROKE_DIST,
     HUNGER_PER_MIN, FEED_AMOUNT, FEED_XP, LEVEL_XP, MAX_LEVEL,
-    HUNGER_HUNGRY, HUNGER_STARVING,
+    HUNGER_HUNGRY, HUNGER_STARVING, WILD, IDLE_EMOTE, SICK, STREAK,
     ENERGY_START, ENERGY_REST_MIN, ENERGY_RUN_SEC, ENERGY_SLEEP_MIN, ENERGY_LOW, ENERGY_WAKE, ENERGY_TIRED,
     BOND_START, BOND_DECAY_MIN, BOND_FRIEND, BOND_BESTIE,
     MOOD_BASE, MOOD_BIAS_MAX, MOOD_BIAS_DECAY_MIN, MOOD_HUNGER_K, MOOD_ENERGY_K, MOOD_BOND_K, MOOD_GOOD, MOOD_BAD,
@@ -44,16 +44,23 @@
   let ledges = [], standLedge = null, lastLedgeScan = 0, vy = 0, vx = 0, lastLeftEl = null;   // lastLeftEl — блок, с которого только что спрыгнула (анти-пинг-понг в свободном платформере)
   let jumping = false;   // в прыжке; внутренности прыжка (откуда/куда/горб/дроп) — в движке core/platformer.js (engine.jumpPhase/isDrop)
   let walkTargetX = 0, nextJumpDecide = 0, sayUntil = 0, nextChatter = 0, climbing = false, falling = false;
-  let testKind = null, testUntil = 0, testDir = 1, testEmo = null;   // ручная проверка действий/эмоций из настроек
+  let testKind = null, testUntil = 0, testDir = 1, testEmo = null, forceRunUntil = 0;   // ручная проверка действий/эмоций; forceRunUntil — превью «Бег» держит бег БЕЗ хайджека общих таймеров авто-решений
   // игровые параметры
   let hungerBase = 0, hungerAt = Date.now(), xp = 0, level = 1;
   // ТАМАГОЧИ: статы (модель base+at — линейное затухание по времени, как у голода; считается одинаково в любой вкладке и попапе)
   let energyBase = 100, energyAt = Date.now(), energyResting = false;   // энергия 0..100 (wall-clock: ставка по режиму сон/бодрствование)
   let bondBase = 0, bondAt = Date.now();            // привязанность 0..100
   let moodBiasBase = 0, moodBiasAt = Date.now();    // бонус настроения от ласки (тает к 0)
+  let lastInteractAt = Date.now();                  // последнее взаимодействие (кормёжка/ласка/игра) -> «заброшенность» для шкалы дикости
+  let sickAt = 0, nextSickCheck = 0;                // болезнь: 0 = здорова, иначе метка начала (тамагочи-петля, лечит игрок 💊)
+  let wildMul = 1;                                  // ползунок вредности из попапа (sync yasiaWildMul): 0 = тихоня, 2 = прокудница
+  let animOff = {};                                 // выключенные анимации (sync yasiaAnimOff): не используются в АВТОНОМНОЙ жизни (тесты/careState работают)
+  let HERO_BEHAVIORS = [];                          // библиотека автономных поведений из манифеста героя (данные, не код) -> core/behavior.pickBehavior
+  const recentBeh = {};                             // id поведения -> когда игралось (cooldown/анти-повтор селектора)
+  let fellPeakY = null;                             // самая высокая точка текущего полёта -> сквош-приземление (land) при глубоком падении
   let ambient = null, ambientEmo = null, resting = false;   // текущее состояние заботы (null -> первый setAmbient не короткозамкнётся)
   let happyKind = 'happy';   // что показывать в mode==='happy': 'happy' (подпрыг от ласки/еды) или 'wave' (намеренное приветствие)
-  let nextAmbient = 0, nextCarePersist = 0, nextAmbSpeak = 0, nextAct = 0, awakeUntil = 0;
+  let nextAmbient = 0, nextCarePersist = 0, nextAmbSpeak = 0, nextAct = 0, awakeUntil = 0, nextIdleEmote = 0;
   let hiding = false, awayAt = 0;                   // «спрятать» + метка ухода со вкладки (для приветствия)
   let downloading = false, dlHoldT = null;          // качается видео -> Яся переходит в ОГНЕННУЮ форму (стоит, горит)
   let watching = false, watchArrived = false, watchDismissed = false, lastPopcornT = 0, watchTestUntil = 0;   // играет видео -> Яся идёт под видео, садится (watchArrived); watchDismissed=прогнали от видео; watchTestUntil — ручной тест
@@ -110,11 +117,8 @@
       </div>
       <div class="twtr-set-sub" id="twtr-l-mode">Режим:</div><!-- режимы поведения (страж, v0.9): гейтят автономные действия -->
       <div class="twtr-mode-row">
-        <button class="twtr-mode-btn" data-mode="game" type="button">🎮</button>
+        <button class="twtr-mode-btn" data-mode="normal" type="button">😺</button>
         <button class="twtr-mode-btn" data-mode="calm" type="button">😌</button>
-        <button class="twtr-mode-btn" data-mode="work" type="button">💼</button>
-        <button class="twtr-mode-btn" data-mode="ai" type="button">🤖</button>
-        <button class="twtr-mode-btn" data-mode="safe" type="button">🛡</button>
       </div>
       <div class="twtr-set-sub">Проверить действие:</div>
       <div class="twtr-test-grid">
@@ -170,6 +174,12 @@
             <button class="twtr-dlg-cap" id="twtr-cap-games" type="button"><span class="twtr-cap-ic">🎮</span><span class="twtr-cap-tx" id="twtr-cap-games-tx"></span><span class="twtr-cap-arr">›</span></button>
             <div class="twtr-skill-body" id="twtr-skill-games" hidden>
               <div class="twtr-dlg-games" id="twtr-dlg-games"></div>
+            </div>
+          </div>
+          <div class="twtr-skill" data-skill="reply" id="twtr-skill-reply-wrap" hidden><!-- автореплаер: секция видна только при включённом флаге replier (см. openDialog) -->
+            <button class="twtr-dlg-cap" id="twtr-cap-reply" type="button"><span class="twtr-cap-ic">✍️</span><span class="twtr-cap-tx" id="twtr-cap-reply-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-reply" hidden>
+              <div class="twtr-dlg-reply" id="twtr-dlg-reply"></div>
             </div>
           </div>
           <div class="twtr-skill" data-skill="notes">
@@ -261,7 +271,7 @@
   let PING_PONG = { sad: 1, angry: 1, dizzy: 1, hungry: 1, sleep: 1 };
   let FRAME_SRC = null;          // key -> относительный путь спрайта из манифеста (если null -> папочная конвенция)
   let MANIFEST_EMOS = [];        // эмоции из манифеста [{key,icon,label}] -> авто-кнопки тест-сетки и подписи
-  const AMBIENT_DEFAULT = { sleep: 'sleep', hungry: 'hungry', grumpy: 'angry', starving: 'sad' };   // care-state -> эмоция (фолбэк; манифест переопределяет полем careState на эмоции)
+  const AMBIENT_DEFAULT = { sleep: 'sleep', hungry: 'hungry', grumpy: 'angry', starving: 'sad', sick: 'dizzy' }; // care-state -> эмоция (фолбэк; манифест переопределяет полем careState на эмоции; sick без спрайта = головокружение)
   let AMBIENT_EMO = Object.assign({}, AMBIENT_DEFAULT);
   let ACTION_STATE = {};         // appState из манифеста (напр. watching) -> имя анимации; событийные действия (смотрит видео и т.п.)
   const CAT_SETS = {}, CAT_DIR = {};
@@ -292,8 +302,10 @@
   function frameUrl(k) {
     const dir = hero;   // папка героя = его id (src/heroes/<id>/)
     try {
-      if (FRAME_SRC && FRAME_SRC[k]) return chrome.runtime.getURL('src/heroes/' + dir + '/' + FRAME_SRC[k]);   // путь из манифеста
-      return chrome.runtime.getURL('src/heroes/' + dir + '/' + (CAT_DIR[k] || k) + '/' + k + '.png');           // папочная конвенция (фолбэк)
+      const rel = (FRAME_SRC && FRAME_SRC[k]) ? FRAME_SRC[k] : (CAT_DIR[k] || k) + '/' + k + '.png';   // путь из манифеста или папочная конвенция (фолбэк)
+      // ?v=<версия> — cache-buster: при замене спрайта файл лежит по тому же URL, и Chrome отдал бы СТАРЫЙ кадр из кэша. Версия в URL = свежая загрузка после reload расширения.
+      const ver = (chrome.runtime.getManifest && chrome.runtime.getManifest().version) || '0';
+      return chrome.runtime.getURL('src/heroes/' + dir + '/' + rel) + '?v=' + ver;
     } catch (_) { return ''; }
   }
   function buildCatFrames() {
@@ -343,6 +355,9 @@
     ACTION_STATE = act;   // карта app-state -> анимация из манифеста (watching и т.п.)
     if (emos.length) EMOTIONS = emos.map((e) => ({ key: e.key, emo: e.icon, name: e.label })).concat(EMO_EXTRA);   // подписи в облачке — тоже из манифеста
     for (const k in src) ensureLayer(k);   // докинуть слои под новые кадры (новые эмоции/действия)
+    // библиотека автономных поведений (данные): {id, anim, kind, when, weight, cooldown, dur, sayPool} -> pickBehavior в idle-жизни
+    const B = (m && m.behaviors) || {};
+    HERO_BEHAVIORS = Object.keys(B).map((id) => Object.assign({ id }, B[id]));
   }
   function renderTestEmos() {   // строит кнопки эмоций в сетке «Проверить действие» из манифеста (а не из статичного HTML)
     const box = root.querySelector('#twtr-test-emos');
@@ -433,6 +448,13 @@
   }
   function setEnergyResting(r) { if (r === energyResting) return; energyBase = currentEnergy(); energyAt = Date.now(); energyResting = r; }   // фиксируем энергию на смене режима
   function currentBond() { return clamp(bondBase - elapsedMin(bondAt) * BOND_DECAY_MIN, 0, 100); }
+  function currentWildness() {   // дикость 0..100: голод/скука/заброшенность дичат, привязанность усмиряет (core/behavior.js)
+    const neglectMin = (Date.now() - lastInteractAt) / 60000;
+    const w = (Yasia.behavior && Yasia.behavior.wildnessOf)
+      ? Yasia.behavior.wildnessOf({ hunger: currentHunger(), mood: currentMood(), bond: currentBond(), neglectMin }, WILD)
+      : 50;
+    return clamp(w * wildMul, 0, 100);   // ползунок вредности из попапа: 0 = совсем не пакостит, 2 = вдвое дичее
+  }
   function currentMoodBias() {   // бонус от ласки тает к нулю
     const dec = elapsedMin(moodBiasAt) * MOOD_BIAS_DECAY_MIN;
     return moodBiasBase > 0 ? Math.max(0, moodBiasBase - dec) : Math.min(0, moodBiasBase + dec);
@@ -443,6 +465,7 @@
     if (h > 60) m -= (h - 60) * MOOD_HUNGER_K;
     if (e < 30) m -= (30 - e) * MOOD_ENERGY_K;
     m += b * MOOD_BOND_K;
+    if (sickAt && SICK) m -= SICK.moodPenalty;   // болеет -> кисло на душе (пока не полечили)
     return clamp(m, 0, 100);
   }
   // мутаторы (rebase: читаем текущее с учётом затухания, прибавляем дельту, сбрасываем метку времени)
@@ -456,6 +479,7 @@
       energy: energyBase, energyAt, energyResting,
       bond: bondBase, bondAt,
       moodBias: moodBiasBase, moodBiasAt,
+      sick: sickAt,
     }, extra || {}));
   }
 
@@ -464,6 +488,7 @@
     const h = currentHunger(), e = currentEnergy(), m = currentMood();
     const sleepThr = resting ? ENERGY_WAKE : ENERGY_LOW;          // гистерезис: засыпает на ENERGY_LOW, просыпается только выспавшись (ENERGY_WAKE)
     if (e < sleepThr && now() > awakeUntil) return 'sleep';
+    if (sickAt) return 'sick';                                   // болеет -> вялая, ждёт лечения (выше голода: лечат раньше, чем кормят)
     if (h >= HUNGER_STARVING) return 'starving';                 // очень голодная -> грустит/вредничает
     if (m <= MOOD_BAD) return 'grumpy';                          // плохое настроение -> сидит/бурчит
     if (h >= HUNGER_HUNGRY) return 'hungry';                     // голодная -> просит
@@ -483,11 +508,54 @@
     nextAmbSpeak = t + 11000 + Math.random() * 12000;
     let line = null;
     if (ambient === 'sleep') { if (Math.random() < 0.5) line = tr().sZzz; }
+    else if (ambient === 'sick') line = pick(SP('sick'));
     else if (ambient === 'starving') line = pick(SP('starving'));
     else if (ambient === 'hungry') line = pick(SP('hungry'));
     else if (ambient === 'grumpy') line = pick(SP('grumpy'));
     else if (currentBond() >= BOND_FRIEND && Math.random() < 0.5) line = pick(SP('bond'));
     if (line) say(line, 2200);
+  }
+  // спонтанная idle-жизнь: периодический кубик (IDLE_EMOTE.chance играем / иначе гуляет дальше), а ЧТО играть выбирает
+  // core/behavior.pickBehavior по библиотеке из манифеста героя (weights/when/cooldown) — новое поведение = данные, не код.
+  function maybeIdleEmote(t) {
+    if (Yasia.guard && !Yasia.guard.allows('chatter')) return;     // спокойный режим -> без спонтанных эмоций
+    if (!IDLE_EMOTE || !roam || paused || busy || dragging || hiding || gameActive || resting || thrown || jumping || falling) return;
+    if (dialog.classList.contains('show') || isTyping() || now() < testUntil) return;
+    if (ambient !== 'normal' && ambient !== 'playful') return;     // негативные состояния (голод/сон/злость/болезнь) эмотят сами
+    if (t < nextIdleEmote) return;
+    nextIdleEmote = t + IDLE_EMOTE.minMs + Math.random() * (IDLE_EMOTE.maxMs - IDLE_EMOTE.minMs);
+    if (Math.random() >= (IDLE_EMOTE.chance || 0.2)) return;       // 80% -> дальше ходит/прыгает по странице
+    if (HERO_BEHAVIORS.length && Yasia.behavior && Yasia.behavior.pickBehavior) {
+      const st = { hunger: currentHunger(), mood: currentMood(), energy: currentEnergy(), bond: currentBond(), wild: currentWildness() };
+      const cands = HERO_BEHAVIORS.filter((b) => !animOff[b.anim || b.id]);   // тумблеры анимаций (попап) гасят поведение целиком
+      const b = Yasia.behavior.pickBehavior(cands, st, recentBeh, t, Math.random, { wild: st.wild, bondFriend: BOND_FRIEND });
+      if (b) {
+        recentBeh[b.id] = t;
+        playEmote(b.anim || b.id, (b.dur || 2.4) * 1000);
+        if (b.sayPool && Math.random() < 0.6) { const line = pick(SP(b.sayPool)); if (line) say(line, 2000); }   // подпись — не каждый раз (не заспамить)
+        return;
+      }
+    }
+    const pool = (IDLE_EMOTE.pool || ['happy', 'wave']).filter((k) => !animOff[k]);   // фолбэк: старый пул (манифест без behaviors)
+    if (pool.length) playEmote(pool[Math.floor(Math.random() * pool.length)], 2400);
+  }
+  // болезнь: раз в SICK.checkMs кидаем кубик по факторам голода/настроения/заброшенности; выздоровление — кнопкой 💊 (или сама через сутки)
+  function sickCheck(t) {
+    if (!SICK) return;
+    if (t < nextSickCheck) return;
+    nextSickCheck = t + SICK.checkMs;
+    if (sickAt) {
+      if (Date.now() - sickAt > SICK.autoHealMs) { sickAt = 0; saveCare({ sick: 0 }); nextAmbient = 0; }   // отлежалась сама
+      return;
+    }
+    let p = 0;
+    if (currentHunger() >= HUNGER_STARVING) p += SICK.pStarving;
+    if (currentMood() <= MOOD_BAD) p += SICK.pGrumpy;
+    if ((Date.now() - lastInteractAt) / 60000 > SICK.neglectMin) p += SICK.pNeglect;
+    if (p > 0 && Math.random() < p) {
+      sickAt = Date.now(); saveCare({ sick: sickAt }); nextAmbient = 0;   // заболела -> ambient пересчитается немедленно
+      say(pick(SP('sick')) || '🤒', 2400);
+    }
   }
   function careTick(t, dt) {
     // восстановление сна теперь в currentEnergy (wall-clock); здесь только доп. расход на бег
@@ -496,11 +564,14 @@
     if (t > nextAmbient) { nextAmbient = t + 1200; setAmbient(computeAmbient()); }
     if (t > nextCarePersist) { nextCarePersist = t + 5000; saveCare(); }
     ambientSpeak(t);
+    maybeIdleEmote(t);
+    sickCheck(t);
   }
 
   // ---------- ТАМАГОЧИ: действия пользователя (скил «Забота») ----------
   function applyAct(a) {
     if (!a) return;
+    lastInteractAt = Date.now();   // любое действие = взаимодействие -> сбрасывает «заброшенность» (успокаивает дикость)
     if (a.hunger) addHunger(a.hunger);
     if (a.energy) addEnergy(a.energy);
     if (a.bond) addBond(a.bond);
@@ -521,10 +592,21 @@
   function unhide() { if (!hiding) return; hiding = false; pet.classList.remove('is-hiding'); setMode('happy'); happyUntil = now() + 900; }
   function playEmote(emo, ms) { testKind = 'emo'; testEmo = emo; testUntil = now() + (ms || 2600); setMode('idle'); climbing = false; jumping = false; }
   function doFeed() { applyAct(ACT_FEED); saveCare(); feedEat(); }
-  function doPet() { applyAct(ACT_PET); saveCare(); setMode('happy'); happyUntil = now() + 1200; say(currentBond() >= BOND_FRIEND ? pick(SP('bond')) : tr().sPetMur, 1600); }
+  function doPet() { applyAct(ACT_PET); saveCare(); playEmote('pet_purr', 2200); say(currentBond() >= BOND_FRIEND ? pick(SP('bond')) : tr().sPetMur, 1600); }
   function doPlay() {
+    if (sickAt) { say(tr().sSickCant, 1900); return; }             // болеет — сначала полечи
     if (currentEnergy() < 12) { addMoodBias(-3); saveCare(); say(tr().sPlayTired, 1800); return; }
-    applyAct(ACT_PLAY); saveCare(); playEmote('happy', 2600); say(tr().sPlayYay, 1800);
+    applyAct(ACT_PLAY); saveCare();
+    playEmote(CAT_SETS.pounce ? 'pounce' : 'like_proud', 2600);   // игровой наскок, если спрайт есть (данные из манифеста)
+    say(tr().sPlayYay, 1800);
+  }
+  function doHeal() {   // 💊 лечение: тамагочи-петля «заболела -> полечи -> сближение»
+    if (!sickAt) { say(tr().sHealNot, 1600); return; }
+    sickAt = 0;
+    applyAct({ bond: SICK.healBond, xp: SICK.healXp, mood: SICK.healMood });
+    saveCare({ sick: 0 }); nextAmbient = 0;
+    playEmote(CAT_SETS.heal ? 'heal' : 'happy', 2600);
+    say(tr().sHealDone, 2200);
   }
   function doCall() { applyAct(ACT_CALL); saveCare(); comeHere(); }
   function doHelp() {
@@ -538,13 +620,13 @@
     applyAct(ACT_WAKE);
     if (currentEnergy() < ENERGY_LOW + 12) addEnergy(ENERGY_LOW + 12 - currentEnergy());   // реально выводим из сна (иначе уснёт снова через окно awakeUntil)
     awakeUntil = now() + 20000; nextAmbient = now() + 1200; setAmbient(computeAmbient()); saveCare();
-    playEmote('dizzy', 2400); say(tr().sWakeUp, 1700);
+    playEmote('wake', 2400); say(tr().sWakeUp, 1700);
   }
   function careAction(k) {
     if (now() < nextAct) return; nextAct = now() + ACT_COOLDOWN_MS;
     const movers = { call: 1, help: 1, hide: 1 };          // действия с перемещением -> закрываем облачко, чтобы видно
     if (movers[k]) closeDialog();
-    ({ feed: doFeed, pet: doPet, play: doPlay, call: doCall, help: doHelp, hide: hide, wake: doWake }[k] || (() => {}))();
+    ({ feed: doFeed, pet: doPet, play: doPlay, call: doCall, help: doHelp, hide: hide, wake: doWake, heal: doHeal }[k] || (() => {}))();
     if (!movers[k] && dialog.classList.contains('show')) renderCareStatus();
   }
 
@@ -662,7 +744,7 @@
     return best;
   }
   const anyVideoPlaying = () => !!playingVideo();
-  function setWatching(on) { if (watching === on) return; watching = on; if (!on) { watchArrived = false; watchHelp = false; watchHelpSayT = 0; watchClimbing = false; watchStuck = false; watchStuckT = 0; watchVid = null; watchFromEl = null; watchPingT = 0; } catAct = null; }   // выкл -> сбросить «дошла»/«лезет»/«просит подсадить»/цель/маршрут (и троттл фразы); catAct=null -> чистый переход кадра
+  function setWatching(on) { if (watching === on) return; watching = on; if (on) { if (testKind === 'run') { testKind = null; forceRunUntil = 0; running = false; walkTargetX = px; } } else { watchArrived = false; watchHelp = false; watchHelpSayT = 0; watchClimbing = false; watchStuck = false; watchStuckT = 0; watchVid = null; watchFromEl = null; watchPingT = 0; } catAct = null; }   // вкл -> отменяем живое превью «Бег» (не сосуществуют); выкл -> сбросить «дошла»/«лезет»/«просит подсадить»/цель/маршрут; catAct=null -> чистый переход кадра
   let watchRecheckT = null, watchOffT = null;
   function refreshWatching() {   // дебаунс + ГИСТЕРЕЗИС: вкл сразу, выкл с задержкой (буферизация видео не должна сгонять её с места)
     if (watchRecheckT) return;
@@ -721,17 +803,21 @@
   function levelUp() {
     bubble.textContent = '⭐ ' + tr().lvl + level;
     bubble.classList.add('show');
-    setMode('happy'); happyUntil = now() + 1200;
+    if (CAT_SETS.levelup) playEmote('levelup', 2400);   // фанфары из манифеста (спрайт есть -> салют звёзд), иначе прежний подпрыг
+    else { setMode('happy'); happyUntil = now() + 1200; }
     spawnParticles('#ffd34d', 14);
     Yasia.events.emit('levelup', { level });   // шина событий: подписчики появятся при выносе систем
   }
 
   // ---------- пакости (визуальные) ----------
   function maybeMischief(t) {
-    if (Yasia.guard && !Yasia.guard.allows('mischief')) return;   // режимы (страж): пакости только в игровом
-    if (busy || gameActive || t < nextMischief || isTyping() || dialogOpen()) return;
-    nextMischief = t + 13000 + Math.random() * 15000;
-    if (isTwitter && Math.random() < 0.5) stealLetter(); else glassCrack();
+    if (Yasia.guard && !Yasia.guard.allows('mischief')) return;   // режимы (страж): пакости только в обычном
+    if (busy || gameActive || t < nextMischief || isTyping() || dialogOpen() || thrown || jumping || falling || dragging) return;   // не пакостим во время активной физики (бросок/прыжок/падение) — busy заморозил бы полёт
+    const wild = currentWildness();
+    const iv = (Yasia.behavior && Yasia.behavior.mischiefIntervalMs) ? Yasia.behavior.mischiefIntervalMs(wild, WILD) : 20000;
+    if (!iv) { nextMischief = t + 8000; return; }                 // смирная (дикость ниже порога) -> не пакостит, перепроверим позже
+    nextMischief = t + iv + Math.random() * iv * 0.3;            // дикость задаёт интервал (+джиттер)
+    glassCrack();
   }
   function crackSVG() {
     const cx = 60, cy = 60, n = 8; let lines = '';
@@ -755,36 +841,11 @@
     setTimeout(() => el.classList.add('fade'), 1900);
     setTimeout(() => { el.remove(); busy = false; setMode('wander'); }, 2700);
   }
-  function pickTextNode(el) {
-    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (nd) => /\S/.test(nd.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });
-    const nodes = []; let nd; while ((nd = w.nextNode())) nodes.push(nd);
-    return nodes.length ? nodes[Math.floor(Math.random() * nodes.length)] : null;
-  }
-  function stealLetter() {
-    const texts = [...document.querySelectorAll('article[data-testid="tweet"] [data-testid="tweetText"]')].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.top > VIEW_PAD_TOP && r.bottom < window.innerHeight - VIEW_PAD_BOTTOM; });
-    if (!texts.length) return;
-    const el = texts[Math.floor(Math.random() * texts.length)], node = pickTextNode(el); if (!node) return;
-    const s = node.nodeValue; let idx = -1; const start = Math.floor(Math.random() * s.length);
-    for (let k = 0; k < s.length; k++) { const i = (start + k) % s.length; if (/\S/.test(s[i])) { idx = i; break; } }
-    if (idx < 0) return;
-    const range = document.createRange(); range.setStart(node, idx); range.setEnd(node, idx + 1);
-    const r = range.getBoundingClientRect(); if (!r || r.width === 0) return;
-    busy = true;
-    const cs = getComputedStyle(el), ch = document.createElement('div');
-    ch.className = 'twtr-pet-letter'; ch.textContent = s[idx];
-    ch.style.left = r.left + 'px'; ch.style.top = r.top + 'px';
-    ch.style.fontFamily = cs.fontFamily; ch.style.fontSize = cs.fontSize; ch.style.fontWeight = cs.fontWeight; ch.style.lineHeight = cs.lineHeight; ch.style.color = cs.color;
-    root.appendChild(ch);
-    const petX = px + PET_W * 0.3, petY = py + 6;
-    requestAnimationFrame(() => { ch.style.transform = `translate(${petX - r.left}px, ${petY - r.top}px) rotate(360deg) scale(1.5)`; });
-    setTimeout(() => { setMode('happy'); happyUntil = now() + 700; }, 350);
-    setTimeout(() => { ch.style.transform = 'translate(0,0) rotate(0deg) scale(1)'; }, 1500);
-    setTimeout(() => { ch.remove(); busy = false; setMode('wander'); }, 2200);
-  }
 
   // ---------- кормление ----------
   function feedEat() {
     busy = true;
+    playEmote('feed_want', 540);   // пока мясо летит — предвкушение (хочет есть), затем chomp на 520мс
     // мясо прилетает снизу к криперу
     const meat = document.createElement('img');
     try { meat.src = chrome.runtime.getURL('src/items/meat.png'); } catch (_) {}
@@ -793,6 +854,11 @@
     meat.style.left = startX + 'px'; meat.style.top = startY + 'px';
     root.appendChild(meat);
     requestAnimationFrame(() => { meat.style.transform = `translate(${(px + PET_W / 2 - 18) - startX}px, ${(py + 8) - startY}px) scale(1)`; });
+    if (CAT_SETS.eat) {   // полноценная анимация еды из манифеста: мясо прилетело -> ест ножку кадрами (грызёт, облизывается)
+      setTimeout(() => { meat.remove(); playEmote('eat', 1900); bubble.textContent = '😋'; bubble.classList.add('show'); }, 520);
+      setTimeout(() => { bubble.classList.remove('show'); busy = false; setMode('wander'); }, 2450);
+      return;
+    }
     setTimeout(() => { setMode('happy'); happyUntil = now() + 900; bubble.textContent = '😋'; pet.classList.add('is-chomp'); }, 520);
     setTimeout(() => { meat.remove(); pet.classList.remove('is-chomp'); }, 950);
     setTimeout(() => { busy = false; setMode('wander'); }, 1200);
@@ -834,7 +900,7 @@
     const bvy = Math.abs(peakVy) > Math.abs(dragVy) ? peakVy : dragVy;
     vx = clamp(bvx * gain, -vmax, vmax);                 // инерция броска: горизонталь
     vy = clamp(bvy * gain, -vmax, 24 + 28 * power);      // вертикаль (вверх можно сильно подкинуть)
-    thrown = true;                                       // дальше physics доводит до приземления (учитывая инерцию)
+    thrown = (Math.abs(vx) > 3 || Math.abs(vy) > 3);     // реальный бросок -> летит по инерции; мягко поставили/подсадили (скорость ~0) -> не бросок (на видео-странице watching доведёт под видео)
     if (pendingMad) { pendingMad = false; playEmote('angry', 3000); say(pick(MAD_CALLS), 1900); }   // забрали от кино -> ЗЛИТСЯ; эмоция стартует на ОТПУСКАНИИ (иначе за время долгого перетаскивания окно успеет истечь и злость не покажется)
     saveState();
   });
@@ -1336,6 +1402,7 @@
     setTxt('#twtr-cap-care-tx', t.care);
     setTxt('#twtr-cap-dl-tx', t.dl);
     setTxt('#twtr-cap-games-tx', t.games);
+    setTxt('#twtr-cap-reply-tx', t.replier);
     setTxt('#twtr-cap-notes-tx', t.notes);
     setTxt('#twtr-dlg-save', t.save);
     setTxt('#twtr-dlg-lang', t.other);
@@ -1418,6 +1485,11 @@
     else if (which === 'care') buildCareSection();
     else if (which === 'dl') buildVideoSection();
     else if (which === 'games') buildGamesSection();
+    else if (which === 'reply') {                         // автореплаер: панель строит systems/replier.js
+      const box = root.querySelector('#twtr-dlg-reply');
+      if (Yasia.replier && Yasia.replier.renderPanel) Yasia.replier.renderPanel(box);
+      else if (box) box.innerHTML = `<div class="twtr-dlg-empty">${tr().replierOff || ''}</div>`;   // флаг выключен/система упала -> честный отказ
+    }
     else if (Yasia.flags && !Yasia.flags.enabled('notes')) {   // флаг выключен/система упала -> честный отказ (как у скачивания), а не мёртвая панель
       const l = root.querySelector('#twtr-dlg-list'); if (l) l.innerHTML = `<div class="twtr-dlg-empty">${tr().notesOff || 'Заметки выключены.'}</div>`;
     }
@@ -1528,6 +1600,7 @@
       e <= ENERGY_LOW ? t.sSleepy : (e < ENERGY_TIRED ? t.sTired : t.sEnergetic),
       b >= BOND_BESTIE ? t.sBestie : (b >= BOND_FRIEND ? t.sFriend : t.sShy),
     ];
+    if (sickAt) parts.unshift(t.sSickNow);   // болезнь — первой строкой (важнее всего)
     return t.careNow + ': ' + parts.join(', ');
   }
   function renderCareStatus() { const el = root.querySelector('#twtr-care-stat'); if (el) el.textContent = careStatusText(); }
@@ -1536,7 +1609,7 @@
     const t = tr();
     const acts = [
       ['feed', '🍖', t.aFeed], ['pet', '✋', t.aPet], ['play', '🎾', t.aPlay], ['call', '📣', t.aCall],
-      ['help', '🆘', t.aHelp], ['hide', '🙈', t.aHide], ['wake', '⏰', t.aWake],
+      ['help', '🆘', t.aHelp], ['hide', '🙈', t.aHide], ['wake', '⏰', t.aWake], ['heal', '💊', t.aHeal],
     ];
     dlgCare.innerHTML = acts.map(([k, ic, lb]) => `<button class="twtr-care-btn" data-act="${k}" type="button"><span class="twtr-care-ic">${ic}</span><span>${lb}</span></button>`).join('') + `<div class="twtr-care-stat" id="twtr-care-stat"></div>`;
     dlgCare.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); careAction(b.getAttribute('data-act')); }));
@@ -1603,6 +1676,8 @@
     try { window.postMessage({ __yasiaCollect: true }, '*'); } catch (_) {}
     const ask = root.querySelector('#twtr-dlg-ask'); if (ask) ask.value = '';
     const ai = root.querySelector('#twtr-dlg-ai'); if (ai) ai.hidden = true;
+    const rw = root.querySelector('#twtr-skill-reply-wrap');   // автореплаер виден только при включённом флаге (по умолчанию выключен)
+    if (rw) rw.hidden = !(Yasia.flags && Yasia.flags.enabled('replier') && Yasia.replier);
     closeAllSkills(); renderDlgLang(); renderNotes(); filterCaps('');
     dialog.classList.add('show'); positionDialog();
   }
@@ -1616,6 +1691,7 @@
   root.querySelector('#twtr-cap-dl').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('dl'); });
   root.querySelector('#twtr-cap-games').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('games'); });
   root.querySelector('#twtr-cap-notes').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('notes'); });
+  root.querySelector('#twtr-cap-reply').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('reply'); });
   // «мозг» (ai.js) распознал намерение в поле «спроси» -> открываем нужный навык прямо в окне Яси (маршрутизация запроса к её инструментам)
   try { Yasia.events.on('cap:open', (p) => {
     const which = p && p.which; if (!which) return;
@@ -1625,8 +1701,8 @@
   }); } catch (_) {}
   // режимы поведения (страж): кнопки в настройках; подсветка активного + тултип с названием
   function renderModeRow() {
-    const t = tr(); const names = { game: t.mGame, calm: t.mCalm, work: t.mWork, ai: t.mAi, safe: t.mSafe };
-    const cur = Yasia.guard ? Yasia.guard.mode() : 'game';
+    const t = tr(); const names = { normal: t.mNormal, calm: t.mCalm };
+    const cur = Yasia.guard ? Yasia.guard.mode() : 'normal';
     root.querySelectorAll('.twtr-mode-btn').forEach((b) => {
       const m = b.getAttribute('data-mode');
       b.classList.toggle('on', m === cur);
@@ -1726,14 +1802,17 @@
   function tryClimb(t) { engine.tryClimb(t); }
   function walkAlong(t) {
     if (resting) { running = false; return; }            // спит/без сил — стоит на месте
-    if (t > nextRunDecide) {
-      nextRunDecide = t + 3500 + Math.random() * 4000;
-      const canRun = currentEnergy() >= ENERGY_TIRED && currentMood() > MOOD_BAD;   // бегает только бодрая и в норм. настроении
-      const chance = ambient === 'playful' ? 0.34 : (canRun ? 0.12 : 0);
-      running = Math.random() < chance;
-      runUntil = running ? t + 900 + Math.random() * 1200 : 0;
+    if (t < forceRunUntil) { running = true; }           // превью «Бег»: держим бег, не трогая общие таймеры авто-решений
+    else {
+      if (t > nextRunDecide) {
+        nextRunDecide = t + 3500 + Math.random() * 4000;
+        const canRun = currentEnergy() >= ENERGY_TIRED && currentMood() > MOOD_BAD;   // бегает только бодрая и в норм. настроении
+        const chance = ambient === 'playful' ? 0.34 : (canRun ? 0.12 : 0);
+        running = Math.random() < chance;
+        runUntil = running ? t + 900 + Math.random() * 1200 : 0;
+      }
+      if (running && t > runUntil) running = false;
     }
-    if (running && t > runUntil) running = false;
     const sp = SPEED * speedMul * userSpeed * (running ? RUN_MUL : 1);
     const dx = walkTargetX - px;
     if (Math.abs(dx) <= sp) {
@@ -1790,13 +1869,13 @@
     if (standLedge) {
       falling = false; thrown = false;
       py = standLedge.y - PET_H;
-      if (watchHelp) { walkTargetX = px; running = false; }   // просит подсадить -> стоит на месте, не блуждает и не лезет
+      if (watchHelp) { running = false; }   // просит подсадить -> не бежит; КУДА идти (под видео) задаёт watching-ветка, не фиксируем на месте (иначе зависает где попало)
       else if (watchClimbing) { running = false; }            // лезет к видео -> walkTargetX задаёт поиск пути (watchClimbDecide), не перетираем тут
       else if (gameClimb) { running = false; }                // лезет к игровой цели -> walkTargetX задаёт gameClimbDecide
       walkAlong(t);
       if (watchClimbing) { if (t > nextJumpDecide) { nextJumpDecide = t + 320; watchClimbDecide(t); } }   // поиск пути к видео: прыжок к следующей полке маршрута (или watchStuck)
       else if (gameClimb) { if (t > nextJumpDecide) { nextJumpDecide = t + 300; gameClimbDecide(t); } }   // лазание к игровой цели: жадный прыжок вверх к точке
-      else if (!watchHelp && t > nextJumpDecide) { nextJumpDecide = t + 1000 + Math.random() * 1800; if (!resting) tryClimb(t); }   // живой темп прыжков по блокам (свободный платформер); resting (сон/без сил) -> не скачет
+      else if (!watchHelp && t > nextJumpDecide && t >= forceRunUntil) { nextJumpDecide = t + 1000 + Math.random() * 1800; if (!resting) tryClimb(t); }   // живой темп прыжков по блокам; во время превью «Бег» (forceRunUntil) — без авто-прыжков; resting -> не скачет
       const cxf = px + PET_W / 2;
       if (cxf < standLedge.x1 - 2 || cxf > standLedge.x2 + 2) standLedge = null;   // сошла с края опоры -> падает
     } else {                                            // падаем/летим: инерция броска + гравитация + ловля полки — в движке (core/platformer.js fallStep)
@@ -1834,6 +1913,14 @@
   // ---------- ручная проверка действий (кнопки в настройках) ----------
   function startTest(kind) {
     testDir = (kind === 'left') ? -1 : 1;
+    if (kind === 'emo:run') {                    // «Бег» — настоящий бег С ФИЗИКОЙ: бежит к дальнему краю, сбежав с края блока — ПАДАЕТ, приземляется, бежит дальше
+      testKind = 'run'; testUntil = now() + 3600; forceRunUntil = testUntil; running = true;
+      setMode('idle'); climbing = false; jumping = false;
+      testDir = (px > (window.innerWidth - PET_W) / 2) ? -1 : 1;
+      walkTargetX = testDir > 0 ? window.innerWidth - PET_W : 0;   // цель — дальний край (физику ведёт platformerTick)
+      const re = EMOTIONS.find((x) => x.key === 'run'); say(re ? re.emo + ' ' + re.name : '🏃 Бег', 1500);
+      return;
+    }
     if (kind.indexOf('emo:') === 0) {            // тест эмоции: проигрываем её кадры на месте
       const st = kind.slice(4); testKind = 'emo'; testEmo = st; testUntil = now() + 3400;
       setMode('idle'); climbing = false; jumping = false;
@@ -1861,8 +1948,16 @@
     else if (kind === 'idle') { setMode('idle'); }
     else { say(testDir < 0 ? tr().sGoLeft : tr().sGoRight, 1400); }
   }
-  function runTest(t) {
+  function runTest(t, dt) {
     if (testKind === 'jump') { updateJump(t); return; }
+    if (testKind === 'run') {                     // настоящий бег: forceRunUntil держит бег, platformerTick роняет с края блока и приземляет
+      if (standLedge) {                            // на опоре: цель — дальний край по направлению (после приземления бежит дальше), разворот только у края экрана
+        if (px <= 2) testDir = 1; else if (px >= window.innerWidth - PET_W - 2) testDir = -1;
+        walkTargetX = testDir > 0 ? window.innerWidth - PET_W : 0;
+      }
+      platformerTick(t, dt);
+      return;
+    }
     if (testKind === 'left' || testKind === 'right') {
       face = testDir; px = clamp(px + testDir * SPEED * userSpeed * 1.3, 0, window.innerWidth - PET_W);
     } else if (testKind === 'climb') {
@@ -1887,7 +1982,7 @@
     if (location.href !== lastHref) { lastHref = location.href; if (gameActive) { try { Yasia.events.emit('game:stop'); } catch (_) {} } resetToWander(); }
 
     runMul = running ? RUN_MUL : 1;
-    if (testKind && t >= testUntil && !jumping) { testKind = null; climbing = false; }
+    if (testKind && t >= testUntil && !jumping) { testKind = null; climbing = false; running = false; forceRunUntil = 0; walkTargetX = px; }   // конец теста: сбрасываем бег и флаг превью, встаём на месте (общие таймеры не трогали)
 
     if (dragging) {
       px = clamp(mouseX - dragOffX, 0, window.innerWidth - PET_W);
@@ -1906,8 +2001,8 @@
       gameTick(t, dt);
     } else if (downloading) {                            // качается видео -> стоит на месте и горит (огненная форма)
       if (mode === 'happy' && t > happyUntil) setMode('idle');
-    } else if (watching && watchAnim()) {                // играет видео -> идёт/лезет под него и смотрит; застряв — просит подсадить
-      thrown = false; vx = 0;                            // смотрит видео -> гасим инерцию броска (после «подсадить» не улетает вбок)
+    } else if (watching && watchAnim() && !thrown) {     // играет видео -> идёт/лезет под него и смотрит; застряв — просит подсадить. РЕАЛЬНЫЙ бросок (thrown) не перехватываем — пусть долетит, потом вернётся к видео
+      thrown = false; vx = 0;                            // (страховка) мягко поставленную у видео не отшвыриваем вбок
       const wasClimbing = watchClimbing;                 // детект ВХОДА в режим лазания (сброс ниже стирает флаг каждый кадр)
       watchClimbing = false;                             // включается только в ветке лазания ниже (иначе обычный платформер не лезет целенаправленно)
       const v = playingVideo();
@@ -1919,7 +2014,7 @@
         tX = clamp(vcx - PET_W / 2, 0, window.innerWidth - PET_W);
         tY = clamp(r.bottom - PET_H, 0, window.innerHeight - PET_H);
         const floorPy = window.innerHeight - PLAT_FLOOR - PET_H;
-        const standPy = (standLedge && !falling) ? standLedge.y - PET_H : floorPy;   // мой текущий уровень ног (полка под ногами или пол)
+        const standPy = (standLedge && !falling) ? standLedge.y - PET_H : py;   // мой текущий уровень ног (полка под ногами, иначе ТЕКУЩЕЕ положение — не пол: иначе reachable дёргается покадрово, когда reachable-ветка зануляет standLedge -> спин)
         reachable = tY >= Math.min(standPy, floorPy) - PLAT_JUMP_UP * 1.3;   // низ видео в пределах прыжка от ПОЛА или от ТЕКУЩЕЙ полки -> подходит вбок и допрыгивает (уже на высоте видео -> не лезет дальше и не просит подсадить); высоко над головой -> лезет по полкам вверх
       } else if (isTest) { tX = clamp((window.innerWidth - PET_W) / 2, 0, window.innerWidth - PET_W); tY = window.innerHeight - PET_H - 6; }   // тест без видео -> низ-центр экрана
       const sp = SPEED * userSpeed * 2.6;
@@ -1942,7 +2037,8 @@
         if (!jumping && hasVid && Math.abs(cx2 - vcx) <= Math.max(PET_W * 0.6, 70) && Math.abs(foot2 - vBottom) <= Math.max(PET_H * 0.5, 80)) {
           watchArrived = true; watchStuck = false; watchHelp = false;   // долезла под видео (или её поднесли рукой) -> садится (попкорн)
         } else if (watchStuck && standLedge && !jumping && watchStuckT && t - watchStuckT > 900) {
-          watchHelp = true;                               // долезла на САМУЮ БЛИЖНЮЮ достижимую полку и застряла НАДОЛГО (дебаунс 900мс отсекает мерцание снимка полок по пути) -> стоит и ПРОСИТ подсадить
+          watchHelp = true;                               // долезла на САМУЮ БЛИЖНЮЮ достижимую полку и застряла НАДОЛГО (дебаунс 900мс отсекает мерцание снимка полок по пути) -> ПРОСИТ подсадить
+          if (hasVid) walkTargetX = clamp(vcx - PET_W / 2, standLedge.x1, standLedge.x2 - PET_W);   // сперва дойти НОГАМИ (walk) под видео по своей полке, просить уже оттуда (а не застывать где попало)
           if (hasVid) face = vcx < cx2 ? -1 : 1;          // смотрит в сторону видео
           if (t > watchHelpSayT) { watchHelpSayT = t + 6000; say(pick(SP('lift')), 2200); }   // изредка просит подсадить (троттл)
         } else {
@@ -1968,7 +2064,7 @@
     } else if (thrown) {
       platformerTick(t, dt);                             // летит по инерции и падает, пока не приземлится
     } else if (testKind && t < testUntil) {
-      runTest(t);
+      runTest(t, dt);
     } else if (!roam) {
       if (mode === 'happy' && t > happyUntil) setMode('idle');
       // стоит на месте (ходьба выключена в настройках); только перетаскивание
@@ -1990,15 +2086,29 @@
       setTimeout(() => { if (bubble.textContent === '🍖') bubble.classList.remove('show'); }, 1600);
     }
 
+    // сквош-приземление: следим за пиком высоты полёта; глубокое падение -> короткий land (присед + пыль из манифеста)
+    const airNow = thrown || falling || jumping;
+    if (airNow) fellPeakY = (fellPeakY == null) ? py : Math.min(fellPeakY, py);
+    else if (fellPeakY != null) {
+      const dropPx = py - fellPeakY;
+      if (dropPx > 240 && CAT_SETS.land && !gameActive && !watching && !dragging && !busy && t > testUntil) playEmote('land', 640);
+      fellPeakY = null;
+    }
     updateHop();
+    if (isFramed() && dragging && CAT_SETS.drag) {   // несут «за шкирку» -> кадры болтающихся ног (иначе — прежний замерший idle)
+      const dm = emoMs('drag') || 170;
+      if (catAct !== 'drag') { catAct = 'drag'; catIdx = 0; catStep = 0; showFrame(CAT_SETS.drag[0]); lastFrameT = t; }
+      else if (CAT_SETS.drag.length > 1 && t - lastFrameT > dm) { lastFrameT = t; catIdx = (catIdx + 1) % CAT_SETS.drag.length; showFrame(CAT_SETS.drag[catIdx]); }
+    }
     if (isFramed() && !dragging) {        // переключаем слой-кадр по состоянию (без смены src -> без мерцания)
       const mv = pet.classList.contains('is-moving');
       let setName, ms;
       if (downloading) { const hasFire = !!CAT_SETS.fire; setName = hasFire ? 'fire' : 'angry'; ms = hasFire ? CAT_FIRE_MS : emoMs('angry'); }   // качается видео -> огненная форма у героя с fire в манифесте, иначе злость
       else if (testKind === 'emo' && t < testUntil) { setName = testEmo; ms = emoMs(testEmo) / userSpeed; }   // тест/действие эмоции (скорость — общий ползунок)
       else if (watching && watchAnim() && watchArrived) { setName = watchAnim(); ms = emoMs(setName); }   // села под видео -> попкорн (выше mv: не мигает ходьбой при езде за скроллом)
+      else if (thrown && CAT_SETS.tumble) { setName = 'tumble'; ms = emoMs('tumble'); }   // бросили -> кувырок в полёте (спрайт из манифеста)
       else if (jumping && !engine.isDrop()) { setName = 'jump'; ms = CAT_JUMP_MS; }   // дуга прыжка вверх/вбок (ВЫШЕ happy: иначе «помочь» не покажет прыжок)
-      else if (falling || jumping) { setName = 'fall'; ms = CAT_FALL_MS; }     // падение ИЛИ спуск-дроп (jumpDrop): кадры падения. У Яси fall=1 кадр (поза climb), у Noema 5
+      else if (falling || jumping) { setName = 'fall'; ms = CAT_FALL_MS; }     // падение ИЛИ спуск-дроп (jumpDrop): кадры падения. У Яси fall=1 кадр (поза climb) — НАМЕРЕННО, не «подключать» fall0-4
       else if (mode === 'happy') { setName = happyKind; ms = happyKind === 'wave' ? CAT_WAVE_MS : emoMs('happy'); }  // радость: подпрыг (happy) или приветствие (wave)
       else if (climbing && mv) { setName = 'climb'; ms = CAT_CLIMB_MS; }   // лезет вверх
       else if (mv) { setName = (running ? 'run' : 'walk'); ms = (running ? CAT_RUN_MS : CAT_WALK_MS) / userSpeed; }   // бег -> кадры бега; медленнее идёт -> медленнее кадры
@@ -2112,20 +2222,37 @@
   const isTwitter = (() => { const h = location.hostname; return h === 'x.com' || h.endsWith('.x.com') || h === 'twitter.com' || h.endsWith('.twitter.com'); })();
 
   try {
-    Yasia.storage.syncGet({ enabled: true, paused: false, hero: 'catgirl', scale: 1, roam: true, walkSpeed: 1, throwPower: 1 }, (s) => { enabled = s.enabled; paused = !!s.paused; hero = s.hero; userScale = s.scale || 1; roam = s.roam; userSpeed = s.walkSpeed || 1; throwMul = (typeof s.throwPower === 'number') ? s.throwPower : 1; applyEnabled(); applyHero(); applyScale(); applySpeed(); applyInertia(); applyRoam(); applyPaused(); });
+    Yasia.storage.syncGet({ enabled: true, paused: false, hero: 'catgirl', scale: 1, roam: true, walkSpeed: 1, throwPower: 1, yasiaWildMul: 1, yasiaAnimOff: {} }, (s) => { enabled = s.enabled; paused = !!s.paused; hero = (s.hero === 'noema') ? 'catgirl' : s.hero; userScale = s.scale || 1; roam = s.roam; userSpeed = s.walkSpeed || 1; throwMul = (typeof s.throwPower === 'number') ? s.throwPower : 1; wildMul = (typeof s.yasiaWildMul === 'number') ? s.yasiaWildMul : 1; animOff = s.yasiaAnimOff || {}; applyEnabled(); applyHero(); applyScale(); applySpeed(); applyInertia(); applyRoam(); applyPaused(); });
     Yasia.storage.localGet({
       hunger: 0, hungerAt: Date.now(), xp: 0,
       energy: ENERGY_START, energyAt: Date.now(), energyResting: false, bond: BOND_START, bondAt: Date.now(), moodBias: 0, moodBiasAt: Date.now(),
+      sick: 0, streak: null,
     }, (s) => {
       hungerBase = s.hunger; hungerAt = s.hungerAt; xp = s.xp;
       energyBase = s.energy; energyAt = s.energyAt; energyResting = !!s.energyResting; bondBase = s.bond; bondAt = s.bondAt; moodBiasBase = s.moodBias; moodBiasAt = s.moodBiasAt;
+      sickAt = s.sick || 0;
       resting = energyResting;   // восстанавливаем флаг покоя -> гистерезис и setEnergyResting примирят знак корректно
       applyAbilities(); setAmbient(computeAmbient());
+      // ежедневный стрик: первый визит дня -> «День N вместе» + XP-бонус (растёт со стриком до потолка)
+      const day = new Date(); const dayStr = day.toISOString().slice(0, 10);
+      const yest = new Date(day.getTime() - 86400000).toISOString().slice(0, 10);
+      const st = s.streak || { count: 0, last: '' };
+      if (st.last !== dayStr) {
+        const count = st.last === yest ? st.count + 1 : 1;
+        Yasia.storage.localSet({ streak: { count, last: dayStr } });
+        if (count > 1 && STREAK) {
+          gainXp(Math.min(STREAK.xpPerDay * count, STREAK.xpCap));
+          setTimeout(() => {   // даём спрайту загрузиться, потом празднуем стрик
+            playEmote(CAT_SETS.levelup ? 'levelup' : 'happy', 2400);
+            say((tr().sStreak || '🔥 День {n} вместе!').replace('{n}', count), 2600);
+          }, 4200);
+        }
+      }
     });
     Yasia.storage.onChanged((ch) => {
       if (ch.enabled) { enabled = ch.enabled.newValue; applyEnabled(); }
       if (ch.paused) { paused = !!ch.paused.newValue; applyPaused(); }
-      if (ch.hero) { hero = ch.hero.newValue; applyHero(); }
+      if (ch.hero) { hero = (ch.hero.newValue === 'noema') ? 'catgirl' : ch.hero.newValue; applyHero(); }
       if (ch.scale) { userScale = ch.scale.newValue || 1; applyScale(); }
       if (ch.walkSpeed) { userSpeed = ch.walkSpeed.newValue || 1; applySpeed(); }
       if (ch.throwPower) { throwMul = (typeof ch.throwPower.newValue === 'number') ? ch.throwPower.newValue : 1; applyInertia(); }
@@ -2144,7 +2271,16 @@
       if (ch.bondAt) bondAt = ch.bondAt.newValue;
       if (ch.moodBias) moodBiasBase = ch.moodBias.newValue;
       if (ch.moodBiasAt) moodBiasAt = ch.moodBiasAt.newValue;
+      if (ch.sick) { sickAt = ch.sick.newValue || 0; nextAmbient = 0; }   // болезнь/лечение из другой вкладки/попапа
+      if (ch.yasiaWildMul) wildMul = (typeof ch.yasiaWildMul.newValue === 'number') ? ch.yasiaWildMul.newValue : 1;   // ползунок вредности (попап)
+      if (ch.yasiaAnimOff) animOff = ch.yasiaAnimOff.newValue || {};      // тумблеры анимаций (попап)
       if (ch.feedPing) feedEat();   // покормили из попапа (статы попап уже записал -> придут своими ключами выше)
+      if (ch.yasiaCareSignal && ch.yasiaCareSignal.newValue) {            // сигнал заботы из попапа: {act:'pet'|'play'|'wake', ts}
+        const sig = ch.yasiaCareSignal.newValue;                          // статы попап УЖЕ записал (придут ключами выше) -> здесь ТОЛЬКО реакция, без повторного ACT_*
+        if (sig.act === 'pet') playEmote('pet_purr', 2200);
+        else if (sig.act === 'play') playEmote(CAT_SETS.pounce ? 'pounce' : 'like_proud', 2600);
+        else if (sig.act === 'wake') { awakeUntil = now() + 20000; nextAmbient = 0; playEmote('wake', 2400); }   // окно бодрости + мгновенный пересчёт ambient (снимает гистерезис сна)
+      }
     });
   } catch (_) {}
 

@@ -399,7 +399,7 @@
           const modelsOpts = ((pcfg.models) || []).map((m) => '<option value="' + m + '"></option>').join('');
           const provTabs =
             '<div class="twtr-ai-prov">' +
-              '<button class="twtr-ai-prov-b' + (prov === 'hermes' ? ' on' : '') + '" data-p="hermes" type="button"><span class="twtr-ai-prov-ic">' + (LOGOS.hermes || '') + '</span>Hermes</button>' +
+              '<button class="twtr-ai-prov-b twtr-ai-prov-b--soon' + (prov === 'hermes' ? ' on' : '') + '" data-p="hermes" type="button" disabled title="Soon">' + '<span class="twtr-ai-prov-ic">' + (LOGOS.hermes || '') + '</span>Hermes</button>' +
               '<button class="twtr-ai-prov-b' + (prov === 'gpt' ? ' on' : '') + '" data-p="gpt" type="button"><span class="twtr-ai-prov-ic">' + (LOGOS.gpt || '') + '</span>GPT</button>' +
             '</div>';
           const modeTabs = prov === 'gpt' ?
