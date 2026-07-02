@@ -58,6 +58,7 @@
   let HERO_BEHAVIORS = [];                          // библиотека автономных поведений из манифеста героя (данные, не код) -> core/behavior.pickBehavior
   const recentBeh = {};                             // id поведения -> когда игралось (cooldown/анти-повтор селектора)
   let fellPeakY = null;                             // самая высокая точка текущего полёта -> сквош-приземление (land) при глубоком падении
+  let pendingEmote = null;                          // эмоция, отложенная до приземления: ПАДЕНИЕ В ПРИОРИТЕТЕ — сначала земля, потом чувства ({emo, ms, line, sayMs})
   let ambient = null, ambientEmo = null, resting = false;   // текущее состояние заботы (null -> первый setAmbient не короткозамкнётся)
   let happyKind = 'happy';   // что показывать в mode==='happy': 'happy' (подпрыг от ласки/еды) или 'wave' (намеренное приветствие)
   let nextAmbient = 0, nextCarePersist = 0, nextAmbSpeak = 0, nextAct = 0, awakeUntil = 0, nextIdleEmote = 0;
@@ -590,7 +591,10 @@
   }
   function hide() { hiding = true; pet.classList.add('is-hiding'); setMode('idle'); say(tr().sHide, 1600); }
   function unhide() { if (!hiding) return; hiding = false; pet.classList.remove('is-hiding'); setMode('happy'); happyUntil = now() + 900; }
-  function playEmote(emo, ms) { testKind = 'emo'; testEmo = emo; testUntil = now() + (ms || 2600); setMode('idle'); climbing = false; jumping = false; }
+  function playEmote(emo, ms) {
+    if (thrown || falling || jumping) { pendingEmote = { emo, ms }; return; }   // в полёте эмоций нет: физика доиграет, эмоция стрельнёт на земле (блок в tick)
+    testKind = 'emo'; testEmo = emo; testUntil = now() + (ms || 2600); setMode('idle'); climbing = false; jumping = false;
+  }
   function doFeed() { applyAct(ACT_FEED); saveCare(); feedEat(); }
   function doPet() { applyAct(ACT_PET); saveCare(); playEmote('pet_purr', 2200); say(currentBond() >= BOND_FRIEND ? pick(SP('bond')) : tr().sPetMur, 1600); }
   function doPlay() {
@@ -641,6 +645,7 @@
     closeDialog();
     gameActive = true; gameId = id || null; gameTargetX = px; gameRun = false; gameVy = 0; gameFloor = true; gameClimb = false;
     thrown = false; jumping = false; climbing = false; falling = false; vy = 0; vx = 0; testKind = null; running = false;
+    pendingEmote = null;   // игра начинается с чистого листа: старая отложенная злость не должна выстрелить посреди раунда
     pet.style.opacity = '1'; pet.style.pointerEvents = '';   // на случай, если прошлая игра прятала питомца
     setMode('idle');
     return true;
@@ -901,7 +906,7 @@
     vx = clamp(bvx * gain, -vmax, vmax);                 // инерция броска: горизонталь
     vy = clamp(bvy * gain, -vmax, 24 + 28 * power);      // вертикаль (вверх можно сильно подкинуть)
     thrown = (Math.abs(vx) > 3 || Math.abs(vy) > 3);     // реальный бросок -> летит по инерции; мягко поставили/подсадили (скорость ~0) -> не бросок (на видео-странице watching доведёт под видео)
-    if (pendingMad) { pendingMad = false; playEmote('angry', 3000); say(pick(MAD_CALLS), 1900); }   // забрали от кино -> ЗЛИТСЯ; эмоция стартует на ОТПУСКАНИИ (иначе за время долгого перетаскивания окно успеет истечь и злость не покажется)
+    if (pendingMad) { pendingMad = false; pendingEmote = { emo: 'angry', ms: 3000, line: pick(MAD_CALLS), sayMs: 1900 }; }   // забрали от кино -> ЗЛИТСЯ, но ПОСЛЕ приземления: физика решит на ближайшем тике, стоит она или летит (на земле сыграет сразу, ~1 кадр)
     saveState();
   });
 
@@ -955,6 +960,7 @@
     if (paused) {
       if (gameActive) { try { Yasia.events.emit('game:stop'); } catch (_) {} }   // игру честно завершаем (иначе зомби/мясо зависнут на экране)
       running = false; jumping = false; climbing = false; falling = false; thrown = false; vx = 0; vy = 0;
+      pendingEmote = null;   // пауза гасит и отложенную эмоцию: после снятия паузы внезапная злость выглядела бы беспричинной
       pet.classList.remove('is-moving', 'is-jump');
       if (mode !== 'happy') setMode('idle');
     } else {
@@ -2089,10 +2095,17 @@
     // сквош-приземление: следим за пиком высоты полёта; глубокое падение -> короткий land (присед + пыль из манифеста)
     const airNow = thrown || falling || jumping;
     if (airNow) fellPeakY = (fellPeakY == null) ? py : Math.min(fellPeakY, py);
-    else if (fellPeakY != null) {
-      const dropPx = py - fellPeakY;
-      if (dropPx > 240 && CAT_SETS.land && !gameActive && !watching && !dragging && !busy && t > testUntil) playEmote('land', 640);
-      fellPeakY = null;
+    else {
+      if (fellPeakY != null) {
+        const dropPx = py - fellPeakY;
+        if (dropPx > 240 && CAT_SETS.land && !gameActive && !watching && !dragging && !busy && t > testUntil) playEmote('land', 640);
+        fellPeakY = null;
+      }
+      if (pendingEmote && !dragging && !paused && t >= testUntil) {   // отложенная эмоция играет ТОЛЬКО на земле (и после сквоша land) — падение в приоритете
+        const pe = pendingEmote; pendingEmote = null;
+        playEmote(pe.emo, pe.ms);
+        if (pe.line) say(pe.line, pe.sayMs || 1900);
+      }
     }
     updateHop();
     if (isFramed() && dragging && CAT_SETS.drag) {   // несут «за шкирку» -> кадры болтающихся ног (иначе — прежний замерший idle)
