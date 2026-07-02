@@ -155,6 +155,47 @@ async function fetchText(msg) {
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
 
+// ---------- лента автора по @нику через официальную синдикацию Twitter (embed-инфраструктура) ----------
+// Без API-ключа и без сессии пользователя: HTML отдаёт <script id="__NEXT_DATA__"> с JSON, внутри
+// props.pageProps.timeline.entries (до ~100 твитов автора). Fetch отсюда (SW), не из content script — CORS.
+// ВАЖНО (проверено вживую): порядок entries НЕ гарантирован — первым может стоять закреплённый твит,
+// а кэш синдикации бывает несвежим; несуществующий ник = 200 с пустым entries. Сортируем по дате сами.
+async function syndTimeline(msg) {
+  try {
+    const handle = String((msg && msg.handle) || '').trim().replace(/^@/, '');
+    if (!/^[A-Za-z0-9_]{1,15}$/.test(handle)) return { ok: false, error: 'bad handle' };
+    const ctrl = new AbortController();
+    const to = setTimeout(() => { try { ctrl.abort(); } catch (_) {} }, msg.timeoutMs || 15000);
+    let resp;
+    try { resp = await fetch('https://syndication.twitter.com/srv/timeline-profile/screen-name/' + handle, { credentials: 'omit', signal: ctrl.signal }); }
+    finally { clearTimeout(to); }
+    if (!resp.ok) return { ok: false, status: resp.status, error: 'HTTP ' + resp.status };
+    const html = await resp.text();
+    const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!m) return { ok: false, error: 'no __NEXT_DATA__' };
+    let data; try { data = JSON.parse(m[1]); } catch (_) { return { ok: false, error: 'bad json' }; }
+    const entries = (((((data || {}).props || {}).pageProps || {}).timeline || {}).entries) || [];
+    const posts = [];
+    for (const e of entries) {
+      const tw = e && e.content && e.content.tweet;                      // entries[].type всегда 'tweet'
+      if (!tw || !tw.id_str) continue;
+      posts.push({
+        id: tw.id_str,
+        text: String(tw.full_text || tw.text || ''),
+        createdTs: Math.floor(Date.parse(tw.created_at || '') / 1000) || 0,   // 'Tue Jun 30 19:09:52 +0000 2026' -> сек
+        isReply: !!(tw.in_reply_to_status_id_str || tw.in_reply_to_screen_name),
+        isRepost: !!tw.retweeted_status || /^RT @/.test(tw.full_text || ''),  // флаг tw.retweeted при этом false — не верить ему
+        url: 'https://x.com' + (tw.permalink || ('/' + handle + '/status/' + tw.id_str)),
+      });
+    }
+    posts.sort((a, b) => b.createdTs - a.createdTs);   // новейшие вперёд (закреплённый твит больше не «самый свежий»)
+    return { ok: true, posts: posts.slice(0, 30) };
+  } catch (e) {
+    const em = String((e && e.message) || e);
+    return { ok: false, error: /abort/i.test(em) ? 'request timeout' : em };
+  }
+}
+
 // ---------- ИИ-мозг v0.8: прокси к OpenAI-совместимому серверу (Hermes / OpenAI) ----------
 // Запрос идёт ОТСЮДА (из service worker), а не из content script: фетч в origin расширения с host_permissions
 // освобождён от CORS и mixed-content (https-страница X -> http://localhost Hermes — ок). Ключи приходят из настроек расширения.
@@ -531,6 +572,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'YASIA_REMIND_PULL') { remPull().then(sendResponse); return true; }
   if (msg.type === 'YASIA_DOWNLOAD') { downloadVideo(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_FETCH') { fetchText(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_SYND_TIMELINE') { syndTimeline(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_AI') { aiChat(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_AI_PING') { aiPing(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_CODEX_START') { codexStart().then(sendResponse); return true; }
