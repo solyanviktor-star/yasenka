@@ -921,9 +921,12 @@
     root.appendChild(meat);
     requestAnimationFrame(() => { meat.style.transform = `translate(${(px + PET_W / 2 - 18) - startX}px, ${(py + 8) - startY}px) scale(1)`; });
     if (CAT_SETS.eat) {   // полноценная анимация еды из манифеста: мясо прилетело -> ест ножку кадрами (грызёт, облизывается)
-      setTimeout(() => { meat.remove(); playEmote('eat', 2000); bubble.textContent = '😋'; bubble.classList.add('show'); }, 520);
-      setTimeout(throwBone, 2000);   // доела -> выбрасывает обглоданную кость назад (падает на пол, лежит как попкорн)
-      setTimeout(() => { bubble.classList.remove('show'); busy = false; setMode('wander'); }, 2550);
+      busy = false;   // busy замораживает ВЕСЬ tick (ранний return) -> кадры еды не листались бы; неподвижность даёт testKind='emo' (ветка runTest)
+      const fMs = (emoMs('eat') || 200) / userSpeed;                  // длительность одного кадра (с учётом ползунка скорости)
+      const eatMs = Math.round(CAT_SETS.eat.length * 2 * fMs);        // РОВНО 2 полных цикла: еда ДОИГРЫВАЕТ до последнего кадра (облизывается с голой косточкой) и на нём выбрасывает кость
+      setTimeout(() => { meat.remove(); playEmote('eat', eatMs); bubble.textContent = '😋'; bubble.classList.add('show'); }, 520);
+      setTimeout(throwBone, 520 + eatMs - Math.round(fMs / 2));       // кость вылетает ПОКА показан последний кадр (облизывается с косточкой) — не раньше и не после, не по слепому таймеру
+      setTimeout(() => { bubble.classList.remove('show'); busy = false; setMode('wander'); }, 520 + eatMs + 600);
       return;
     }
     setTimeout(() => { setMode('happy'); happyUntil = now() + 900; bubble.textContent = '😋'; pet.classList.add('is-chomp'); }, 520);
@@ -1996,7 +1999,13 @@
       return;
     }
     if (kind.indexOf('emo:') === 0) {            // тест эмоции: проигрываем её кадры на месте
-      const st = kind.slice(4); testKind = 'emo'; testEmo = st; testUntil = now() + 3400;
+      const st = kind.slice(4);
+      if (st === 'pounce' && CAT_SETS.pounce) {  // наскок — НЕ поза: и из тест-сетки запускаем настоящий рывок вперёд
+        startPounce();
+        const pe = EMOTIONS.find((x) => x.key === 'pounce'); say(pe ? pe.emo + ' ' + pe.name : 'pounce', 1600);
+        return;
+      }
+      testKind = 'emo'; testEmo = st; testUntil = now() + 3400;
       setMode('idle'); climbing = false; jumping = false;
       const e = EMOTIONS.find((x) => x.key === st); say(e ? e.emo + ' ' + e.name : st, 1600);
       return;
