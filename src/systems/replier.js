@@ -123,6 +123,8 @@
     dlgClose: 'div[role="dialog"] button[data-testid="app-bar-close"], div[role="dialog"] [aria-label="Close"]',
     confirmSheet: '[data-testid="confirmationSheetConfirm"]',
     profileLink: 'a[data-testid="AppTabBar_Profile_Link"], nav a[aria-label="Profile"]',
+    sendBtn: 'div[role="dialog"] button[data-testid="tweetButton"], button[data-testid="tweetButtonInline"]',   // настоящая кнопка «Ответить» X (автосенд)
+    likeBtn: 'button[data-testid="like"]',   // есть только у НЕлайкнутого твита (лайкнутый = data-testid="unlike") — повторно не лайкнем
   };
 
   // ---------- словарь системы (двуязычный, локально — как G в games.js) ----------
@@ -150,6 +152,12 @@
       gdAsk: 'Отправлять тексты постов с {host} в ИИ (Hermes/GPT), чтобы я писала черновики ответов? Отправляешь их всё равно ты сам.',
       gdYes: 'Отправлять', gdNo: 'Отмена', gdSafe: '🛡 ИИ выключен стражем — смени режим в настройках.',
       note: 'Кнопку «Ответить» в X жмёшь только ты. Я никогда не отправляю сама.',
+      noteAuto: '⚠️ Автоотправка ВКЛ: после отсчёта жму «Ответить» сама. «Пропустить»/«Пауза»/«Стоп» отменяют отсчёт.',
+      lbAutoSend: 'Автоотправка ⚠️', lbAutoLike: 'Автолайк ⚠️', lbAutoSec: 'Отсчёт, с',
+      stCount: 'Отправлю сама через {s}с — «Пропустить» отменит…',
+      stNoSendBtn: 'Кнопка отправки недоступна — реши сам (или «Пропустить»).',
+      gdAuto: 'Автоотправка включена: после отсчёта я САМА жму «Ответить». Это риск для аккаунта. Продолжить этот обход с автоотправкой?',
+      gdAutoYes: 'Да, отправляй',
     },
     en: {
       collect: 'Collect targets', start: 'Start ▶', pause: 'Pause ⏸', resume: 'Resume ▶', stop: 'Stop ■', skip: 'Skip',
@@ -174,6 +182,12 @@
       gdAsk: 'Send post texts from {host} to the AI (Hermes/GPT) so I can draft replies? You still send them yourself.',
       gdYes: 'Send', gdNo: 'Cancel', gdSafe: '🛡 AI is off by the guard — change the mode in settings.',
       note: 'YOU press X’s real Reply button. I never send for you.',
+      noteAuto: '⚠️ Auto-send is ON: after the countdown I press Reply myself. Skip/Pause/Stop cancel the countdown.',
+      lbAutoSend: 'Auto-send ⚠️', lbAutoLike: 'Auto-like ⚠️', lbAutoSec: 'Countdown, s',
+      stCount: 'Sending in {s}s — Skip cancels…',
+      stNoSendBtn: 'Send button unavailable — decide yourself (or Skip).',
+      gdAuto: 'Auto-send is enabled: after a countdown I press Reply MYSELF. This is a risk for your account. Continue this run with auto-send?',
+      gdAutoYes: 'Yes, send',
     },
   };
 
@@ -185,7 +199,7 @@
   };
 
   const QUEUE_KEY = 'yasiaReplyQueue', REPLIED_KEY = 'yasiaRepliedPosts', RECENT_KEY = 'yasiaReplyRecent', CFG_KEY = 'yasiaReplierCfg';
-  const CFG_DEF = { myHandle: '', dailyCap: 10, minDelaySec: 25, maxDelaySec: 90, tone: 'friendly', handles: '', recencyHours: 36 };
+  const CFG_DEF = { myHandle: '', dailyCap: 10, minDelaySec: 25, maxDelaySec: 90, tone: 'friendly', handles: '', recencyHours: 36, autoSend: false, autoLike: false, autoSendSec: 6 };
   const MAX_SCROLLS = 15;   // автоскролл добора целей — плавный и конечный, не «бесконечный робот»
 
   Yasia.systems.register({
@@ -520,6 +534,13 @@
         const ai = await localGet({ yasiaAI: null });   // честный отказ ДО старта, а не на первой цели
         if (!(ai && ai.yasiaAI)) { setStatus(t.stNoAI); return; }
         if (!(await aiAllowed())) return;
+        // автоотправка — самое рискованное действие: страж спрашивает явно, один раз на обход (fail-closed).
+        // «Нет» не отменяет обход — просто идём в ручном режиме (черновики без автоклика).
+        queue.autoOk = false;
+        if (cfg.autoSend) {
+          const ok = (Yasia.guard && Yasia.guard.confirm) ? await Yasia.guard.confirm({ text: t.gdAuto, yes: t.gdAutoYes, no: t.gdNo }) : false;
+          queue.autoOk = !!ok;
+        }
         queue.active = true; queue.paused = false;
         if (queue.idx >= queue.targets.length) queue.idx = 0;
         saveQueue();
@@ -584,7 +605,16 @@
         petDraftDone();
         setStatus(t.stReview); syncButtons();
 
-        const outcome = await waitReview();   // ЧЕЛОВЕК отправляет или пропускает — мы только ждём
+        if (cfg.autoSend && queue.autoOk) {              // авто-режим: опция + подтверждение стража на этот обход
+          const r = await autoSendCountdown(t);
+          if (r === 'skip') {                            // «Пропустить»/«Стоп» во время отсчёта — как обычный скип
+            await closeComposer();
+            if (!running) return;
+            setStatus(t.stSkip); markSkip(tg); await sleep(rand(600, 1500)); return;
+          }
+          if (r === 'nobtn') setStatus(t.stNoSendBtn);   // кнопка X недоступна -> откатываемся к ручному ожиданию
+        }
+        const outcome = await waitReview();   // человек (или сработавший автосенд): ждём закрытия composer / «Пропустить»
         syncButtons();
         if (outcome === 'skip') {
           await closeComposer();
@@ -597,12 +627,40 @@
           rememberReplied(tg.postId); pushRecent(draft);
           tg.st = 'sent'; queue.sentToday++; queue.idx++; saveQueue(); renderList(); updateCounter();
           petSent();
+          if (cfg.autoLike) await tryAutoLike();   // лайк ТОЛЬКО после подтверждённой отправки (ответила — значит пост понравился)
           await humanDelay();   // пауза между отправками minDelaySec..maxDelaySec
         } else {
           setStatus(t.stSkip); markSkip(tg); await sleep(rand(600, 1500));   // закрыл не отправив -> пост остаётся неотвеченным, но цель пропускаем
         }
       }
 
+      // отменяемый отсчёт автоотправки: «Пропустить»/«Стоп» прерывают, «Пауза» замораживает, человек может успеть сам.
+      // Длительность со случайным джиттером ±30% (autoSendSec) — не метроном. По нулю жмём НАСТОЯЩУЮ кнопку X;
+      // недоступную/disabled кнопку не жмём никогда (fail-closed) — тогда ждём человека как обычно.
+      async function autoSendCountdown(t) {
+        skipFlag = false;
+        let secs = Math.max(3, Math.round((+cfg.autoSendSec || CFG_DEF.autoSendSec) * (0.7 + Math.random() * 0.6)));
+        while (secs > 0) {
+          if (skipFlag || !running) return 'skip';
+          if (!composerBox()) return 'closed';           // человек успел сам (отправил или закрыл)
+          if (queue.paused) { await sleep(400); continue; }
+          setStatus(fmt(t.stCount, { s: secs }));
+          await sleep(1000); secs--;
+        }
+        const btn = document.querySelector(SEL.sendBtn);
+        if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') return 'nobtn';
+        btn.click();
+        return 'fired';
+      }
+      // автолайк цели ПОСЛЕ подтверждённой отправки: только фокальный твит; уже лайкнутый не трогаем (selector like ≠ unlike)
+      async function tryAutoLike() {
+        try {
+          await sleep(rand(500, 1100));
+          const card = focalCard(); if (!card) return;
+          const btn = card.querySelector(SEL.likeBtn);
+          if (btn) btn.click();
+        } catch (_) {}
+      }
       // ожидание решения человека: composer закрылся (отправил/закрыл) или нажат «Пропустить»/«Стоп»
       function waitReview() {
         skipFlag = false;
@@ -642,6 +700,8 @@
           '.twtr-rep-btns button{flex:1;min-width:64px;border:1px solid rgba(128,128,128,.45);background:rgba(128,128,128,.18);color:inherit;border-radius:8px;padding:6px 8px;font:600 11px system-ui;cursor:pointer}',
           '.twtr-rep-btns button.twtr-rep-primary{background:#1d9bf0;border-color:#1d9bf0;color:#fff}',
           '.twtr-rep-btns button:disabled{opacity:.4;cursor:default}',
+          '.twtr-rep-auto{display:flex;gap:14px;margin:2px 0 4px;flex-wrap:wrap}',
+          '.twtr-rep-chk{display:flex;gap:5px;align-items:center;font-size:11px;cursor:pointer;opacity:.95}',
           '.twtr-rep-list{max-height:180px;overflow:auto;display:flex;flex-direction:column;gap:4px;margin-top:6px}',
           '.twtr-rep-it{display:flex;gap:6px;align-items:center;border:1px solid rgba(128,128,128,.3);border-radius:8px;padding:4px 6px}',
           '.twtr-rep-it.cur{border-color:#1d9bf0}',
@@ -670,6 +730,11 @@
                 '<option value="expert">' + esc(t.toneExpert) + '</option>' +
                 '<option value="witty">' + esc(t.toneWitty) + '</option>' +
               '</select></label>' +
+              '<label class="twtr-rep-f"><span>' + esc(t.lbAutoSec) + '</span><input data-k="autoSendSec" type="number" min="3"></label>' +
+            '</div>' +
+            '<div class="twtr-rep-auto">' +
+              '<label class="twtr-rep-chk"><input type="checkbox" data-b="autoSend"> ' + esc(t.lbAutoSend) + '</label>' +
+              '<label class="twtr-rep-chk"><input type="checkbox" data-b="autoLike"> ' + esc(t.lbAutoLike) + '</label>' +
             '</div>' +
             '<div class="twtr-rep-btns">' +
               '<button class="twtr-rep-primary" data-a="collect" type="button">' + esc(t.collect) + '</button>' +
@@ -699,6 +764,7 @@
           btnStop: box.querySelector('[data-a="stop"]'),
           btnHandles: box.querySelector('[data-a="handles"]'),
           inHandle: box.querySelector('[data-k="myHandle"]'),
+          note: box.querySelector('.twtr-rep-note'),
         };
         // настройки: показать сохранённое, писать на change
         box.querySelectorAll('[data-k]').forEach((i) => {
@@ -709,10 +775,16 @@
             if (k === 'myHandle') cfg.myHandle = normHandle(i.value);
             else if (k === 'handles') cfg.handles = String(i.value || '').slice(0, 2000);   // сырой ввод: парсим на запуске, чтобы не «съедать» текст под руками
             else if (k === 'tone') cfg.tone = TONES[i.value] ? i.value : 'friendly';
-            else cfg[k] = Math.max(k === 'dailyCap' || k === 'recencyHours' ? 1 : 5, parseInt(i.value, 10) || CFG_DEF[k]);
+            else cfg[k] = Math.max(k === 'dailyCap' || k === 'recencyHours' ? 1 : (k === 'autoSendSec' ? 3 : 5), parseInt(i.value, 10) || CFG_DEF[k]);
             if (cfg.maxDelaySec < cfg.minDelaySec) cfg.maxDelaySec = cfg.minDelaySec;
             saveCfg(); updateCounter();
           });
+        });
+        box.querySelectorAll('[data-b]').forEach((i) => {   // булевы опции (автосенд/автолайк): чекбоксы, note меняется вживую
+          const k = i.getAttribute('data-b');
+          i.checked = !!cfg[k];
+          ['mousedown', 'keydown', 'click'].forEach((ev) => i.addEventListener(ev, (e) => e.stopPropagation()));
+          i.addEventListener('change', () => { cfg[k] = i.checked; saveCfg(); renderNote(); });
         });
         ui.btnCollect.addEventListener('click', (e) => { e.stopPropagation(); collect(); });
         ui.btnStart.addEventListener('click', (e) => { e.stopPropagation(); startWalk(); });
@@ -723,9 +795,10 @@
           const b = e.target.closest && e.target.closest('.twtr-rep-skip'); if (!b) return;
           e.stopPropagation(); skipCurrent();
         });
-        updateCounter(); renderList(); syncButtons();
+        updateCounter(); renderList(); syncButtons(); renderNote();
         setStatus(queue.targets.length ? fmt(t.stFound, { n: queue.targets.length }) : t.stIdle);
       }
+      function renderNote() { if (ui && ui.note) ui.note.textContent = cfg.autoSend ? L().noteAuto : L().note; }   // честное примечание: с автосендом «я никогда не отправляю сама» — уже неправда
       function setStatus(msg) { if (ui && ui.status && msg != null) ui.status.textContent = msg; }
       function updateCounter() { if (ui && ui.count) ui.count.textContent = fmt(L().counter, { c: queue.sentToday, cap: cfg.dailyCap }); }
       function stLabel(st) {
