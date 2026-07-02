@@ -15,10 +15,10 @@ ask her things — and she remembers you.
 > per-site permission prompt — and in Safe mode it never leaves the browser.
 
 ### 🎚 Behavior modes
-Five modes (⚙ settings) gate her autonomous behavior — your clicks always work:
-**🎮 Game** (everything on) · **😌 Calm** (no pranks/chatter) · **💼 Work**
-(never distracts, doesn't run to videos) · **🤖 AI** (assistant first) ·
-**🛡 Safe** (AI off, site journal paused — nothing leaves the browser).
+Two modes (⚙ settings / popup) gate her autonomous behavior — your clicks always work:
+**😺 Normal** (she lives by her stats: a hidden *wildness* scale driven by hunger,
+mood and neglect decides how mischievous she gets) · **😌 Calm** (no pranks, no chatter).
+A *mischief slider* in the popup scales wildness from 😇 angel to 😈 gremlin.
 
 ## What she can do
 
@@ -56,8 +56,23 @@ Five modes (⚙ settings) gate her autonomous behavior — your clicks always wo
 
 ### 🐱 Tamagotchi care, games and moods
 - Hunger, energy, mood, bond and XP; feed her, pet her, wake her up.
-- Mini-games: chase the cursor, catch food, zombie archer, hide & seek.
-- Two playable heroes with full frame animation (Yasya and Noema), manifest-driven.
+- **Sickness & healing:** neglect her and she may fall ill (thermometer, green face) —
+  heal her with 💊 and she trusts you more. She recovers by herself after a day.
+- **Daily streak:** the first visit each day is celebrated; the streak grows XP bonuses.
+- **Idle life engine:** a data-driven behavior library (hero manifest → weighted picker
+  in `core/behavior.js`) — she sits, grooms, laughs, gets bored, poses — depending on
+  her live stats. Adding a behavior = one manifest entry, no code.
+- Mini-games are full rounds with HUD, scores and records: chase the cursor (45s),
+  catch food (10 throws), zombie archer (5 stomps vs 3 bites), hide & seek (5 finds).
+- 30+ frame animations (eat, pounce, sick, heal, level-up, tumble, dangle…),
+  manifest-driven; generated with an AI sprite-sheet pipeline (`art/`).
+
+### ✍️ Auto-replier (human-in-the-loop, off by default)
+- Collects reply targets **without any external API**: from the timeline you already
+  have open (DOM scan) or by @handles via Twitter's free syndication endpoints.
+- Drafts replies with her AI brain (your Hermes/GPT), inserts them into the native
+  composer — **you press Send yourself**. No auto-send, no auto-likes, daily cap,
+  cross-session dedup of already-answered posts.
 
 ## Install (developer mode)
 
