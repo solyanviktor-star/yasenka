@@ -3,7 +3,16 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { normHandle, parseStatusHref, targetFilterReason, collectTargets, parseHandles, pickFreshOriginal, prunePostMap, jitterMs, todayKey } = require('../src/systems/replier.js');
+const { normHandle, parseStatusHref, parseListUrl, targetFilterReason, collectTargets, parseHandles, pickFreshOriginal, prunePostMap, jitterMs, todayKey } = require('../src/systems/replier.js');
+
+test('parseListUrl: списки X -> канонический url, мусор -> null', () => {
+  assert.equal(parseListUrl('https://x.com/i/lists/123456'), 'https://x.com/i/lists/123456');
+  assert.equal(parseListUrl('twitter.com/i/lists/9?utm=1'), 'https://x.com/i/lists/9');
+  assert.equal(parseListUrl(' https://www.x.com/i/lists/42/members '), 'https://x.com/i/lists/42');
+  assert.equal(parseListUrl('https://x.com/user/status/1'), null);
+  assert.equal(parseListUrl('https://x.com/i/lists/'), null);
+  assert.equal(parseListUrl(''), null);
+});
 
 test('normHandle: срезает @, пробелы и регистр', () => {
   assert.equal(normHandle(' @UserName '), 'username');

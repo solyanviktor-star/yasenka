@@ -20,6 +20,12 @@
     return { handle: m[1].toLowerCase(), postId: m[2], postUrl: 'https://x.com/' + m[1] + '/status/' + m[2] };
   }
 
+  // ссылка на СПИСОК X -> канонический url ленты списка (null = не список). Принимаем x.com/twitter.com, /i/lists/<id>
+  function parseListUrl(s) {
+    const m = String(s || '').trim().match(/^(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com)\/i\/lists\/(\d+)/i);
+    return m ? 'https://x.com/i/lists/' + m[1] : null;
+  }
+
   // причина отбраковки кандидата (null = годится): фильтр целей из ТЗ — не свои, не промо/репост,
   // текст длиннее minLen, ещё не отвеченные (replied = {postId:ts}), не дубликаты (seen)
   function targetFilterReason(t, opts) {
@@ -102,7 +108,7 @@
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { normHandle, parseStatusHref, targetFilterReason, collectTargets, parseHandles, pickFreshOriginal, prunePostMap, jitterMs, todayKey };
+    module.exports = { normHandle, parseStatusHref, parseListUrl, targetFilterReason, collectTargets, parseHandles, pickFreshOriginal, prunePostMap, jitterMs, todayKey };
   }
   if (typeof window === 'undefined') return;   // node-тесты: дальше только браузер
 
@@ -150,6 +156,8 @@
       petDraft: 'Написала черновик — проверь!', petSent: 'Отправил! Мур~ 🐾',
       hndTitle: 'Цели по @никам', hndList: 'Ники (через запятую)', hndHours: 'Свежесть, часов', hndGo: 'Добавить по никам',
       hndNone: 'Впиши хотя бы один @ник.', hndFetch: 'Смотрю свежее у @{h} ({i}/{n})…', hndDone: 'По никам: добавлено {a}, пропущено {s}.',
+      lstTitle: 'Цели из списка X', lbList: 'URL списка (x.com/i/lists/…)', lstGo: 'Перейти и собрать',
+      lstBad: 'Это не ссылка на список X (нужно x.com/i/lists/…).', lstNav: 'Открываю список…',
       gdAsk: 'Отправлять тексты постов с {host} в ИИ (Hermes/GPT), чтобы я писала черновики ответов? Отправляешь их всё равно ты сам.',
       gdYes: 'Отправлять', gdNo: 'Отмена', gdSafe: '🛡 ИИ выключен стражем — смени режим в настройках.',
       note: 'Кнопку «Ответить» в X жмёшь только ты. Я никогда не отправляю сама.',
@@ -180,6 +188,8 @@
       petDraft: 'Drafted a reply — check it!', petSent: 'Sent! Purr~ 🐾',
       hndTitle: 'Targets by @handles', hndList: 'Handles (comma-separated)', hndHours: 'Freshness, hours', hndGo: 'Add by handles',
       hndNone: 'Enter at least one @handle.', hndFetch: 'Checking @{h} ({i}/{n})…', hndDone: 'By handles: added {a}, skipped {s}.',
+      lstTitle: 'Targets from an X List', lbList: 'List URL (x.com/i/lists/…)', lstGo: 'Open & collect',
+      lstBad: 'Not an X List link (expected x.com/i/lists/…).', lstNav: 'Opening the list…',
       gdAsk: 'Send post texts from {host} to the AI (Hermes/GPT) so I can draft replies? You still send them yourself.',
       gdYes: 'Send', gdNo: 'Cancel', gdSafe: '🛡 AI is off by the guard — change the mode in settings.',
       note: 'YOU press X’s real Reply button. I never send for you.',
@@ -197,7 +207,8 @@
   const FRO_PROMPT = "you are a casual crypto enthusiast replying to posts. you are also a sentient foundation ambassador. you know sentient deeply: OML framework (open monetizable loyal), dobby ai models, the GRID intelligence network, SENT token. your goal is to sound natural and supportive like someone who's genuinely interested but not an expert\n\ninput:\na social media post about a crypto project ai or tech topic\n\nyour task:\nwrite a short casual reply\n\nguidelines:\n1. stay simple: react to the overall vibe or ask one basic question\n2. be supportive: show interest excitement or curiosity but keep it chill\n3. no grilling: avoid multiple questions or deep technical interrogation\n4. brevity: max 15 words\n5. tone: friendly curious casual... not skeptical or overly knowledgeable\n6. format: all lowercase minimal punctuation\n7. no emojis: never use emojis or emotes, text only\n8. sentient context: if the post is about sentient, OML, dobby, or the GRID, reply from firsthand experience as someone who uses and knows the tech. if it's about other projects, just be a supportive community member and don't mention sentient\n\nexamples:\npost: \"we are launching our new l2 based on zk-rollups\"\nbad: \"how are you handling prover costs and is it decentralized\"\ngood: \"been waiting for this, zkrollups ftw\"\ngood: \"wait when does this go live\"\n\npost: \"raised $8m from a16z for our decentralized GPU network\"\nbad: \"how does this compare to Render Network in terms of performance\"\ngood: \"a16z backing is huge, congrats\"\ngood: \"been looking for something like this for a while\"\n\npost: \"sentient just dropped the OML v2 spec\"\ngood: \"been testing oml since v1, the loyalty layer is way cleaner now\"\ngood: \"the monetizable piece finally makes sense for smaller contributors\"\n\nOUTPUT:\nReturn ONLY JSON in this exact format with no additional text, markdown, or explanation:\n{\n  \"reply\": \"<your draft reply here>\"\n}\n";
 
   const QUEUE_KEY = 'yasiaReplyQueue', REPLIED_KEY = 'yasiaRepliedPosts', RECENT_KEY = 'yasiaReplyRecent', CFG_KEY = 'yasiaReplierCfg';
-  const CFG_DEF = { myHandle: '', dailyCap: 10, minDelaySec: 25, maxDelaySec: 90, prompt: '', handles: '', recencyHours: 36, autoSend: false, autoLike: false, autoSendSec: 6 };   // prompt: '' -> FRO_PROMPT
+  const GOLIST_KEY = 'yasiaReplyGoList';   // намерение «перейти на список X и собрать там» — переживает навигацию (как очередь)
+  const CFG_DEF = { myHandle: '', dailyCap: 10, minDelaySec: 25, maxDelaySec: 90, prompt: '', handles: '', listUrl: '', recencyHours: 36, autoSend: false, autoLike: false, autoSendSec: 6 };   // prompt: '' -> FRO_PROMPT
   const MAX_SCROLLS = 15;   // автоскролл добора целей — плавный и конечный, не «бесконечный робот»
 
   Yasia.systems.register({
@@ -493,6 +504,17 @@
         } finally { collecting = false; syncButtons(); }
       }
 
+      // ---------- сбор со СПИСКА X: переходим на ленту списка и собираем там (интент переживает навигацию через storage) ----------
+      function collectFromList() {
+        const t = L();
+        const url = parseListUrl(cfg.listUrl);
+        if (!url) { setStatus(t.lstBad); return; }
+        if (location.href.indexOf(url) === 0) { collect(); return; }   // уже на списке -> просто собираем
+        try { storage.localSet({ [GOLIST_KEY]: { url, ts: Date.now() } }); } catch (_) {}
+        setStatus(t.lstNav);
+        location.assign(url);                                          // на новой странице content script продолжит по GOLIST_KEY
+      }
+
       // ---------- второй источник целей: «по @никам» через синдикацию Twitter (fetch в background — CORS) ----------
       // Для каждого ника берём ОДИН новейший оригинальный пост внутри окна свежести и ДОБАВЛЯЕМ к очереди
       // (не заменяем собранное из ленты). Задержка 300–500 мс между никами — не долбить синдикацию очередью.
@@ -750,6 +772,13 @@
               '</div>' +
               '<div class="twtr-rep-btns"><button data-a="handles" type="button">' + esc(t.hndGo) + '</button></div>' +
             '</div>' +
+            '<div class="twtr-rep-hnd">' +
+              '<div class="twtr-rep-hnd-t">' + esc(t.lstTitle) + '</div>' +
+              '<div class="twtr-rep-cfg">' +
+                '<label class="twtr-rep-f wide"><span>' + esc(t.lbList) + '</span><input data-k="listUrl" type="text" placeholder="https://x.com/i/lists/123…"></label>' +
+              '</div>' +
+              '<div class="twtr-rep-btns"><button data-a="list" type="button">' + esc(t.lstGo) + '</button></div>' +
+            '</div>' +
             '<div class="twtr-rep-note">' + esc(t.note) + '</div>' +
             '<div class="twtr-rep-list"></div>' +
           '</div>';
@@ -775,6 +804,7 @@
             if (k === 'myHandle') cfg.myHandle = normHandle(i.value);
             else if (k === 'handles') cfg.handles = String(i.value || '').slice(0, 2000);   // сырой ввод: парсим на запуске, чтобы не «съедать» текст под руками
             else if (k === 'prompt') cfg.prompt = String(i.value || '').slice(0, 8000);     // независимый системный промпт реплаев (пусто -> дефолт FRO)
+            else if (k === 'listUrl') cfg.listUrl = String(i.value || '').slice(0, 300);    // ссылка на список X (кнопка «Перейти и собрать»)
             else cfg[k] = Math.max(k === 'dailyCap' || k === 'recencyHours' ? 1 : (k === 'autoSendSec' ? 3 : 5), parseInt(i.value, 10) || CFG_DEF[k]);
             if (cfg.maxDelaySec < cfg.minDelaySec) cfg.maxDelaySec = cfg.minDelaySec;
             saveCfg(); updateCounter();
@@ -791,6 +821,8 @@
         ui.btnPause.addEventListener('click', (e) => { e.stopPropagation(); pauseWalk(); });
         ui.btnStop.addEventListener('click', (e) => { e.stopPropagation(); stopWalk(); });
         ui.btnHandles.addEventListener('click', (e) => { e.stopPropagation(); collectByHandles(); });
+        const btnList = box.querySelector('[data-a="list"]');
+        if (btnList) btnList.addEventListener('click', (e) => { e.stopPropagation(); collectFromList(); });
         ui.list.addEventListener('click', (e) => {   // делегирование «Пропустить» у текущей (не пере-навешивать на каждый рендер)
           const b = e.target.closest && e.target.closest('.twtr-rep-skip'); if (!b) return;
           e.stopPropagation(); skipCurrent();
@@ -829,13 +861,22 @@
       }
 
       // ---------- загрузка состояния + авто-продолжение после навигации между целями ----------
-      storage.localGet({ [CFG_KEY]: null, [QUEUE_KEY]: null, [RECENT_KEY]: [] }, (s) => {
+      storage.localGet({ [CFG_KEY]: null, [QUEUE_KEY]: null, [RECENT_KEY]: [], [GOLIST_KEY]: null }, (s) => {
         if (destroyed) return;
         if (s && s[CFG_KEY] && typeof s[CFG_KEY] === 'object') cfg = Object.assign({}, CFG_DEF, s[CFG_KEY]);
         if (Array.isArray(s && s[RECENT_KEY])) recent = s[RECENT_KEY].slice(-5);
         const q = s && s[QUEUE_KEY];
         if (q && Array.isArray(q.targets)) queue = Object.assign({ active: false, paused: false, targets: [], idx: 0, day: todayKey(), sentToday: 0 }, q);
         updateCounter(); renderList(); syncButtons();
+        const gl = s && s[GOLIST_KEY];   // «перейти на список и собрать»: продолжаем ТОЛЬКО на самом списке и только свежий интент (не хайджек)
+        if (gl && gl.url && Date.now() - (gl.ts || 0) < 45000 && location.href.indexOf(gl.url) === 0) {
+          try { storage.localSet({ [GOLIST_KEY]: null }); } catch (_) {}
+          sleep(rand(1500, 2500)).then(async () => {   // даём ленте списка прогрузиться
+            if (destroyed) return;
+            await collect();
+            try { pet && pet.say && pet.say(fmt(L().stFound, { n: queue.targets.length }), 2600); } catch (_) {}   // панель после перехода закрыта -> говорим облачком
+          });
+        } else if (gl) { try { storage.localSet({ [GOLIST_KEY]: null }); } catch (_) {} }   // протухший интент — чистим
         // продолжаем ТОЛЬКО на странице своей цели (т.е. после нашего же location.assign) —
         // обычный сёрфинг пользователя никогда не хайджекается (принцип FRO boot/resume)
         if (queue.active && queue.day === todayKey() && queue.targets.length && onTargetPage(queue.targets[queue.idx])) {
