@@ -158,6 +158,7 @@
       hndNone: 'Впиши хотя бы один @ник.', hndFetch: 'Смотрю свежее у @{h} ({i}/{n})…', hndDone: 'По никам: добавлено {a}, пропущено {s}.',
       lstTitle: 'Цели из списка X', lbList: 'URL списка (x.com/i/lists/…)', lstGo: 'Перейти и собрать',
       lstBad: 'Это не ссылка на список X (нужно x.com/i/lists/…).', lstNav: 'Открываю список…',
+      secSources: 'Источники целей', secPrompt: 'Промпт реплаев', secSettings: 'Настройки',
       gdAsk: 'Отправлять тексты постов с {host} в ИИ (Hermes/GPT), чтобы я писала черновики ответов? Отправляешь их всё равно ты сам.',
       gdYes: 'Отправлять', gdNo: 'Отмена', gdSafe: '🛡 ИИ выключен стражем — смени режим в настройках.',
       note: 'Кнопку «Ответить» в X жмёшь только ты. Я никогда не отправляю сама.',
@@ -190,6 +191,7 @@
       hndNone: 'Enter at least one @handle.', hndFetch: 'Checking @{h} ({i}/{n})…', hndDone: 'By handles: added {a}, skipped {s}.',
       lstTitle: 'Targets from an X List', lbList: 'List URL (x.com/i/lists/…)', lstGo: 'Open & collect',
       lstBad: 'Not an X List link (expected x.com/i/lists/…).', lstNav: 'Opening the list…',
+      secSources: 'Target sources', secPrompt: 'Reply prompt', secSettings: 'Settings',
       gdAsk: 'Send post texts from {host} to the AI (Hermes/GPT) so I can draft replies? You still send them yourself.',
       gdYes: 'Send', gdNo: 'Cancel', gdSafe: '🛡 AI is off by the guard — change the mode in settings.',
       note: 'YOU press X’s real Reply button. I never send for you.',
@@ -712,28 +714,45 @@
         s.id = 'twtr-rep-style';
         s.textContent = [
           '.twtr-rep{font:12px system-ui;color:inherit}',
-          '.twtr-rep-count{font-weight:700;margin-bottom:2px}',
-          '.twtr-rep-status{min-height:28px;font-size:11px;opacity:.85;margin:4px 0}',
+          // шапка: счётчик дня + прогресс-бар
+          '.twtr-rep-top{display:flex;align-items:center;gap:8px;margin-bottom:4px}',
+          '.twtr-rep-count{font-weight:700;white-space:nowrap}',
+          '.twtr-rep-bar{flex:1;height:8px;border-radius:99px;background:rgba(128,128,128,.25);overflow:hidden}',
+          '.twtr-rep-bar-f{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#1d9bf0,#4caf50);transition:width .4s ease}',
+          '.twtr-rep-status{min-height:26px;font-size:11px;opacity:.85;margin:2px 0 4px}',
           '.twtr-rep-note{font-size:10px;opacity:.6;margin:4px 0}',
+          '.twtr-rep-note.warn{opacity:1;color:#e0a030}',
+          // кнопки
+          '.twtr-rep-btns{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}',
+          '.twtr-rep-btns button{flex:1;min-width:64px;border:1px solid rgba(128,128,128,.45);background:rgba(128,128,128,.18);color:inherit;border-radius:8px;padding:7px 8px;font:600 11px system-ui;cursor:pointer}',
+          '.twtr-rep-btns button.twtr-rep-primary{background:#1d9bf0;border-color:#1d9bf0;color:#fff}',
+          '.twtr-rep-btns button:disabled{opacity:.4;cursor:default}',
+          // свёрнутые секции (источники/промпт/настройки): главный экран остаётся чистым
+          '.twtr-rep-sec{border:1px solid rgba(128,128,128,.3);border-radius:10px;margin:6px 0;padding:0 8px}',
+          '.twtr-rep-sec>summary{cursor:pointer;font:600 11px system-ui;padding:7px 0;list-style:none;display:flex;align-items:center;gap:6px;user-select:none}',
+          '.twtr-rep-sec>summary::-webkit-details-marker{display:none}',
+          '.twtr-rep-sec>summary::after{content:"▸";margin-left:auto;opacity:.6;transition:transform .15s}',
+          '.twtr-rep-sec[open]>summary::after{transform:rotate(90deg)}',
+          '.twtr-rep-sec-b{padding-bottom:8px}',
+          // поля
           '.twtr-rep-cfg{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}',
           '.twtr-rep-f{display:flex;flex-direction:column;gap:2px;font-size:10px;opacity:.9;flex:1;min-width:70px}',
           '.twtr-rep-f.wide{flex:2;min-width:140px}',
-          '.twtr-rep-hnd{border-top:1px solid rgba(128,128,128,.3);margin-top:6px;padding-top:6px}',
-          '.twtr-rep-hnd-t{font-weight:700;font-size:11px;margin-bottom:2px}',
           '.twtr-rep-f input,.twtr-rep-f select,.twtr-rep-f textarea{width:100%;box-sizing:border-box;background:rgba(0,0,0,.25);color:inherit;border:1px solid rgba(128,128,128,.45);border-radius:6px;padding:4px;font:11px system-ui}',
-          '.twtr-rep-f textarea{resize:vertical;min-height:64px;font:10px/1.35 ui-monospace,Consolas,monospace;white-space:pre-wrap}',
-          '.twtr-rep-btns{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}',
-          '.twtr-rep-btns button{flex:1;min-width:64px;border:1px solid rgba(128,128,128,.45);background:rgba(128,128,128,.18);color:inherit;border-radius:8px;padding:6px 8px;font:600 11px system-ui;cursor:pointer}',
-          '.twtr-rep-btns button.twtr-rep-primary{background:#1d9bf0;border-color:#1d9bf0;color:#fff}',
-          '.twtr-rep-btns button:disabled{opacity:.4;cursor:default}',
-          '.twtr-rep-auto{display:flex;gap:14px;margin:2px 0 4px;flex-wrap:wrap}',
+          '.twtr-rep-f textarea{resize:vertical;min-height:88px;font:10px/1.35 ui-monospace,Consolas,monospace;white-space:pre-wrap}',
+          '.twtr-rep-hnd-t{font-weight:700;font-size:11px;margin:6px 0 2px}',
+          // опасные тумблеры — заметная зона
+          '.twtr-rep-auto{display:flex;gap:14px;margin:6px 0 4px;flex-wrap:wrap;border:1px solid rgba(224,160,48,.55);background:rgba(224,160,48,.08);border-radius:8px;padding:6px 8px}',
           '.twtr-rep-chk{display:flex;gap:5px;align-items:center;font-size:11px;cursor:pointer;opacity:.95}',
-          '.twtr-rep-list{max-height:180px;overflow:auto;display:flex;flex-direction:column;gap:4px;margin-top:6px}',
-          '.twtr-rep-it{display:flex;gap:6px;align-items:center;border:1px solid rgba(128,128,128,.3);border-radius:8px;padding:4px 6px}',
-          '.twtr-rep-it.cur{border-color:#1d9bf0}',
+          // очередь: карточки с цветными бейджами статуса
+          '.twtr-rep-list{max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:4px;margin-top:6px}',
+          '.twtr-rep-it{display:flex;gap:6px;align-items:center;border:1px solid rgba(128,128,128,.3);border-radius:8px;padding:5px 7px}',
+          '.twtr-rep-it.cur{border-color:#1d9bf0;background:rgba(29,155,240,.08)}',
           '.twtr-rep-it-tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}',
-          '.twtr-rep-it-st{font-size:10px;opacity:.75;white-space:nowrap}',
-          '.twtr-rep-it-st.sent{color:#4caf50;opacity:1}',
+          '.twtr-rep-b{font:600 9px system-ui;border-radius:99px;padding:2px 7px;white-space:nowrap;background:rgba(128,128,128,.22)}',
+          '.twtr-rep-b.draft{background:rgba(29,155,240,.25);color:#7cc4f5}',
+          '.twtr-rep-b.sent{background:rgba(76,175,80,.25);color:#7bd07f}',
+          '.twtr-rep-b.skip{opacity:.5}',
           '.twtr-rep-skip{border:1px solid rgba(128,128,128,.45);background:transparent;color:inherit;border-radius:6px;font:10px system-ui;cursor:pointer;padding:2px 6px}',
         ].join('\n');
         (document.head || document.documentElement).appendChild(s);
@@ -744,44 +763,48 @@
         const t = L();
         box.innerHTML =
           '<div class="twtr-rep">' +
-            '<div class="twtr-rep-count"></div>' +
+            // ГЛАВНЫЙ ЭКРАН: прогресс дня, статус, кнопки шага, очередь. Всё остальное — свёрнуто ниже.
+            '<div class="twtr-rep-top"><div class="twtr-rep-count"></div><div class="twtr-rep-bar"><div class="twtr-rep-bar-f"></div></div></div>' +
             '<div class="twtr-rep-status"></div>' +
-            '<div class="twtr-rep-cfg">' +
-              '<label class="twtr-rep-f"><span>' + esc(t.lbHandle) + '</span><input data-k="myHandle" type="text" placeholder="@you"></label>' +
-              '<label class="twtr-rep-f"><span>' + esc(t.lbCap) + '</span><input data-k="dailyCap" type="number" min="1"></label>' +
-              '<label class="twtr-rep-f"><span>' + esc(t.lbMin) + '</span><input data-k="minDelaySec" type="number" min="5"></label>' +
-              '<label class="twtr-rep-f"><span>' + esc(t.lbMax) + '</span><input data-k="maxDelaySec" type="number" min="5"></label>' +
-              '<label class="twtr-rep-f"><span>' + esc(t.lbAutoSec) + '</span><input data-k="autoSendSec" type="number" min="3"></label>' +
-              '<label class="twtr-rep-f wide"><span>' + esc(t.lbPrompt) + '</span><textarea data-k="prompt" rows="6" spellcheck="false"></textarea></label>' +
-            '</div>' +
-            '<div class="twtr-rep-auto">' +
-              '<label class="twtr-rep-chk"><input type="checkbox" data-b="autoSend"> ' + esc(t.lbAutoSend) + '</label>' +
-              '<label class="twtr-rep-chk"><input type="checkbox" data-b="autoLike"> ' + esc(t.lbAutoLike) + '</label>' +
-            '</div>' +
             '<div class="twtr-rep-btns">' +
               '<button class="twtr-rep-primary" data-a="collect" type="button">' + esc(t.collect) + '</button>' +
               '<button data-a="start" type="button">' + esc(t.start) + '</button>' +
               '<button data-a="pause" type="button">' + esc(t.pause) + '</button>' +
               '<button data-a="stop" type="button">' + esc(t.stop) + '</button>' +
             '</div>' +
-            '<div class="twtr-rep-hnd">' +
+            '<div class="twtr-rep-list"></div>' +
+            '<div class="twtr-rep-note">' + esc(t.note) + '</div>' +
+            '<details class="twtr-rep-sec"><summary>🎯 ' + esc(t.secSources) + '</summary><div class="twtr-rep-sec-b">' +
               '<div class="twtr-rep-hnd-t">' + esc(t.hndTitle) + '</div>' +
               '<div class="twtr-rep-cfg">' +
                 '<label class="twtr-rep-f wide"><span>' + esc(t.hndList) + '</span><input data-k="handles" type="text" placeholder="@nick1, @nick2"></label>' +
                 '<label class="twtr-rep-f"><span>' + esc(t.hndHours) + '</span><input data-k="recencyHours" type="number" min="1"></label>' +
               '</div>' +
               '<div class="twtr-rep-btns"><button data-a="handles" type="button">' + esc(t.hndGo) + '</button></div>' +
-            '</div>' +
-            '<div class="twtr-rep-hnd">' +
               '<div class="twtr-rep-hnd-t">' + esc(t.lstTitle) + '</div>' +
               '<div class="twtr-rep-cfg">' +
                 '<label class="twtr-rep-f wide"><span>' + esc(t.lbList) + '</span><input data-k="listUrl" type="text" placeholder="https://x.com/i/lists/123…"></label>' +
               '</div>' +
               '<div class="twtr-rep-btns"><button data-a="list" type="button">' + esc(t.lstGo) + '</button></div>' +
-            '</div>' +
-            '<div class="twtr-rep-note">' + esc(t.note) + '</div>' +
-            '<div class="twtr-rep-list"></div>' +
+            '</div></details>' +
+            '<details class="twtr-rep-sec"><summary>✎ ' + esc(t.secPrompt) + '</summary><div class="twtr-rep-sec-b">' +
+              '<label class="twtr-rep-f wide"><span>' + esc(t.lbPrompt) + '</span><textarea data-k="prompt" rows="7" spellcheck="false"></textarea></label>' +
+            '</div></details>' +
+            '<details class="twtr-rep-sec"><summary>⚙️ ' + esc(t.secSettings) + '</summary><div class="twtr-rep-sec-b">' +
+              '<div class="twtr-rep-cfg">' +
+                '<label class="twtr-rep-f"><span>' + esc(t.lbHandle) + '</span><input data-k="myHandle" type="text" placeholder="@you"></label>' +
+                '<label class="twtr-rep-f"><span>' + esc(t.lbCap) + '</span><input data-k="dailyCap" type="number" min="1"></label>' +
+                '<label class="twtr-rep-f"><span>' + esc(t.lbMin) + '</span><input data-k="minDelaySec" type="number" min="5"></label>' +
+                '<label class="twtr-rep-f"><span>' + esc(t.lbMax) + '</span><input data-k="maxDelaySec" type="number" min="5"></label>' +
+                '<label class="twtr-rep-f"><span>' + esc(t.lbAutoSec) + '</span><input data-k="autoSendSec" type="number" min="3"></label>' +
+              '</div>' +
+              '<div class="twtr-rep-auto">' +
+                '<label class="twtr-rep-chk"><input type="checkbox" data-b="autoSend"> ' + esc(t.lbAutoSend) + '</label>' +
+                '<label class="twtr-rep-chk"><input type="checkbox" data-b="autoLike"> ' + esc(t.lbAutoLike) + '</label>' +
+              '</div>' +
+            '</div></details>' +
           '</div>';
+        box.querySelectorAll('.twtr-rep-sec>summary').forEach((sm) => sm.addEventListener('click', (e) => e.stopPropagation()));   // раскрытие секций не должно дёргать диалог/питомца
         ui = {
           box,
           count: box.querySelector('.twtr-rep-count'),
@@ -794,6 +817,7 @@
           btnHandles: box.querySelector('[data-a="handles"]'),
           inHandle: box.querySelector('[data-k="myHandle"]'),
           note: box.querySelector('.twtr-rep-note'),
+          barF: box.querySelector('.twtr-rep-bar-f'),
         };
         // настройки: показать сохранённое, писать на change
         box.querySelectorAll('[data-k]').forEach((i) => {
@@ -830,9 +854,17 @@
         updateCounter(); renderList(); syncButtons(); renderNote();
         setStatus(queue.targets.length ? fmt(t.stFound, { n: queue.targets.length }) : t.stIdle);
       }
-      function renderNote() { if (ui && ui.note) ui.note.textContent = cfg.autoSend ? L().noteAuto : L().note; }   // честное примечание: с автосендом «я никогда не отправляю сама» — уже неправда
+      function renderNote() {   // честное примечание: с автосендом «я никогда не отправляю сама» — уже неправда (и подсвечиваем жёлтым)
+        if (!ui || !ui.note) return;
+        ui.note.textContent = cfg.autoSend ? L().noteAuto : L().note;
+        ui.note.classList.toggle('warn', !!cfg.autoSend);
+      }
       function setStatus(msg) { if (ui && ui.status && msg != null) ui.status.textContent = msg; }
-      function updateCounter() { if (ui && ui.count) ui.count.textContent = fmt(L().counter, { c: queue.sentToday, cap: cfg.dailyCap }); }
+      function updateCounter() {
+        if (!ui) return;
+        if (ui.count) ui.count.textContent = fmt(L().counter, { c: queue.sentToday, cap: cfg.dailyCap });
+        if (ui.barF) ui.barF.style.width = Math.min(100, Math.round(100 * queue.sentToday / Math.max(1, +cfg.dailyCap || 1))) + '%';   // прогресс дня
+      }
       function stLabel(st) {
         const t = L();
         return st === 'sent' ? t.stSentB : st === 'skip' ? t.stSkipped : st === 'draft' ? t.stDrafted : t.stWait;
@@ -842,9 +874,10 @@
         const t = L();
         ui.list.innerHTML = queue.targets.map((tg, i) => {
           const cur = i === queue.idx && (tg.st === 'wait' || tg.st === 'draft');
+          const bcls = tg.st === 'sent' ? ' sent' : tg.st === 'draft' ? ' draft' : tg.st === 'skip' ? ' skip' : '';   // цветной бейдж статуса
           return '<div class="twtr-rep-it' + (cur ? ' cur' : '') + '">' +
             '<div class="twtr-rep-it-tx" title="' + esc(tg.text) + '">@' + esc(tg.handle) + ' — ' + esc(String(tg.text || '').slice(0, 70)) + '</div>' +
-            '<span class="twtr-rep-it-st' + (tg.st === 'sent' ? ' sent' : '') + '">' + esc(stLabel(tg.st)) + '</span>' +
+            '<span class="twtr-rep-b' + bcls + '">' + esc(stLabel(tg.st)) + '</span>' +
             (cur && running ? '<button class="twtr-rep-skip" type="button">' + esc(t.skip) + '</button>' : '') +
           '</div>';
         }).join('');
