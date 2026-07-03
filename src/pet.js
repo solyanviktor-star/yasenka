@@ -913,9 +913,17 @@
 
   // ---------- кормление ----------
   function feedEat() {
+    if (CAT_SETS.eat) {   // полноценная анимация еды из манифеста: ножка уже В КАДРАХ (eat0…) — летящая картинка мяса не нужна, ест сразу
+      const fMs = (emoMs('eat') || 200) / userSpeed;                  // длительность одного кадра (с учётом ползунка скорости)
+      const eatMs = Math.round(CAT_SETS.eat.length * 2 * fMs);        // РОВНО 2 полных цикла: еда ДОИГРЫВАЕТ до последнего кадра (облизывается с голой косточкой) и на нём выбрасывает кость
+      playEmote('eat', eatMs);                                        // busy не ставим: он замораживает ВЕСЬ tick (кадры бы не листались); неподвижность даёт testKind='emo'
+      bubble.textContent = '😋'; bubble.classList.add('show');
+      setTimeout(throwBone, eatMs - Math.round(fMs / 2));             // кость вылетает ПОКА показан последний кадр (облизывается с косточкой) — не раньше и не после, не по слепому таймеру
+      setTimeout(() => { bubble.classList.remove('show'); setMode('wander'); }, eatMs + 600);
+      return;
+    }
     busy = true;
-    playEmote('feed_want', 540);   // пока мясо летит — предвкушение (хочет есть), затем chomp на 520мс
-    // мясо прилетает снизу к криперу
+    // фолбэк без eat-кадров (крипер): мясо прилетает снизу + chomp
     const meat = document.createElement('img');
     try { meat.src = chrome.runtime.getURL('src/items/meat.png'); } catch (_) {}
     meat.className = 'twtr-pet-meat';
@@ -923,15 +931,6 @@
     meat.style.left = startX + 'px'; meat.style.top = startY + 'px';
     root.appendChild(meat);
     requestAnimationFrame(() => { meat.style.transform = `translate(${(px + PET_W / 2 - 18) - startX}px, ${(py + 8) - startY}px) scale(1)`; });
-    if (CAT_SETS.eat) {   // полноценная анимация еды из манифеста: мясо прилетело -> ест ножку кадрами (грызёт, облизывается)
-      busy = false;   // busy замораживает ВЕСЬ tick (ранний return) -> кадры еды не листались бы; неподвижность даёт testKind='emo' (ветка runTest)
-      const fMs = (emoMs('eat') || 200) / userSpeed;                  // длительность одного кадра (с учётом ползунка скорости)
-      const eatMs = Math.round(CAT_SETS.eat.length * 2 * fMs);        // РОВНО 2 полных цикла: еда ДОИГРЫВАЕТ до последнего кадра (облизывается с голой косточкой) и на нём выбрасывает кость
-      setTimeout(() => { meat.remove(); playEmote('eat', eatMs); bubble.textContent = '😋'; bubble.classList.add('show'); }, 520);
-      setTimeout(throwBone, 520 + eatMs - Math.round(fMs / 2));       // кость вылетает ПОКА показан последний кадр (облизывается с косточкой) — не раньше и не после, не по слепому таймеру
-      setTimeout(() => { bubble.classList.remove('show'); busy = false; setMode('wander'); }, 520 + eatMs + 600);
-      return;
-    }
     setTimeout(() => { setMode('happy'); happyUntil = now() + 900; bubble.textContent = '😋'; pet.classList.add('is-chomp'); }, 520);
     setTimeout(() => { meat.remove(); pet.classList.remove('is-chomp'); }, 950);
     setTimeout(() => { busy = false; setMode('wander'); }, 1200);
@@ -2106,7 +2105,7 @@
       gameTick(t, dt);
     } else if (downloading) {                            // качается видео -> стоит на месте и горит (огненная форма)
       if (mode === 'happy' && t > happyUntil) setMode('idle');
-    } else if (watching && watchAnim() && !thrown && !(testKind === 'emo' && t < testUntil)) {     // играет видео -> идёт/лезет под него и смотрит; застряв — просит подсадить. РЕАЛЬНЫЙ бросок (thrown) не перехватываем; ЭМОЦИЯ доигрывает СТОЯ (кадры показывают эмоцию — двигаться в позе нельзя), к видео пойдёт после
+    } else if (watching && watchAnim() && !thrown && !(testKind === 'emo' && t < testUntil) && !dialog.classList.contains('show')) {     // играет видео -> идёт/лезет под него и смотрит; застряв — просит подсадить. РЕАЛЬНЫЙ бросок (thrown) не перехватываем; ЭМОЦИЯ доигрывает СТОЯ; открытый ДИАЛОГ важнее кино (иначе облачко уезжает за ней — текст не почитать)
       thrown = false; vx = 0;                            // (страховка) мягко поставленную у видео не отшвыриваем вбок
       if (mode === 'happy' && t > happyUntil) setMode('idle');   // сброс радости-приветствия и в походе к видео: иначе wave (выше ходьбы в кадрах) залипает — «машет и едет»
       const wasClimbing = watchClimbing;                 // детект ВХОДА в режим лазания (сброс ниже стирает флаг каждый кадр)
