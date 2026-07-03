@@ -1929,16 +1929,16 @@
     watchFromEl = start.el; watchPingT = 0;                                 // запоминаем покинутую полку (анти-крюк) и сбрасываем его таймер на успешном прыжке
     startJump(step, landC, t);                                              // прыжок к следующей полке маршрута (вверх/вбок/вниз)
   }
+  function rideStandLedge() {   // едем вместе с прокруткой, пока стоим на элементе; сдвиг полки СКРОЛЛОМ — не её ходьба (prevPy), иначе updateHop мигает walk/idle
+    if (!(standLedge && standLedge.el)) return;
+    const r = standLedge.el.getBoundingClientRect();
+    if (!r || r.width < 30 || r.top < 0 || r.top > window.innerHeight) { standLedge = null; return; }
+    prevPy += r.top - standLedge.y;
+    standLedge.y = r.top; standLedge.x1 = Math.max(4, r.left); standLedge.x2 = Math.min(window.innerWidth - 4, r.right);
+  }
   function platformerTick(t, dt) {
     if (t - lastLedgeScan > 140) { lastLedgeScan = t; ledges = engine.scan(); engine.reacquireFloor(); drawLedgeDebug(); }   // снимок полок ведёт движок; ledges — та же ссылка (маршруты к видео/игре читают её)
-    if (standLedge && standLedge.el) {                 // едем вместе с прокруткой, пока стоим на элементе
-      const r = standLedge.el.getBoundingClientRect();
-      if (!r || r.width < 30 || r.top < 0 || r.top > window.innerHeight) standLedge = null;
-      else {
-        prevPy += r.top - standLedge.y;                // сдвиг полки СКРОЛЛОМ — не её ходьба: иначе updateHop мигает walk/idle при медленной прокрутке (py едет за полкой ниже)
-        standLedge.y = r.top; standLedge.x1 = Math.max(4, r.left); standLedge.x2 = Math.min(window.innerWidth - 4, r.right);
-      }
-    }
+    rideStandLedge();
     if (jumping) { falling = false; thrown = false; updateJump(t); return; }
     if (standLedge) {
       falling = false; thrown = false;
@@ -2035,6 +2035,11 @@
     else { say(testDir < 0 ? tr().sGoLeft : tr().sGoRight, 1400); }
   }
   function runTest(t, dt) {
+    if (testKind === 'emo') {                     // эмоция-поза: НИКАКОГО движения, но едем за своей полкой при прокрутке (иначе поза отрывается от блока)
+      rideStandLedge();
+      if (standLedge) py = standLedge.y - PET_H;
+      return;
+    }
     if (testKind === 'jump') { updateJump(t); return; }
     if (testKind === 'run') {                     // настоящий бег: forceRunUntil держит бег, platformerTick роняет с края блока и приземляет
       if (standLedge) {                            // на опоре: цель — дальний край по направлению (после приземления бежит дальше), разворот только у края экрана
@@ -2095,7 +2100,7 @@
       gameTick(t, dt);
     } else if (downloading) {                            // качается видео -> стоит на месте и горит (огненная форма)
       if (mode === 'happy' && t > happyUntil) setMode('idle');
-    } else if (watching && watchAnim() && !thrown) {     // играет видео -> идёт/лезет под него и смотрит; застряв — просит подсадить. РЕАЛЬНЫЙ бросок (thrown) не перехватываем — пусть долетит, потом вернётся к видео
+    } else if (watching && watchAnim() && !thrown && !(testKind === 'emo' && t < testUntil)) {     // играет видео -> идёт/лезет под него и смотрит; застряв — просит подсадить. РЕАЛЬНЫЙ бросок (thrown) не перехватываем; ЭМОЦИЯ доигрывает СТОЯ (кадры показывают эмоцию — двигаться в позе нельзя), к видео пойдёт после
       thrown = false; vx = 0;                            // (страховка) мягко поставленную у видео не отшвыриваем вбок
       const wasClimbing = watchClimbing;                 // детект ВХОДА в режим лазания (сброс ниже стирает флаг каждый кадр)
       watchClimbing = false;                             // включается только в ветке лазания ниже (иначе обычный платформер не лезет целенаправленно)
