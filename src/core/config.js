@@ -106,11 +106,25 @@
       maxContext: 6000,                   // макс. длина текста страницы/треда, отдаваемого в запрос (символы)
       // models — подсказки для выпадающего списка модели (можно вписать ЛЮБУЮ вручную); keysUrl — куда вести «где взять ключ»
       hermes: { baseUrl: 'http://127.0.0.1:8642', model: 'hermes-agent', models: ['hermes-agent'], keysUrl: 'https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server/' },   // локальный API-сервер Hermes
-      gpt:    { baseUrl: 'https://api.openai.com', model: 'gpt-5.5', models: ['gpt-5.5', 'gpt-5', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'o3'], keysUrl: 'https://platform.openai.com/api-keys' },   // OpenAI напрямую; дефолт — последняя gpt-5.5
+      gpt:    { baseUrl: 'https://api.openai.com', model: 'gpt-5.5', models: ['gpt-5.5', 'gpt-5', 'gpt-5-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'], keysUrl: 'https://platform.openai.com/api-keys' },   // OpenAI напрямую; дефолт — последняя gpt-5.5
+      other:  { baseUrl: '', model: '', models: [], keysUrl: '' },   // «Другой» провайдер: любой OpenAI-совместимый (baseUrl+ключ+модель), как «свой эндпоинт» у Hermes
+      // ПРЕСЕТЫ для вкладки «Другой» (в стиле Hermes: Nous Portal / OpenRouter / OpenAI / свой). Выбрал -> подставились адрес/модели/ссылка на ключ; модель и адрес правятся вручную.
+      providers: [
+        { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api', keysUrl: 'https://openrouter.ai/keys', models: ['openai/gpt-5.5', 'anthropic/claude-sonnet-5', 'google/gemini-2.5-pro', 'deepseek/deepseek-chat', 'meta-llama/llama-4-maverick', 'x-ai/grok-4'] },
+        { id: 'nous', name: 'Nous Portal', baseUrl: 'https://inference-api.nousresearch.com', keysUrl: 'https://portal.nousresearch.com/', models: ['Hermes-4-405B', 'Hermes-4-70B', 'DeepHermes-3-Llama-3-8B'] },
+        { id: 'groq', name: 'Groq', baseUrl: 'https://api.groq.com/openai', keysUrl: 'https://console.groq.com/keys', models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'moonshotai/kimi-k2-instruct'] },
+        { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com', keysUrl: 'https://platform.deepseek.com/api_keys', models: ['deepseek-chat', 'deepseek-reasoner'] },
+        { id: 'together', name: 'Together', baseUrl: 'https://api.together.xyz', keysUrl: 'https://api.together.ai/settings/api-keys', models: ['meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8', 'deepseek-ai/DeepSeek-V3', 'Qwen/Qwen3-235B-A22B-fp8'] },
+        { id: 'mistral', name: 'Mistral', baseUrl: 'https://api.mistral.ai', keysUrl: 'https://console.mistral.ai/api-keys', models: ['mistral-large-latest', 'mistral-small-latest', 'codestral-latest'] },
+        { id: 'xai', name: 'xAI (Grok)', baseUrl: 'https://api.x.ai', keysUrl: 'https://console.x.ai/', models: ['grok-4', 'grok-3', 'grok-3-mini'] },
+        { id: 'ollama', name: 'Ollama (локально)', baseUrl: 'http://127.0.0.1:11434', keysUrl: '', models: ['llama3.2', 'qwen2.5', 'mistral-nemo'] },
+        { id: 'custom', name: 'Свой эндпоинт', baseUrl: '', keysUrl: '', models: [] },
+      ],
       // квадратные SVG-значки провайдеров (переиспользуют popup/pet.js/ai.js) — без внешних файлов
       logos: {
         hermes: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="6" fill="#6c5ce7"/><path d="M7.5 6.5h2v3.2h5V6.5h2v11h-2v-3.6h-5v3.6h-2z" fill="#fff"/><path d="M3.6 9.2l3.4 1-3.4 1zM20.4 9.2l-3.4 1 3.4 1z" fill="#fff" opacity=".85"/></svg>',
         gpt: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="6" fill="#10a37f"/><path d="M12 4.6l1.8 4.0 4.0 1.8-4.0 1.8L12 16.2l-1.8-4.0L6.2 10.4l4.0-1.8z" fill="#fff"/><circle cx="12" cy="10.4" r="1.5" fill="#10a37f"/></svg>',
+        other: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="6" fill="#5a6472"/><path d="M12 6.5a2.4 2.4 0 100 4.8 2.4 2.4 0 000-4.8zM7 14.5a2 2 0 100 4 2 2 0 000-4zm10 0a2 2 0 100 4 2 2 0 000-4z" fill="#fff"/><path d="M12 11.3v2.4M10.4 15.8l-2 .9M13.6 15.8l2 .9" stroke="#fff" stroke-width="1.3"/></svg>',
       },
     },
 

@@ -276,7 +276,7 @@
         const s = await localGet({ yasiaAI: null });
         const v = s && s.yasiaAI;
         if (!v || typeof v !== 'object') return { ok: false, noCfg: true };
-        const prov = v.provider === 'gpt' ? 'gpt' : 'hermes';
+        const prov = (v.provider === 'gpt' || v.provider === 'other') ? v.provider : 'hermes';   // hermes | gpt | other (любой OpenAI-совместимый)
         if (prov === 'gpt' && (((v.gpt && v.gpt.authMode) || 'chatgpt') === 'chatgpt')) {   // подписка ChatGPT -> codex-канал
           const cg = (v.gpt && v.gpt.chatgpt) || {};
           if (!cg.accessToken) return { ok: false, noCfg: true };
