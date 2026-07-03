@@ -1934,7 +1934,10 @@
     if (standLedge && standLedge.el) {                 // едем вместе с прокруткой, пока стоим на элементе
       const r = standLedge.el.getBoundingClientRect();
       if (!r || r.width < 30 || r.top < 0 || r.top > window.innerHeight) standLedge = null;
-      else { standLedge.y = r.top; standLedge.x1 = Math.max(4, r.left); standLedge.x2 = Math.min(window.innerWidth - 4, r.right); }
+      else {
+        prevPy += r.top - standLedge.y;                // сдвиг полки СКРОЛЛОМ — не её ходьба: иначе updateHop мигает walk/idle при медленной прокрутке (py едет за полкой ниже)
+        standLedge.y = r.top; standLedge.x1 = Math.max(4, r.left); standLedge.x2 = Math.min(window.innerWidth - 4, r.right);
+      }
     }
     if (jumping) { falling = false; thrown = false; updateJump(t); return; }
     if (standLedge) {
