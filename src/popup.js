@@ -21,8 +21,8 @@ const levelFromXp = (x) => { let lv = 1; for (let i = 0; i < LEVEL_XP.length; i+
 
 // ---------- локализация (единый язык с окном Яси: storage.sync 'dlgLang') ----------
 const P = {
-  ru: { title: '🟩 Твиттер-Питомец', enabled: 'Питомец включён', hero: 'Герой:', lvl: 'Ур.', maxAb: 'макс. способности ✨', abHint: '+скорость +размер', max: '(макс.)', xp: 'Опыт', hunger: 'Голод', mood: 'Настроение', energy: 'Энергия', bond: 'Привязанность', feed: 'Покормить мясом', hint: 'Голод растёт со временем. Заботься о питомце — корми, гладь, играй: он меняется от твоего отношения. Клик по питомцу открывает меню «Забота».', ai: 'ИИ-мозг (Hermes / GPT)', aiOn: 'Подключено', aiOff: 'Не настроен', connect: '⚙ Подключить Hermes / GPT', cfgUrl: 'Адрес', cfgKey: 'Ключ', cfgModel: 'Модель', test: 'Проверить связь', save: 'Сохранить', testing: 'Проверяю…', ok: '🟢 Связь есть', fail: 'Не вышло', saved: '✓ Сохранено', hintHermes: 'Включи в Hermes канал «API server», задай API_SERVER_KEY, впиши адрес и ключ.', hintGpt: 'Прямое подключение к OpenAI: вставь ключ sk-…. Хранится локально, не синкается.', getKey: '🔑 Где взять ключ ↗', langBtn: 'EN', dev: '🛠 Разработчик', devLedges: 'Подсветка полок', devLedgesHint: 'Показывает на странице, как Яся видит полки: оранжевая — стоит тут, зелёные — допрыгнет отсюда, жёлтые — допрыгнет с края полки (маршрут), красные — видит, но не достать, синяя — пол.', amSub: 'Подписка ChatGPT', amKey: 'API-ключ', signinBtn: 'Войти через ChatGPT', signedReauth: 'Войти заново', signedIn: '🟢 Вход выполнен', signinStart: 'Запрашиваю код…', signinCode: 'Открой страницу и введи код:', signinFail: 'Не вышло войти', signinTimeout: 'Время вышло — попробуй ещё раз', hintSub: 'Вход твоим аккаунтом ChatGPT (подписка). Откроется страница OpenAI — введи код. ⚠️ Неофициальный путь: возможен отказ Cloudflare и риск для аккаунта. Если не работает — через Hermes.', paused: 'Пауза (замереть на месте)', flags: '🧩 Способности', flagsHint: 'Действует сразу: выключенная способность останавливается прямо на странице. Сломанная фича гаснет сама.', flagNames: { tamagotchi: 'Тамагочи (голод/энергия)', mediaDownload: 'Скачивание медиа', notes: 'Заметки', aiAssistant: 'ИИ-помощник', skills: 'Навыки', memory: 'Память', games: 'Мини-игры', replier: 'Автореплаер (черновики ответов)' }, backup: '💾 Резервная копия', exportBtn: 'Экспорт', importBtn: 'Импорт', backupHint: 'JSON со статами, заметками, памятью и настройками. Ключи ИИ (yasiaAI) не выгружаются.', expOk: '✓ Файл сохранён', impOk: '✓ Импортировано', impBad: 'Это не файл резервной копии Яси' },
-  en: { title: '🟩 Twitter-Pet', enabled: 'Pet enabled', hero: 'Character:', lvl: 'Lv.', maxAb: 'max abilities ✨', abHint: '+speed +size', max: '(max)', xp: 'XP', hunger: 'Hunger', mood: 'Mood', energy: 'Energy', bond: 'Bond', feed: 'Feed meat', hint: 'Hunger grows over time. Care for the pet — feed, pet, play: it changes with how you treat it. Click the pet to open the «Care» menu.', ai: 'AI brain (Hermes / GPT)', aiOn: 'Connected', aiOff: 'Not set up', connect: '⚙ Connect Hermes / GPT', cfgUrl: 'Address', cfgKey: 'Key', cfgModel: 'Model', test: 'Test connection', save: 'Save', testing: 'Testing…', ok: '🟢 Connection OK', fail: 'Failed', saved: '✓ Saved', hintHermes: 'In Hermes enable the «API server» channel, set API_SERVER_KEY, enter the address and key.', hintGpt: 'Direct OpenAI connection: paste sk-… key. Stored locally, never synced.', getKey: '🔑 Get a key ↗', langBtn: 'RU', dev: '🛠 Developer', devLedges: 'Ledge overlay', devLedgesHint: 'Shows how Yasya sees the page: orange — standing here, green — jumpable from her spot, yellow — jumpable from the ledge edge (route), red — visible but unreachable, blue — the floor.', amSub: 'ChatGPT subscription', amKey: 'API key', signinBtn: 'Sign in with ChatGPT', signedReauth: 'Sign in again', signedIn: '🟢 Signed in', signinStart: 'Requesting code…', signinCode: 'Open the page and enter the code:', signinFail: 'Sign-in failed', signinTimeout: 'Timed out — try again', hintSub: 'Sign in with your ChatGPT account (subscription). An OpenAI page opens — enter the code. ⚠️ Unofficial path: Cloudflare may refuse it and there is account risk. If it fails, use Hermes.', paused: 'Pause (freeze in place)', flags: '🧩 Features', flagsHint: 'Applies instantly: a feature you turn off stops right on the page. A broken feature turns itself off.', flagNames: { tamagotchi: 'Tamagotchi (hunger/energy)', mediaDownload: 'Media download', notes: 'Notes', aiAssistant: 'AI assistant', skills: 'Skills', memory: 'Memory', games: 'Mini-games', replier: 'Auto-replier (reply drafts)' }, backup: '💾 Backup', exportBtn: 'Export', importBtn: 'Import', backupHint: 'JSON with stats, notes, memory and settings. AI keys (yasiaAI) are never exported.', expOk: '✓ File saved', impOk: '✓ Imported', impBad: 'Not a Yasya backup file' },
+  ru: { title: '🟩 Твиттер-Питомец', enabled: 'Питомец включён', hero: 'Герой:', lvl: 'Ур.', maxAb: 'макс. способности ✨', abHint: '+скорость +размер', max: '(макс.)', xp: 'Опыт', hunger: 'Голод', mood: 'Настроение', energy: 'Энергия', bond: 'Привязанность', feed: 'Покормить мясом', hint: 'Голод растёт со временем. Заботься о питомце — корми, гладь, играй: он меняется от твоего отношения. Клик по питомцу открывает меню «Забота».', ai: 'ИИ-мозг', aiOn: 'Подключено', aiOff: 'Не настроен', connect: '⚙ Подключить ИИ', cfgUrl: 'Адрес API', cfgKey: 'API-ключ', cfgModel: 'Модель', test: 'Проверить связь', save: 'Сохранить', testing: 'Проверяю…', ok: '🟢 Связь есть', fail: 'Не вышло', saved: '✓ Сохранено', hintHermes: 'Включи в Hermes канал «API server», задай API_SERVER_KEY, впиши адрес и ключ.', hintGpt: 'Прямое подключение к OpenAI: вставь ключ sk-…. Хранится локально, не синкается.', hintOther: 'Любой OpenAI-совместимый провайдер (OpenRouter, Groq, DeepSeek, Together, свой эндпоинт…). Выбери из списка или впиши адрес и ключ. Ключ хранится локально, не синкается.', provOther: 'Другой', lbPreset: 'Провайдер', pickModel: '— выбрать модель —', customModel: '✎ Своя модель…', getKey: '🔑 Где взять ключ ↗', langBtn: 'EN', dev: '🛠 Разработчик', devLedges: 'Подсветка полок', devLedgesHint: 'Показывает на странице, как Яся видит полки: оранжевая — стоит тут, зелёные — допрыгнет отсюда, жёлтые — допрыгнет с края полки (маршрут), красные — видит, но не достать, синяя — пол.', amSub: 'Подписка ChatGPT', amKey: 'API-ключ', signinBtn: 'Войти через ChatGPT', signedReauth: 'Войти заново', signedIn: '🟢 Вход выполнен', signinStart: 'Запрашиваю код…', signinCode: 'Открой страницу и введи код:', signinFail: 'Не вышло войти', signinTimeout: 'Время вышло — попробуй ещё раз', hintSub: 'Вход твоим аккаунтом ChatGPT (подписка). Откроется страница OpenAI — введи код. ⚠️ Неофициальный путь: возможен отказ Cloudflare и риск для аккаунта. Если не работает — через Hermes.', paused: 'Пауза (замереть на месте)', flags: '🧩 Способности', flagsHint: 'Действует сразу: выключенная способность останавливается прямо на странице. Сломанная фича гаснет сама.', flagNames: { tamagotchi: 'Тамагочи (голод/энергия)', mediaDownload: 'Скачивание медиа', notes: 'Заметки', aiAssistant: 'ИИ-помощник', skills: 'Навыки', memory: 'Память', games: 'Мини-игры', replier: 'Автореплаер (черновики ответов)' }, backup: '💾 Резервная копия', exportBtn: 'Экспорт', importBtn: 'Импорт', backupHint: 'JSON со статами, заметками, памятью и настройками. Ключи ИИ (yasiaAI) не выгружаются.', expOk: '✓ Файл сохранён', impOk: '✓ Импортировано', impBad: 'Это не файл резервной копии Яси' },
+  en: { title: '🟩 Twitter-Pet', enabled: 'Pet enabled', hero: 'Character:', lvl: 'Lv.', maxAb: 'max abilities ✨', abHint: '+speed +size', max: '(max)', xp: 'XP', hunger: 'Hunger', mood: 'Mood', energy: 'Energy', bond: 'Bond', feed: 'Feed meat', hint: 'Hunger grows over time. Care for the pet — feed, pet, play: it changes with how you treat it. Click the pet to open the «Care» menu.', ai: 'AI brain', aiOn: 'Connected', aiOff: 'Not set up', connect: '⚙ Connect AI', cfgUrl: 'API address', cfgKey: 'API key', cfgModel: 'Model', test: 'Test connection', save: 'Save', testing: 'Testing…', ok: '🟢 Connection OK', fail: 'Failed', saved: '✓ Saved', hintHermes: 'In Hermes enable the «API server» channel, set API_SERVER_KEY, enter the address and key.', hintGpt: 'Direct OpenAI connection: paste sk-… key. Stored locally, never synced.', hintOther: 'Any OpenAI-compatible provider (OpenRouter, Groq, DeepSeek, Together, your own endpoint…). Pick one or type the address and key. The key is stored locally, never synced.', provOther: 'Other', lbPreset: 'Provider', pickModel: '— pick a model —', customModel: '✎ Custom model…', getKey: '🔑 Get a key ↗', langBtn: 'RU', dev: '🛠 Developer', devLedges: 'Ledge overlay', devLedgesHint: 'Shows how Yasya sees the page: orange — standing here, green — jumpable from her spot, yellow — jumpable from the ledge edge (route), red — visible but unreachable, blue — the floor.', amSub: 'ChatGPT subscription', amKey: 'API key', signinBtn: 'Sign in with ChatGPT', signedReauth: 'Sign in again', signedIn: '🟢 Signed in', signinStart: 'Requesting code…', signinCode: 'Open the page and enter the code:', signinFail: 'Sign-in failed', signinTimeout: 'Timed out — try again', hintSub: 'Sign in with your ChatGPT account (subscription). An OpenAI page opens — enter the code. ⚠️ Unofficial path: Cloudflare may refuse it and there is account risk. If it fails, use Hermes.', paused: 'Pause (freeze in place)', flags: '🧩 Features', flagsHint: 'Applies instantly: a feature you turn off stops right on the page. A broken feature turns itself off.', flagNames: { tamagotchi: 'Tamagotchi (hunger/energy)', mediaDownload: 'Media download', notes: 'Notes', aiAssistant: 'AI assistant', skills: 'Skills', memory: 'Memory', games: 'Mini-games', replier: 'Auto-replier (reply drafts)' }, backup: '💾 Backup', exportBtn: 'Export', importBtn: 'Import', backupHint: 'JSON with stats, notes, memory and settings. AI keys (yasiaAI) are never exported.', expOk: '✓ File saved', impOk: '✓ Imported', impBad: 'Not a Yasya backup file' },
 };
 // строки редизайна v1.1 (тамагочи-first) — доливаем поверх, чтобы не раздувать исходные словари
 Object.assign(P.ru, {
@@ -49,12 +49,14 @@ const L2 = () => P[lang] || P.ru;
 // ---------- конфиг ИИ-мозга (тот же storage.local 'yasiaAI', что читает src/systems/ai.js) ----------
 const AICFG = (CFG && CFG.AI) || {};
 const LOGOS = AICFG.logos || { hermes: '', gpt: '' };
+const PROVIDERS = AICFG.providers || [];   // пресеты для вкладки «Другой» (OpenRouter/Groq/DeepSeek/…)
 const PROV_DEF = {
   hermes: { baseUrl: (AICFG.hermes && AICFG.hermes.baseUrl) || 'http://127.0.0.1:8642', apiKey: '', model: (AICFG.hermes && AICFG.hermes.model) || 'hermes-agent' },
   gpt: { baseUrl: (AICFG.gpt && AICFG.gpt.baseUrl) || 'https://api.openai.com', apiKey: '', model: (AICFG.gpt && AICFG.gpt.model) || 'gpt-5.5', authMode: 'chatgpt', chatgpt: { accessToken: '', refreshToken: '', accountId: '' } },
+  other: { baseUrl: '', apiKey: '', model: '', presetId: '' },   // «Другой»: любой OpenAI-совместимый (baseUrl+ключ+модель)
 };
-let aiCfg = { provider: AICFG.provider || 'hermes', sessionKey: AICFG.sessionKey || 'yasia:x', hermes: Object.assign({}, PROV_DEF.hermes), gpt: Object.assign({}, PROV_DEF.gpt) };
-let aiProv = aiCfg.provider;   // какой провайдер сейчас редактируется в форме
+let aiCfg = { provider: AICFG.provider || 'hermes', sessionKey: AICFG.sessionKey || 'yasia:x', hermes: Object.assign({}, PROV_DEF.hermes), gpt: Object.assign({}, PROV_DEF.gpt), other: Object.assign({}, PROV_DEF.other) };
+let aiProv = aiCfg.provider === 'hermes' ? 'gpt' : aiCfg.provider;   // Hermes-вкладки в UI нет -> правим GPT/Other (Hermes = пресет «Nous Portal»)
 let aiMode = aiCfg.gpt.authMode || 'chatgpt';   // режим GPT-вкладки: 'chatgpt' (подписка) | 'key'
 let signinTimer = 0;
 
@@ -336,6 +338,7 @@ function localize() {
   setPetName(); buildAnims();
   buildFlags();
   set('t-cfg-url', t.cfgUrl); set('t-cfg-key', t.cfgKey); set('t-cfg-model', t.cfgModel);
+  set('t-prov-other', t.provOther); set('t-cfg-preset', t.lbPreset);
   set('cfg-test', t.test); set('cfg-save', t.save);
   const lb = document.getElementById('lang'); if (lb) lb.textContent = t.langBtn;
   try { document.documentElement.lang = lang; } catch (_) {}
@@ -350,34 +353,49 @@ function aiConfigured() {
   const a = aiCfg[aiCfg.provider] || {}; return !!(a.baseUrl && a.apiKey);
 }
 function injectLogos() {
-  const h = document.getElementById('ai-logo'); if (h) h.innerHTML = LOGOS[aiCfg.provider] || '';
-  const ph = document.querySelector('#prov-hermes .ai-logo'); if (ph) ph.innerHTML = LOGOS.hermes || '';
+  const h = document.getElementById('ai-logo'); if (h) h.innerHTML = LOGOS[aiCfg.provider] || LOGOS.other || '';
   const pg = document.querySelector('#prov-gpt .ai-logo'); if (pg) pg.innerHTML = LOGOS.gpt || '';
+  const po = document.querySelector('#prov-other .ai-logo'); if (po) po.innerHTML = LOGOS.other || '';
+}
+function otherPreset() { return PROVIDERS.find((p) => p.id === aiCfg.other.presetId) || null; }   // выбранный пресет во вкладке «Другой»
+// «эффективный» конфиг активного провайдера для СТАТУСА/подсказок (у Other модели/keysUrl берём из пресета)
+function provInfo(prov) {
+  if (prov === 'other') { const pr = otherPreset(); return { models: (pr && pr.models) || [], keysUrl: (pr && pr.keysUrl) || '' }; }
+  return AICFG[prov] || {};
 }
 function updateAiStatus() {
   const el = document.getElementById('ai-status'); if (!el) return;
-  const t = L2(), provName = aiCfg.provider === 'gpt' ? 'GPT' : 'Hermes';
+  const t = L2();
+  const provName = aiCfg.provider === 'gpt' ? 'GPT' : (aiCfg.provider === 'other' ? ((otherPreset() || {}).name || t.provOther) : 'Hermes');
   el.textContent = aiConfigured() ? (t.aiOn + ' · ' + provName) : t.aiOff;
   el.classList.toggle('ok', aiConfigured());
-  const h = document.getElementById('ai-logo'); if (h) h.innerHTML = LOGOS[aiCfg.provider] || '';
+  const h = document.getElementById('ai-logo'); if (h) h.innerHTML = LOGOS[aiCfg.provider] || LOGOS.other || '';
 }
 function fillProvHint() {
   const e = document.getElementById('cfg-hint'); if (!e) return;
-  e.textContent = (aiProv === 'gpt' && aiMode === 'chatgpt') ? L2().hintSub : (aiProv === 'gpt' ? L2().hintGpt : L2().hintHermes);
+  e.textContent = (aiProv === 'gpt' && aiMode === 'chatgpt') ? L2().hintSub : (aiProv === 'gpt' ? L2().hintGpt : L2().hintOther);
 }
 function fillAi() {
   const t = L2();
   const isSub = (aiProv === 'gpt' && aiMode === 'chatgpt');
   const p = aiCfg[aiProv] || {};
-  const url = document.getElementById('cfg-url'), key = document.getElementById('cfg-key'), model = document.getElementById('cfg-model');
-  if (url) url.value = p.baseUrl || ''; if (key) key.value = p.apiKey || ''; if (model) model.value = p.model || '';
-  const bh = document.getElementById('prov-hermes'), bg = document.getElementById('prov-gpt');
-  if (bh) bh.classList.toggle('on', aiProv === 'hermes'); if (bg) bg.classList.toggle('on', aiProv === 'gpt');
+  const info = provInfo(aiProv);
+  const url = document.getElementById('cfg-url'), key = document.getElementById('cfg-key');
+  if (url) url.value = p.baseUrl || ((aiProv === 'other' && otherPreset()) ? otherPreset().baseUrl : '');
+  if (key) key.value = p.apiKey || '';
+  const bg = document.getElementById('prov-gpt'), bo = document.getElementById('prov-other');
+  if (bg) bg.classList.toggle('on', aiProv === 'gpt'); if (bo) bo.classList.toggle('on', aiProv === 'other');
   // вкладки режима (только для GPT)
   const modeBox = document.getElementById('ai-mode'); if (modeBox) modeBox.hidden = (aiProv !== 'gpt');
   const ms = document.getElementById('mode-sub'), mk = document.getElementById('mode-key');
   if (ms) { ms.textContent = t.amSub; ms.classList.toggle('on', aiMode === 'chatgpt'); }
   if (mk) { mk.textContent = t.amKey; mk.classList.toggle('on', aiMode === 'key'); }
+  // пресет-провайдер (только «Другой»)
+  const presetF = document.getElementById('cfg-preset-f'); if (presetF) presetF.hidden = (aiProv !== 'other');
+  const preSel = document.getElementById('cfg-preset');
+  if (preSel && aiProv === 'other') {
+    preSel.innerHTML = '<option value="">—</option>' + PROVIDERS.map((pr) => '<option value="' + pr.id + '"' + (pr.id === aiCfg.other.presetId ? ' selected' : '') + '>' + pr.name + '</option>').join('');
+  }
   // поля ключа vs блок входа
   const kf = document.getElementById('ai-keyfields'); if (kf) kf.hidden = isSub;
   const si = document.getElementById('ai-signin'); if (si) si.hidden = !isSub;
@@ -386,18 +404,29 @@ function fillAi() {
     const sb = document.getElementById('signin-btn'); if (sb) sb.textContent = signed ? t.signedReauth : t.signinBtn;
     const st = document.getElementById('signin-st'); if (st && !signinTimer) { st.className = 'ai-signin-st' + (signed ? ' ok' : ''); st.textContent = signed ? t.signedIn : ''; }
   }
-  const dl = document.getElementById('cfg-models');
-  const models = (AICFG[aiProv] && AICFG[aiProv].models) || [];
-  if (dl) dl.innerHTML = models.map((m) => '<option value="' + m + '"></option>').join('');   // список моделей провайдера (можно вписать любую)
-  const gk = document.getElementById('cfg-getkey'), kurl = AICFG[aiProv] && AICFG[aiProv].keysUrl;
+  // модель = ВЫПАДАЮЩИЙ список всех известных + «своя модель» (видны все сразу, не как datalist)
+  const sel = document.getElementById('cfg-modelsel'), cust = document.getElementById('cfg-modelcustom');
+  const models = info.models || [];
+  const cur = p.model || '';
+  const inList = models.indexOf(cur) >= 0;
+  if (sel) {
+    sel.innerHTML = '<option value="">' + t.pickModel + '</option>' +
+      models.map((m) => '<option value="' + m + '"' + (m === cur ? ' selected' : '') + '>' + m + '</option>').join('') +
+      '<option value="__custom__"' + ((!inList && cur) ? ' selected' : '') + '>' + t.customModel + '</option>';
+  }
+  if (cust) { cust.value = (!inList ? cur : ''); cust.placeholder = cur || (aiProv === 'gpt' ? 'gpt-5.5' : 'model-name'); cust.style.display = (!inList && cur) ? '' : 'none'; }
+  const gk = document.getElementById('cfg-getkey'), kurl = info.keysUrl;
   if (gk) { if (kurl) { gk.href = kurl; gk.textContent = t.getKey; gk.style.display = ''; } else gk.style.display = 'none'; }   // ссылка «где взять ключ»
   fillProvHint();
 }
 function collectAi() {
+  const sel = document.getElementById('cfg-modelsel'), cust = document.getElementById('cfg-modelcustom');
+  const selV = sel ? sel.value : '';
+  const model = (selV === '__custom__' || !selV) ? ((cust && cust.value) || '').trim() : selV;   // модель: из списка или своя
   return {
     baseUrl: ((document.getElementById('cfg-url') || {}).value || '').trim(),
     apiKey: ((document.getElementById('cfg-key') || {}).value || '').trim(),
-    model: ((document.getElementById('cfg-model') || {}).value || '').trim(),
+    model: model,
   };
 }
 
@@ -405,21 +434,34 @@ injectLogos();
 chrome.storage.local.get({ yasiaAI: null }, (s) => {
   const v = s && s.yasiaAI;
   if (v && typeof v === 'object') {
-    if (v.provider === 'gpt' || v.provider === 'hermes') aiCfg.provider = v.provider;
+    if (v.provider === 'gpt' || v.provider === 'hermes' || v.provider === 'other') aiCfg.provider = v.provider;
     if (v.sessionKey) aiCfg.sessionKey = v.sessionKey;
     if (v.hermes && typeof v.hermes === 'object') aiCfg.hermes = Object.assign(aiCfg.hermes, v.hermes);
     if (v.gpt && typeof v.gpt === 'object') aiCfg.gpt = Object.assign(aiCfg.gpt, v.gpt);
+    if (v.other && typeof v.other === 'object') aiCfg.other = Object.assign(aiCfg.other, v.other);
   }
-  aiProv = aiCfg.provider; aiMode = aiCfg.gpt.authMode || 'chatgpt'; fillAi(); updateAiStatus();
+  aiProv = aiCfg.provider === 'hermes' ? 'gpt' : aiCfg.provider; aiMode = aiCfg.gpt.authMode || 'chatgpt'; fillAi(); updateAiStatus();
 });
 
 document.getElementById('ai-toggle').addEventListener('click', () => {
   const box = document.getElementById('ai-cfg'); box.hidden = !box.hidden; if (!box.hidden) fillAi();
 });
-[['prov-hermes', 'hermes'], ['prov-gpt', 'gpt']].forEach(([id, p]) => {
+[['prov-gpt', 'gpt'], ['prov-other', 'other']].forEach(([id, p]) => {
   const b = document.getElementById(id);
   if (b) b.addEventListener('click', () => { aiCfg[aiProv] = Object.assign({}, aiCfg[aiProv], collectAi()); aiProv = p; fillAi(); });
 });
+// пресет провайдера (вкладка «Другой») -> подставить адрес/модели/ссылку
+const preSelEl = document.getElementById('cfg-preset');
+if (preSelEl) preSelEl.addEventListener('change', () => {
+  aiCfg.other = Object.assign({}, aiCfg.other, collectAi());
+  aiCfg.other.presetId = preSelEl.value;
+  const pr = PROVIDERS.find((x) => x.id === preSelEl.value);
+  if (pr) { if (pr.baseUrl) aiCfg.other.baseUrl = pr.baseUrl; if ((pr.models || []).indexOf(aiCfg.other.model) < 0) aiCfg.other.model = ''; }
+  fillAi();
+});
+// «своя модель»: показываем текстовое поле, когда в списке выбран пункт custom
+const modelSelEl = document.getElementById('cfg-modelsel'), modelCustEl = document.getElementById('cfg-modelcustom');
+if (modelSelEl && modelCustEl) modelSelEl.addEventListener('change', () => { const c = modelSelEl.value === '__custom__'; modelCustEl.style.display = c ? '' : 'none'; if (c) modelCustEl.focus(); });
 [['mode-sub', 'chatgpt'], ['mode-key', 'key']].forEach(([id, m]) => {
   const b = document.getElementById(id);
   if (b) b.addEventListener('click', () => { aiCfg.gpt = Object.assign({}, aiCfg.gpt, collectAi()); aiMode = m; aiCfg.gpt.authMode = m; fillAi(); });
