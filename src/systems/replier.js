@@ -27,6 +27,7 @@
     if (!t || !t.postId || !t.handle) return 'meta';
     if (t.promoted) return 'promo';
     if (t.repost) return 'repost';
+    if (t.reply) return 'reply';   // чужой РЕПЛАЙ под постом — не цель: отвечаем на оригинальные посты, не на комментарии
     if (o.myHandle && t.handle === o.myHandle) return 'self';
     if (String(t.text || '').trim().length <= (o.minLen != null ? o.minLen : 30)) return 'short';
     if (o.replied && o.replied[t.postId]) return 'replied';
@@ -347,11 +348,17 @@
         const sc = card.querySelector(SEL.social);
         return sc ? /repost|retweet|репост/i.test(sc.textContent || '') : false;
       }
+      function isReplyCard(card, meta, rootId) {   // карточка-РЕПЛАЙ, а не оригинальный пост
+        if (rootId) return !!(meta && meta.postId && meta.postId !== rootId);   // страница треда (/status/): всё, кроме корневого поста, — реплаи под ним
+        const head = (card.innerText || '').slice(0, 160);                      // лента «с ответами»: X подписывает реплаи «Replying to @…»/«В ответ»
+        return /(^|\n)\s*(Replying to|В ответ)/i.test(head);
+      }
       function scanCards() {   // кандидаты из видимых карточек текущей ленты
         const out = [];
+        const rootId = (location.pathname.match(/\/status\/(\d+)/) || [])[1] || null;   // открыт конкретный пост -> целью может быть только он сам
         for (const card of document.querySelectorAll(SEL.tweet)) {
           const meta = tweetMeta(card); if (!meta) continue;
-          out.push({ handle: meta.handle, postId: meta.postId, postUrl: meta.postUrl, text: extractTweetText(card), promoted: isPromoted(card), repost: isRepost(card) });
+          out.push({ handle: meta.handle, postId: meta.postId, postUrl: meta.postUrl, text: extractTweetText(card), promoted: isPromoted(card), repost: isRepost(card), reply: isReplyCard(card, meta, rootId) });
         }
         return out;
       }

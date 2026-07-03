@@ -35,6 +35,7 @@ test('targetFilterReason: каждая причина отбраковки', () 
   assert.equal(targetFilterReason({ handle: 'a' }, {}), 'meta');                                    // нет postId
   assert.equal(targetFilterReason(Object.assign({}, OK, { promoted: true }), {}), 'promo');
   assert.equal(targetFilterReason(Object.assign({}, OK, { repost: true }), {}), 'repost');
+  assert.equal(targetFilterReason(Object.assign({}, OK, { reply: true }), {}), 'reply');            // чужой реплай под постом — не цель
   assert.equal(targetFilterReason(OK, { myHandle: 'alice' }), 'self');                              // не отвечаем сами себе
   assert.equal(targetFilterReason(Object.assign({}, OK, { text: 'коротко' }), {}), 'short');        // <=30 симв.
   assert.equal(targetFilterReason(OK, { replied: { 1: 1700000000 } }), 'replied');                  // уже отвечен
