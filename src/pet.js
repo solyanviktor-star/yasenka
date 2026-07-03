@@ -912,14 +912,21 @@
   }
 
   // ---------- кормление ----------
+  // еда КАК АНИМАЦИЯ: ровно 2 полных цикла кадров, в конце (кадр с голой косточкой) вылетает РОВНО ОДНА кость.
+  // Единственный вход для всех путей (кормление, попап, тест-сетка) — кость всегда завершает анимацию.
+  function playEatCycle() {
+    if (thrown || falling || jumping) { pendingEmote = { emo: 'eat', ms: 0 }; return 0; }   // в полёте — отложим ЦЕЛИКОМ (иначе кость вылетит без еды)
+    const fMs = (emoMs('eat') || 200) / userSpeed;                  // длительность одного кадра (с учётом ползунка скорости)
+    const eatMs = Math.round(CAT_SETS.eat.length * 2 * fMs);        // еда ДОИГРЫВАЕТ до последнего кадра (облизывается с косточкой)
+    playEmote('eat', eatMs);                                        // busy не ставим: он замораживает ВЕСЬ tick (кадры бы не листались); неподвижность даёт testKind='emo'
+    setTimeout(throwBone, eatMs - Math.round(fMs / 2));             // кость — ПОКА показан последний кадр, одна на проигрыш
+    return eatMs;
+  }
   function feedEat() {
     if (CAT_SETS.eat) {   // полноценная анимация еды из манифеста: ножка уже В КАДРАХ (eat0…) — летящая картинка мяса не нужна, ест сразу
-      const fMs = (emoMs('eat') || 200) / userSpeed;                  // длительность одного кадра (с учётом ползунка скорости)
-      const eatMs = Math.round(CAT_SETS.eat.length * 2 * fMs);        // РОВНО 2 полных цикла: еда ДОИГРЫВАЕТ до последнего кадра (облизывается с голой косточкой) и на нём выбрасывает кость
-      playEmote('eat', eatMs);                                        // busy не ставим: он замораживает ВЕСЬ tick (кадры бы не листались); неподвижность даёт testKind='emo'
+      const eatMs = playEatCycle();
       bubble.textContent = '😋'; bubble.classList.add('show');
-      setTimeout(throwBone, eatMs - Math.round(fMs / 2));             // кость вылетает ПОКА показан последний кадр (облизывается с косточкой) — не раньше и не после, не по слепому таймеру
-      setTimeout(() => { bubble.classList.remove('show'); setMode('wander'); }, eatMs + 600);
+      setTimeout(() => { bubble.classList.remove('show'); setMode('wander'); }, (eatMs || 2400) + 600);
       return;
     }
     busy = true;
@@ -2014,6 +2021,11 @@
         if (goSitEdge(now())) { const se = EMOTIONS.find((x) => x.key === 'sit_edge'); say(se ? se.emo + ' ' + se.name : 'sit_edge', 1600); return; }
         // в воздухе — обычной позой на месте (упадёт и покажет)
       }
+      if (st === 'eat' && CAT_SETS.eat) {             // еда и из тест-сетки — полный цикл с костью в конце (кость всегда завершает анимацию)
+        playEatCycle();
+        const ee = EMOTIONS.find((x) => x.key === 'eat'); say(ee ? ee.emo + ' ' + ee.name : 'eat', 1600);
+        return;
+      }
       playEmote(st, 3400);                       // через playEmote: в полёте эмоция ОТЛОЖИТСЯ до приземления (иначе поза зависает в воздухе)
       const e = EMOTIONS.find((x) => x.key === st); say(e ? e.emo + ' ' + e.name : st, 1600);
       return;
@@ -2204,6 +2216,7 @@
       if (pendingEmote && !dragging && !paused && t >= testUntil) {   // отложенная эмоция играет ТОЛЬКО на земле (и после сквоша land) — падение в приоритете
         const pe = pendingEmote; pendingEmote = null;
         if (pe.emo === 'sit_edge') goSitEdge(t);                      // «сидит на краю» и после приземления привязана к краю опоры, не к точке приземления
+        else if (pe.emo === 'eat' && CAT_SETS.eat) playEatCycle();    // еда и после приземления играет полным циклом с костью в конце
         else playEmote(pe.emo, pe.ms);
         if (pe.line) say(pe.line, pe.sayMs || 1900);
       }
