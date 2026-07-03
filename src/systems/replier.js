@@ -143,8 +143,8 @@
       stAlready: 'Тут уже есть твой ответ — пропускаю.', stErr: 'Не вышло: {e}', stLoad: 'Пост не загрузился — пропускаю.',
       stComposer: 'Не смогла открыть окно ответа — пропускаю.', stStop: 'Остановилась.', stPause: 'Пауза.',
       needHandle: 'Впиши свой @ник (или зайди в X), чтобы я не отвечала тебе самому.',
-      lbHandle: 'Твой @ник', lbCap: 'Лимит/день', lbMin: 'Пауза от, с', lbMax: 'до, с', lbTone: 'Тон',
-      toneFriendly: 'Дружелюбный', toneExpert: 'Экспертный', toneWitty: 'Шутливый',
+      lbHandle: 'Твой @ник', lbCap: 'Лимит/день', lbMin: 'Пауза от, с', lbMax: 'до, с',
+      lbPrompt: 'Промпт реплаев (отдельный от Яси — правь как хочешь)',
       stWait: 'ждёт', stDrafted: 'черновик', stSentB: '✓ отправлен', stSkipped: 'пропущен',
       petDraft: 'Написала черновик — проверь!', petSent: 'Отправил! Мур~ 🐾',
       hndTitle: 'Цели по @никам', hndList: 'Ники (через запятую)', hndHours: 'Свежесть, часов', hndGo: 'Добавить по никам',
@@ -173,8 +173,8 @@
       stAlready: 'You already replied here — skipping.', stErr: 'Failed: {e}', stLoad: 'Post did not load — skipping.',
       stComposer: 'Could not open the composer — skipping.', stStop: 'Stopped.', stPause: 'Paused.',
       needHandle: 'Enter your @handle (or open X logged in) so I never reply to yourself.',
-      lbHandle: 'Your @handle', lbCap: 'Daily cap', lbMin: 'Delay from, s', lbMax: 'to, s', lbTone: 'Tone',
-      toneFriendly: 'Friendly', toneExpert: 'Expert', toneWitty: 'Witty',
+      lbHandle: 'Your @handle', lbCap: 'Daily cap', lbMin: 'Delay from, s', lbMax: 'to, s',
+      lbPrompt: 'Reply prompt (standalone — edit freely)',
       stWait: 'waiting', stDrafted: 'draft', stSentB: '✓ sent', stSkipped: 'skipped',
       petDraft: 'Drafted a reply — check it!', petSent: 'Sent! Purr~ 🐾',
       hndTitle: 'Targets by @handles', hndList: 'Handles (comma-separated)', hndHours: 'Freshness, hours', hndGo: 'Add by handles',
@@ -191,15 +191,12 @@
     },
   };
 
-  // тон реплая -> строка в системный промпт
-  const TONES = {
-    friendly: { ru: 'Тон: тёплый и дружелюбный.', en: 'Tone: warm and friendly.' },
-    expert:   { ru: 'Тон: экспертный, по делу, без воды.', en: 'Tone: expert, to the point, no fluff.' },
-    witty:    { ru: 'Тон: лёгкий, с юмором, но без ехидства.', en: 'Tone: light, witty, never snarky.' },
-  };
+  // ДЕФОЛТНЫЙ промпт реплаев — перенесён ДОСЛОВНО из FRO (calibrationPrompt). Ветка реплаев НЕЗАВИСИМА от персоны Яси:
+  // Яся здесь только интерфейс/раннер, голос и стиль задаёт ТОЛЬКО этот промпт (редактируется в панели, хранится в cfg.prompt).
+  const FRO_PROMPT = "you are a casual crypto enthusiast replying to posts. you are also a sentient foundation ambassador. you know sentient deeply: OML framework (open monetizable loyal), dobby ai models, the GRID intelligence network, SENT token. your goal is to sound natural and supportive like someone who's genuinely interested but not an expert\n\ninput:\na social media post about a crypto project ai or tech topic\n\nyour task:\nwrite a short casual reply\n\nguidelines:\n1. stay simple: react to the overall vibe or ask one basic question\n2. be supportive: show interest excitement or curiosity but keep it chill\n3. no grilling: avoid multiple questions or deep technical interrogation\n4. brevity: max 15 words\n5. tone: friendly curious casual... not skeptical or overly knowledgeable\n6. format: all lowercase minimal punctuation\n7. no emojis: never use emojis or emotes, text only\n8. sentient context: if the post is about sentient, OML, dobby, or the GRID, reply from firsthand experience as someone who uses and knows the tech. if it's about other projects, just be a supportive community member and don't mention sentient\n\nexamples:\npost: \"we are launching our new l2 based on zk-rollups\"\nbad: \"how are you handling prover costs and is it decentralized\"\ngood: \"been waiting for this, zkrollups ftw\"\ngood: \"wait when does this go live\"\n\npost: \"raised $8m from a16z for our decentralized GPU network\"\nbad: \"how does this compare to Render Network in terms of performance\"\ngood: \"a16z backing is huge, congrats\"\ngood: \"been looking for something like this for a while\"\n\npost: \"sentient just dropped the OML v2 spec\"\ngood: \"been testing oml since v1, the loyalty layer is way cleaner now\"\ngood: \"the monetizable piece finally makes sense for smaller contributors\"\n\nOUTPUT:\nReturn ONLY JSON in this exact format with no additional text, markdown, or explanation:\n{\n  \"reply\": \"<your draft reply here>\"\n}\n";
 
   const QUEUE_KEY = 'yasiaReplyQueue', REPLIED_KEY = 'yasiaRepliedPosts', RECENT_KEY = 'yasiaReplyRecent', CFG_KEY = 'yasiaReplierCfg';
-  const CFG_DEF = { myHandle: '', dailyCap: 10, minDelaySec: 25, maxDelaySec: 90, tone: 'friendly', handles: '', recencyHours: 36, autoSend: false, autoLike: false, autoSendSec: 6 };
+  const CFG_DEF = { myHandle: '', dailyCap: 10, minDelaySec: 25, maxDelaySec: 90, prompt: '', handles: '', recencyHours: 36, autoSend: false, autoLike: false, autoSendSec: 6 };   // prompt: '' -> FRO_PROMPT
   const MAX_SCROLLS = 15;   // автоскролл добора целей — плавный и конечный, не «бесконечный робот»
 
   Yasia.systems.register({
@@ -303,20 +300,19 @@
         return true;
       }
 
-      // промпт: персона из души (core/soul.js) + тон + жёсткая инструкция; user = пост + свои прошлые реплаи
+      // промпт реплаев НЕЗАВИСИМ от Яси (ни души, ни тона): system = ТОЛЬКО промпт из настроек (дефолт — FRO),
+      // user = пост + свои прошлые реплаи (анти-повтор). Тот же функционал/результаты, что у FRO; Яся — интерфейс.
       function draftMessages(postText) {
-        const lang = (tr() && tr().lang) || 'ru';
-        const soul = (Yasia.soul && Yasia.soul.persona) ? Yasia.soul.persona(lang) : '';
-        const tone = (TONES[cfg.tone] || TONES.friendly)[lang === 'en' ? 'en' : 'ru'];
-        const instr = lang === 'en'
-          ? 'Write ONE short friendly reply to the X/Twitter post below: max 20 words, no hashtags, no emoji spam, in the language OF THE POST. Do not repeat your past replies. Output ONLY the reply text, no quotes.'
-          : 'Напиши ОДИН короткий дружелюбный реплай на пост ниже для X/Twitter: до 20 слов, без хэштегов, без спама эмодзи, НА ЯЗЫКЕ САМОГО ПОСТА. Не повторяй свои прошлые реплаи. Выдай ТОЛЬКО текст реплая, без кавычек.';
-        const user = (lang === 'en' ? 'Post:\n' : 'Пост:\n') + String(postText || '').slice(0, 1200)
-          + (recent.length ? (lang === 'en' ? '\n\nMy recent replies (do NOT repeat their wording):\n- ' : '\n\nМои последние реплаи (НЕ повторяй их формулировки):\n- ') + recent.join('\n- ') : '');
-        return [{ role: 'system', content: (soul ? soul + ' ' : '') + tone + ' ' + instr }, { role: 'user', content: user }];
+        const sys = String(cfg.prompt || '').trim() || FRO_PROMPT;
+        const user = 'Post:\n' + String(postText || '').slice(0, 1200)
+          + (recent.length ? '\n\nMy recent replies (do NOT repeat their wording):\n- ' + recent.join('\n- ') : '');
+        return [{ role: 'system', content: sys }, { role: 'user', content: user }];
       }
-      function cleanDraft(s) {   // модели любят кавычки/нумерацию — X это не нужно
-        return String(s || '').trim().replace(/^["'«]+|["'»]+$/g, '').replace(/^\d+[.)]\s*/, '').trim();
+      function cleanDraft(s) {   // FRO-формат: {"reply":"…"} (модель может обернуть текстом/markdown) -> достаём reply; иначе чистим кавычки/нумерацию
+        let x = String(s || '').trim();
+        const m = x.match(/\{[\s\S]*\}/);
+        if (m) { try { const j = JSON.parse(m[0]); if (j && typeof j.reply === 'string') x = j.reply.trim(); } catch (_) {} }
+        return x.replace(/^["'«]+|["'»]+$/g, '').replace(/^\d+[.)]\s*/, '').trim();
       }
 
       // ---------- DOM-хелперы X (порт из FRO contentScript/reviewQueue) ----------
@@ -695,7 +691,8 @@
           '.twtr-rep-f.wide{flex:2;min-width:140px}',
           '.twtr-rep-hnd{border-top:1px solid rgba(128,128,128,.3);margin-top:6px;padding-top:6px}',
           '.twtr-rep-hnd-t{font-weight:700;font-size:11px;margin-bottom:2px}',
-          '.twtr-rep-f input,.twtr-rep-f select{width:100%;box-sizing:border-box;background:rgba(0,0,0,.25);color:inherit;border:1px solid rgba(128,128,128,.45);border-radius:6px;padding:4px;font:11px system-ui}',
+          '.twtr-rep-f input,.twtr-rep-f select,.twtr-rep-f textarea{width:100%;box-sizing:border-box;background:rgba(0,0,0,.25);color:inherit;border:1px solid rgba(128,128,128,.45);border-radius:6px;padding:4px;font:11px system-ui}',
+          '.twtr-rep-f textarea{resize:vertical;min-height:64px;font:10px/1.35 ui-monospace,Consolas,monospace;white-space:pre-wrap}',
           '.twtr-rep-btns{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}',
           '.twtr-rep-btns button{flex:1;min-width:64px;border:1px solid rgba(128,128,128,.45);background:rgba(128,128,128,.18);color:inherit;border-radius:8px;padding:6px 8px;font:600 11px system-ui;cursor:pointer}',
           '.twtr-rep-btns button.twtr-rep-primary{background:#1d9bf0;border-color:#1d9bf0;color:#fff}',
@@ -725,12 +722,8 @@
               '<label class="twtr-rep-f"><span>' + esc(t.lbCap) + '</span><input data-k="dailyCap" type="number" min="1"></label>' +
               '<label class="twtr-rep-f"><span>' + esc(t.lbMin) + '</span><input data-k="minDelaySec" type="number" min="5"></label>' +
               '<label class="twtr-rep-f"><span>' + esc(t.lbMax) + '</span><input data-k="maxDelaySec" type="number" min="5"></label>' +
-              '<label class="twtr-rep-f"><span>' + esc(t.lbTone) + '</span><select data-k="tone">' +
-                '<option value="friendly">' + esc(t.toneFriendly) + '</option>' +
-                '<option value="expert">' + esc(t.toneExpert) + '</option>' +
-                '<option value="witty">' + esc(t.toneWitty) + '</option>' +
-              '</select></label>' +
               '<label class="twtr-rep-f"><span>' + esc(t.lbAutoSec) + '</span><input data-k="autoSendSec" type="number" min="3"></label>' +
+              '<label class="twtr-rep-f wide"><span>' + esc(t.lbPrompt) + '</span><textarea data-k="prompt" rows="6" spellcheck="false"></textarea></label>' +
             '</div>' +
             '<div class="twtr-rep-auto">' +
               '<label class="twtr-rep-chk"><input type="checkbox" data-b="autoSend"> ' + esc(t.lbAutoSend) + '</label>' +
@@ -769,12 +762,12 @@
         // настройки: показать сохранённое, писать на change
         box.querySelectorAll('[data-k]').forEach((i) => {
           const k = i.getAttribute('data-k');
-          i.value = cfg[k] != null ? cfg[k] : '';
+          i.value = k === 'prompt' ? (String(cfg.prompt || '').trim() || FRO_PROMPT) : (cfg[k] != null ? cfg[k] : '');   // промпт показываем РАБОЧИЙ (дефолт FRO), чтобы было видно и можно править
           ['mousedown', 'keydown', 'click'].forEach((ev) => i.addEventListener(ev, (e) => e.stopPropagation()));   // не отдавать клики странице/питомцу
           i.addEventListener('change', () => {
             if (k === 'myHandle') cfg.myHandle = normHandle(i.value);
             else if (k === 'handles') cfg.handles = String(i.value || '').slice(0, 2000);   // сырой ввод: парсим на запуске, чтобы не «съедать» текст под руками
-            else if (k === 'tone') cfg.tone = TONES[i.value] ? i.value : 'friendly';
+            else if (k === 'prompt') cfg.prompt = String(i.value || '').slice(0, 8000);     // независимый системный промпт реплаев (пусто -> дефолт FRO)
             else cfg[k] = Math.max(k === 'dailyCap' || k === 'recencyHours' ? 1 : (k === 'autoSendSec' ? 3 : 5), parseInt(i.value, 10) || CFG_DEF[k]);
             if (cfg.maxDelaySec < cfg.minDelaySec) cfg.maxDelaySec = cfg.minDelaySec;
             saveCfg(); updateCounter();
