@@ -57,7 +57,7 @@
       cfgHintOther: 'Любой OpenAI-совместимый провайдер (OpenRouter, Groq, DeepSeek, Together, свой эндпоинт…). Выбери из списка или впиши адрес и ключ вручную. Ключ хранится локально и не синкается.',
       quickTitle: 'Быстрые действия:',
       cfgUrl: 'Адрес API', cfgKey: 'API-ключ', cfgModel: 'Модель',
-      cfgTest: 'Проверить связь', cfgSave: 'Сохранить', cfgTesting: 'Проверяю…', cfgOk: '🟢 Связь есть', cfgFail: 'Не вышло', cfgSaved: '✓ Сохранено',
+      cfgTest: 'Проверить связь', cfgSave: 'Сохранить', cfgTesting: 'Проверяю…', cfgOk: '🟢 Связь есть', cfgFail: 'Не вышло', cfgSaved: '✓ Сохранено', cfgModelsLoaded: '🟢 Загружено моделей: {n}',
       cfgHint: 'В Hermes включи канал «API server», задай API_SERVER_KEY, сюда впиши адрес (по умолчанию http://127.0.0.1:8642) и этот ключ.',
       cfgHintGpt: 'Прямое подключение к OpenAI: вставь свой API-ключ (sk-…). Ключ хранится локально на устройстве и не синкается. Можно указать свой адрес OpenAI-совместимого шлюза.',
       provHermes: '🛰 Hermes', provGpt: '🤖 GPT', getKey: '🔑 Где взять ключ ↗',
@@ -99,7 +99,7 @@
       cfgHintOther: 'Any OpenAI-compatible provider (OpenRouter, Groq, DeepSeek, Together, your own endpoint…). Pick one from the list or type the address and key manually. The key is stored locally and never synced.',
       quickTitle: 'Quick actions:',
       cfgUrl: 'API address', cfgKey: 'API key', cfgModel: 'Model',
-      cfgTest: 'Test connection', cfgSave: 'Save', cfgTesting: 'Testing…', cfgOk: '🟢 Connection OK', cfgFail: 'Failed', cfgSaved: '✓ Saved',
+      cfgTest: 'Test connection', cfgSave: 'Save', cfgTesting: 'Testing…', cfgOk: '🟢 Connection OK', cfgFail: 'Failed', cfgSaved: '✓ Saved', cfgModelsLoaded: '🟢 Loaded {n} models',
       cfgHint: 'In Hermes enable the «API server» channel, set API_SERVER_KEY, then enter the address (default http://127.0.0.1:8642) and that key here.',
       cfgHintGpt: 'Direct OpenAI connection: paste your API key (sk-…). The key is stored locally on this device and never synced. You may point the address to any OpenAI-compatible gateway.',
       provHermes: '🛰 Hermes', provGpt: '🤖 GPT', getKey: '🔑 Get a key ↗',
@@ -395,6 +395,7 @@
         let prov = cfg.provider === 'hermes' ? 'gpt' : cfg.provider;   // Hermes-вкладки больше нет в UI: правим GPT/Other (Hermes доступен как пресет «Nous Portal» в «Другой»)
         let am = cfg.gpt.authMode || 'chatgpt';                  // режим GPT-вкладки: 'chatgpt' (подписка) | 'key'
         let presetId = cfg.other.presetId || '';                 // выбранный пресет во вкладке «Другой»
+        const liveModels = {};                                   // модели, реально доступные по ключу (GET /v1/models) — заполняются автозагрузкой/проверкой связи, per-провайдер
         let pollTimer = 0;
         const stopPoll = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = 0; } };
         // поле «Модель» = ВЫПАДАЮЩИЙ СПИСОК всех известных моделей (видны сразу) + пункт «своя модель» с текстовым вводом
@@ -421,6 +422,7 @@
           const curModel = (cfg[prov] && cfg[prov].model) || '';
           const phMod = curModel || pcfg.model || (prov === 'gpt' ? 'gpt-5.5' : 'model-name');
           const kurl = pcfg.keysUrl || '';
+          const modelsList = (liveModels[prov] && liveModels[prov].length) ? liveModels[prov] : (pcfg.models || []);   // живые модели с эндпоинта (если подтянулись) важнее захардкоженного пресета
           const provTabs =
             '<div class="twtr-ai-prov">' +
               '<button class="twtr-ai-prov-b' + (prov === 'gpt' ? ' on' : '') + '" data-p="gpt" type="button"><span class="twtr-ai-prov-ic">' + (LOGOS.gpt || '') + '</span>GPT</button>' +
@@ -435,7 +437,7 @@
             '<label class="twtr-ai-f"><span>' + esc(t.lbPreset) + '</span><select class="twtr-ai-preset"><option value="">—</option>' +
               PROVIDERS.map((p) => '<option value="' + esc(p.id) + '"' + (p.id === presetId ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') +
             '</select></label>' : '';
-          const modelField = modelFieldHtml(pcfg.models, curModel, phMod);
+          const modelField = modelFieldHtml(modelsList, curModel, phMod);
           if (isGptSub) {
             const signed = !!(cfg.gpt.chatgpt && cfg.gpt.chatgpt.accessToken);
             box.innerHTML = provTabs + modeTabs + modelField +
@@ -480,6 +482,21 @@
             }
             return c;
           };
+          // подтянуть РЕАЛЬНЫЕ модели с эндпоинта (GET /v1/models) и показать все в списке — как это делает Hermes
+          async function loadModels(silent) {
+            const c = collect();
+            if (!c.baseUrl || !c.apiKey) return;
+            if (msg && !silent) { msg.className = 'twtr-ai-cfg-msg'; msg.textContent = t.cfgTesting; }
+            const r = await ping(c);
+            if (r && r.ok && r.models && r.models.length) {
+              liveModels[prov] = r.models;
+              cfg[prov] = Object.assign({}, cfg[prov], c);   // сохранить введённое перед перерисовкой
+              draw();
+              if (msg) { msg.className = 'twtr-ai-cfg-msg ok'; msg.textContent = String(t.cfgModelsLoaded || (t.cfgOk + ' ({n})')).replace('{n}', r.models.length); }
+            } else if (!silent && msg) { msg.className = 'twtr-ai-cfg-msg err'; msg.textContent = t.cfgFail + ': ' + friendlyErr(r, t); }
+          }
+          const keyIn = box.querySelector('[data-k="apiKey"]');   // ввёл ключ -> авто-загрузка всех доступных моделей (тихо)
+          if (keyIn) keyIn.addEventListener('blur', () => { if ((keyIn.value || '').trim()) loadModels(true); });
           box.querySelectorAll('.twtr-ai-prov-b[data-p]').forEach((b) => b.addEventListener('click', (e) => {
             e.stopPropagation();
             cfg[prov] = Object.assign({}, cfg[prov], collect());  // не теряем введённое при переключении вкладки
@@ -517,10 +534,7 @@
           });
           const tb = box.querySelector('.twtr-ai-test');
           if (tb) tb.addEventListener('click', async (e) => {
-            e.stopPropagation(); const c = collect(); msg.className = 'twtr-ai-cfg-msg'; msg.textContent = t.cfgTesting;
-            const r = await ping(c);
-            if (r && r.ok) { msg.className = 'twtr-ai-cfg-msg ok'; msg.textContent = t.cfgOk + (r.models && r.models.length ? ' (' + r.models.slice(0, 3).join(', ') + ')' : ''); }
-            else { msg.className = 'twtr-ai-cfg-msg err'; msg.textContent = t.cfgFail + ': ' + friendlyErr(r, t); }
+            e.stopPropagation(); await loadModels(false);   // «Проверить связь» = проверка + подтягивание всех моделей в список
           });
           box.querySelector('.twtr-ai-save').addEventListener('click', (e) => {
             e.stopPropagation(); stopPoll();
