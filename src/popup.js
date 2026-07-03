@@ -405,25 +405,18 @@ function fillAi() {
     const sb = document.getElementById('signin-btn'); if (sb) sb.textContent = signed ? t.signedReauth : t.signinBtn;
     const st = document.getElementById('signin-st'); if (st && !signinTimer) { st.className = 'ai-signin-st' + (signed ? ' ok' : ''); st.textContent = signed ? t.signedIn : ''; }
   }
-  // модель = ВЫПАДАЮЩИЙ список всех известных + «своя модель» (видны все сразу, не как datalist)
-  const sel = document.getElementById('cfg-modelsel'), cust = document.getElementById('cfg-modelcustom');
+  // модель = текстовый ввод + datalist: печатаешь -> список сужается по названию (список бывает огромный); можно вписать и свою
+  const min = document.getElementById('cfg-modelin'), dl = document.getElementById('cfg-modellist');
   const models = (liveModels[aiProv] && liveModels[aiProv].length) ? liveModels[aiProv] : (info.models || []);   // живые модели с эндпоинта важнее захардкоженного пресета
   const cur = p.model || '';
-  const inList = models.indexOf(cur) >= 0;
-  if (sel) {
-    sel.innerHTML = '<option value="">' + t.pickModel + '</option>' +
-      models.map((m) => '<option value="' + m + '"' + (m === cur ? ' selected' : '') + '>' + m + '</option>').join('') +
-      '<option value="__custom__"' + ((!inList && cur) ? ' selected' : '') + '>' + t.customModel + '</option>';
-  }
-  if (cust) { cust.value = (!inList ? cur : ''); cust.placeholder = cur || (aiProv === 'gpt' ? 'gpt-5.5' : 'model-name'); cust.style.display = (!inList && cur) ? '' : 'none'; }
+  if (dl) dl.innerHTML = models.map((m) => '<option value="' + m + '"></option>').join('');
+  if (min) { min.value = cur; min.placeholder = cur || (aiProv === 'gpt' ? 'gpt-5.5' : 'model-name'); }
   const gk = document.getElementById('cfg-getkey'), kurl = info.keysUrl;
   if (gk) { if (kurl) { gk.href = kurl; gk.textContent = t.getKey; gk.style.display = ''; } else gk.style.display = 'none'; }   // ссылка «где взять ключ»
   fillProvHint();
 }
 function collectAi() {
-  const sel = document.getElementById('cfg-modelsel'), cust = document.getElementById('cfg-modelcustom');
-  const selV = sel ? sel.value : '';
-  const model = (selV === '__custom__' || !selV) ? ((cust && cust.value) || '').trim() : selV;   // модель: из списка или своя
+  const model = (((document.getElementById('cfg-modelin') || {}).value) || '').trim();   // модель напрямую из текстового поля (datalist)
   return {
     baseUrl: ((document.getElementById('cfg-url') || {}).value || '').trim(),
     apiKey: ((document.getElementById('cfg-key') || {}).value || '').trim(),
@@ -460,9 +453,6 @@ if (preSelEl) preSelEl.addEventListener('change', () => {
   if (pr) { if (pr.baseUrl) aiCfg.other.baseUrl = pr.baseUrl; if ((pr.models || []).indexOf(aiCfg.other.model) < 0) aiCfg.other.model = ''; }
   fillAi();
 });
-// «своя модель»: показываем текстовое поле, когда в списке выбран пункт custom
-const modelSelEl = document.getElementById('cfg-modelsel'), modelCustEl = document.getElementById('cfg-modelcustom');
-if (modelSelEl && modelCustEl) modelSelEl.addEventListener('change', () => { const c = modelSelEl.value === '__custom__'; modelCustEl.style.display = c ? '' : 'none'; if (c) modelCustEl.focus(); });
 [['mode-sub', 'chatgpt'], ['mode-key', 'key']].forEach(([id, m]) => {
   const b = document.getElementById(id);
   if (b) b.addEventListener('click', () => { aiCfg.gpt = Object.assign({}, aiCfg.gpt, collectAi()); aiMode = m; aiCfg.gpt.authMode = m; fillAi(); });

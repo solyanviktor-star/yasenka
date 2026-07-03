@@ -398,17 +398,14 @@
         const liveModels = {};                                   // модели, реально доступные по ключу (GET /v1/models) — заполняются автозагрузкой/проверкой связи, per-провайдер
         let pollTimer = 0;
         const stopPoll = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = 0; } };
-        // поле «Модель» = ВЫПАДАЮЩИЙ СПИСОК всех известных моделей (видны сразу) + пункт «своя модель» с текстовым вводом
+        // поле «Модель» = текстовый ввод + datalist: печатаешь -> список сужается по названию (список бывает огромный); можно вписать и свою модель
         function modelFieldHtml(models, curModel, phMod) {
           const list = models || [];
-          const inList = list.indexOf(curModel) >= 0;
-          const opts = list.map((m) => '<option value="' + esc(m) + '"' + (m === curModel ? ' selected' : '') + '>' + esc(m) + '</option>').join('');
-          const customSel = (!inList && curModel) ? ' selected' : '';
-          const custHidden = (!inList && curModel) ? '' : ' style="display:none"';
+          const dlId = 'twtr-ai-models-' + prov;
+          const opts = list.map((m) => '<option value="' + esc(m) + '"></option>').join('');
           return '<label class="twtr-ai-f"><span>' + t.cfgModel + '</span>' +
-            '<select class="twtr-ai-in twtr-ai-modelsel" data-k="modelSel"><option value="">' + esc(t.pickModel) + '</option>' + opts +
-              '<option value="__custom__"' + customSel + '>' + esc(t.customModel) + '</option></select>' +
-            '<input class="twtr-ai-in twtr-ai-modelcustom" data-k="modelCustom" type="text" autocomplete="off" placeholder="' + esc(phMod) + '" value="' + (!inList ? esc(curModel) : '') + '"' + custHidden + '></label>';
+            '<input class="twtr-ai-in twtr-ai-modelin" data-k="model" list="' + dlId + '" type="text" autocomplete="off" placeholder="' + esc(phMod) + '" value="' + esc(curModel) + '">' +
+            '<datalist id="' + dlId + '">' + opts + '</datalist></label>';
         }
         function draw() {
           stopPoll();
@@ -458,11 +455,9 @@
           const ins = box.querySelectorAll('.twtr-ai-in');
           ins.forEach((i) => {
             const k = i.getAttribute('data-k');
-            if (k !== 'modelSel' && k !== 'modelCustom') i.value = (cfg[prov] && cfg[prov][k]) || '';   // модель проставлена в HTML (select/своя), базовый URL/ключ — из cfg
+            if (k !== 'model') i.value = (cfg[prov] && cfg[prov][k]) || '';   // модель уже проставлена в HTML value (для datalist), базовый URL/ключ — из cfg
             ['mousedown', 'keydown', 'click'].forEach((ev) => i.addEventListener(ev, (e) => e.stopPropagation()));
           });
-          const msel = box.querySelector('.twtr-ai-modelsel'), mcust = box.querySelector('.twtr-ai-modelcustom');
-          if (msel && mcust) msel.addEventListener('change', () => { const c = msel.value === '__custom__'; mcust.style.display = c ? '' : 'none'; if (c) mcust.focus(); });
           const preSel = box.querySelector('.twtr-ai-preset');   // пресет провайдера -> подставить адрес/модели/ссылку и перерисовать
           if (preSel) preSel.addEventListener('change', (e) => {
             e.stopPropagation();
@@ -475,11 +470,7 @@
           const msg = box.querySelector('.twtr-ai-cfg-msg');
           const collect = () => {
             const c = {};
-            ins.forEach((i) => { c[i.getAttribute('data-k')] = (i.value || '').trim(); });
-            if ('modelSel' in c || 'modelCustom' in c) {   // модель: из списка, либо своя из текстового поля
-              c.model = (c.modelSel === '__custom__' || !c.modelSel) ? (c.modelCustom || '') : c.modelSel;
-              delete c.modelSel; delete c.modelCustom;
-            }
+            ins.forEach((i) => { c[i.getAttribute('data-k')] = (i.value || '').trim(); });   // model берётся напрямую из текстового поля (datalist)
             return c;
           };
           // подтянуть РЕАЛЬНЫЕ модели с эндпоинта (GET /v1/models) и показать все в списке — как это делает Hermes
