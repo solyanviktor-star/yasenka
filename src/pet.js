@@ -521,7 +521,7 @@
   // core/behavior.pickBehavior по библиотеке из манифеста героя (weights/when/cooldown) — новое поведение = данные, не код.
   function maybeIdleEmote(t) {
     if (Yasia.guard && !Yasia.guard.allows('chatter')) return;     // спокойный режим -> без спонтанных эмоций
-    if (!IDLE_EMOTE || !roam || paused || busy || dragging || hiding || gameActive || resting || thrown || jumping || falling) return;
+    if (!IDLE_EMOTE || !roam || paused || busy || dragging || hiding || gameActive || resting || thrown || jumping || falling || watching) return;   // watching: поход к видео/просмотр не прерываем позами (иначе «идёт-машет-идёт»)
     if (dialog.classList.contains('show') || isTyping() || now() < testUntil) return;
     if (ambient !== 'normal' && ambient !== 'playful') return;     // негативные состояния (голод/сон/злость/болезнь) эмотят сами
     if (t < nextIdleEmote) return;
@@ -529,21 +529,14 @@
     if (Math.random() >= (IDLE_EMOTE.chance || 0.2)) return;       // 80% -> дальше ходит/прыгает по странице
     if (HERO_BEHAVIORS.length && Yasia.behavior && Yasia.behavior.pickBehavior) {
       const st = { hunger: currentHunger(), mood: currentMood(), energy: currentEnergy(), bond: currentBond(), wild: currentWildness() };
-      // «сидит на краю» требует опоры-полки; у края садится сразу, иначе САМА идёт к ближайшему краю и садится по прибытии
-      const onEdge = !!standLedge && !falling && !jumping && (px <= standLedge.x1 + 12 || px + PET_W >= standLedge.x2 - 12);
+      // «сидит на краю» требует опоры-полки; у края садится сразу, иначе САМА идёт к ближайшему краю и садится по прибытии (goSitEdge)
       const canSitEdge = !!standLedge && !standLedge.floor && !falling && !jumping && !watching && !gameActive;   // на полу «краёв» нет — только на блоках
       let cands = HERO_BEHAVIORS.filter((b) => !animOff[b.anim || b.id]);   // тумблеры анимаций (попап) гасят поведение целиком
       if (!canSitEdge) cands = cands.filter((b) => (b.anim || b.id) !== 'sit_edge');   // в воздухе/на полу/у видео -> «сидеть на краю» недоступна
       const b = Yasia.behavior.pickBehavior(cands, st, recentBeh, t, Math.random, { wild: st.wild, bondFriend: BOND_FRIEND });
       if (b) {
         recentBeh[b.id] = t;
-        if ((b.anim || b.id) === 'sit_edge' && !onEdge) {   // выбрала «сесть на край», но стоит посреди блока -> идёт к ближайшему краю (сядет по прибытии, платформенная ветка)
-          const leftNear = (px - standLedge.x1) <= (standLedge.x2 - (px + PET_W));
-          goEdgeX = leftNear ? standLedge.x1 : (standLedge.x2 - PET_W);
-          goEdgeUntil = t + 5000;
-          return;
-        }
-        if ((b.anim || b.id) === 'sit_edge') face = (px <= standLedge.x1 + 12) ? -1 : 1;   // ноги свисают ЗА край: у левого края смотрит влево, у правого — вправо
+        if ((b.anim || b.id) === 'sit_edge') { goSitEdge(t); return; }   // сесть на край: у края — сразу, с середины — сама идёт к краю (общий хелпер)
         playEmote(b.anim || b.id, (b.dur || 2.4) * 1000);
         if (b.sayPool && Math.random() < 0.6) { const line = pick(SP(b.sayPool)); if (line) say(line, 2000); }   // подпись — не каждый раз (не заспамить)
         return;
@@ -615,6 +608,16 @@
     applyAct(ACT_PLAY); saveCare();
     if (CAT_SETS.pounce) startPounce(); else playEmote('like_proud', 2600);   // наскок = рывок вперёд (движение), не поза на месте
     say(tr().sPlayYay, 1800);
+  }
+  // сесть на край опоры: у края — сразу (лицом наружу, ноги свисают); с середины — идёт к ближайшему краю, сядет по прибытии (ветка goEdge в platformerTick)
+  function goSitEdge(t) {
+    if (!standLedge || falling || jumping) return false;
+    const x1 = standLedge.x1, x2 = standLedge.x2;
+    if (px <= x1 + 12 || px + PET_W >= x2 - 12) { face = (px <= x1 + 12) ? -1 : 1; playEmote('sit_edge', 3600); return true; }
+    const leftNear = (px - x1) <= (x2 - (px + PET_W));
+    goEdgeX = leftNear ? x1 : (x2 - PET_W);
+    goEdgeUntil = t + 8000;   // окно похода: на полу край = край экрана, путь бывает полэкрана
+    return true;
   }
   // наскок в движении: короткий рывок вперёд прыжками (кадры pounce), в сторону курсора; держится в пределах текущей полки/экрана
   function startPounce() {
@@ -2008,8 +2011,11 @@
         const pe = EMOTIONS.find((x) => x.key === 'pounce'); say(pe ? pe.emo + ' ' + pe.name : 'pounce', 1600);
         return;
       }
-      testKind = 'emo'; testEmo = st; testUntil = now() + 3400;
-      setMode('idle'); climbing = false; jumping = false;
+      if (st === 'sit_edge' && CAT_SETS.sit_edge) {   // «сидит на краю» привязана к краю опоры: и из тест-сетки сперва ИДЁТ к краю (на полу край = край экрана)
+        if (goSitEdge(now())) { const se = EMOTIONS.find((x) => x.key === 'sit_edge'); say(se ? se.emo + ' ' + se.name : 'sit_edge', 1600); return; }
+        // в воздухе — обычной позой на месте (упадёт и покажет)
+      }
+      playEmote(st, 3400);                       // через playEmote: в полёте эмоция ОТЛОЖИТСЯ до приземления (иначе поза зависает в воздухе)
       const e = EMOTIONS.find((x) => x.key === st); say(e ? e.emo + ' ' + e.name : st, 1600);
       return;
     }
@@ -2102,6 +2108,7 @@
       if (mode === 'happy' && t > happyUntil) setMode('idle');
     } else if (watching && watchAnim() && !thrown && !(testKind === 'emo' && t < testUntil)) {     // играет видео -> идёт/лезет под него и смотрит; застряв — просит подсадить. РЕАЛЬНЫЙ бросок (thrown) не перехватываем; ЭМОЦИЯ доигрывает СТОЯ (кадры показывают эмоцию — двигаться в позе нельзя), к видео пойдёт после
       thrown = false; vx = 0;                            // (страховка) мягко поставленную у видео не отшвыриваем вбок
+      if (mode === 'happy' && t > happyUntil) setMode('idle');   // сброс радости-приветствия и в походе к видео: иначе wave (выше ходьбы в кадрах) залипает — «машет и едет»
       const wasClimbing = watchClimbing;                 // детект ВХОДА в режим лазания (сброс ниже стирает флаг каждый кадр)
       watchClimbing = false;                             // включается только в ветке лазания ниже (иначе обычный платформер не лезет целенаправленно)
       const v = playingVideo();
@@ -2197,7 +2204,8 @@
       }
       if (pendingEmote && !dragging && !paused && t >= testUntil) {   // отложенная эмоция играет ТОЛЬКО на земле (и после сквоша land) — падение в приоритете
         const pe = pendingEmote; pendingEmote = null;
-        playEmote(pe.emo, pe.ms);
+        if (pe.emo === 'sit_edge') goSitEdge(t);                      // «сидит на краю» и после приземления привязана к краю опоры, не к точке приземления
+        else playEmote(pe.emo, pe.ms);
         if (pe.line) say(pe.line, pe.sayMs || 1900);
       }
     }
