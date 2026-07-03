@@ -159,6 +159,7 @@
       lstTitle: 'Цели из списка X', lbList: 'URL списка (x.com/i/lists/…)', lstGo: 'Перейти и собрать',
       lstBad: 'Это не ссылка на список X (нужно x.com/i/lists/…).', lstNav: 'Открываю список…',
       secSources: 'Источники целей', secPrompt: 'Промпт реплаев', secSettings: 'Настройки',
+      chipTitle: 'Яся: придумать реплай (промпт реплаера, отправляешь ты)',
       gdAsk: 'Отправлять тексты постов с {host} в ИИ (Hermes/GPT), чтобы я писала черновики ответов? Отправляешь их всё равно ты сам.',
       gdYes: 'Отправлять', gdNo: 'Отмена', gdSafe: '🛡 ИИ выключен стражем — смени режим в настройках.',
       note: 'Кнопку «Ответить» в X жмёшь только ты. Я никогда не отправляю сама.',
@@ -192,6 +193,7 @@
       lstTitle: 'Targets from an X List', lbList: 'List URL (x.com/i/lists/…)', lstGo: 'Open & collect',
       lstBad: 'Not an X List link (expected x.com/i/lists/…).', lstNav: 'Opening the list…',
       secSources: 'Target sources', secPrompt: 'Reply prompt', secSettings: 'Settings',
+      chipTitle: 'Yasya: draft a reply (replier prompt, you press Send)',
       gdAsk: 'Send post texts from {host} to the AI (Hermes/GPT) so I can draft replies? You still send them yourself.',
       gdYes: 'Send', gdNo: 'Cancel', gdSafe: '🛡 AI is off by the guard — change the mode in settings.',
       note: 'YOU press X’s real Reply button. I never send for you.',
@@ -454,6 +456,69 @@
         const found = pageHasMyReply(me);
         window.scrollTo({ top: 0 });
         return found;
+      }
+
+      // ---------- кнопка «🐾» на каждом твите: точечный реплай одним кликом (аналог «...» из FRO) ----------
+      // Клик -> черновик по промпту реплаера через подключённый ИИ -> открытый composer на апрув. Отправляет ЧЕЛОВЕК.
+      const CHIP_ATTR = 'data-yasia-rep';
+      let chipBusy = false, chipMo = null, chipTick = 0;
+      function chipStyles() {
+        if (document.getElementById('twtr-rep-chip-style')) return;
+        const s = document.createElement('style'); s.id = 'twtr-rep-chip-style';
+        s.textContent = '.twtr-rep-chip{border:1px solid rgba(128,128,128,.5);background:transparent;color:inherit;border-radius:999px;font:12px system-ui;line-height:1;cursor:pointer;padding:3px 9px;margin-left:6px;opacity:.7}.twtr-rep-chip:hover{opacity:1;border-color:#1d9bf0}.twtr-rep-chip:disabled{opacity:.45;cursor:default}';
+        (document.head || document.documentElement).appendChild(s);
+      }
+      function ensureChips() {
+        if (destroyed) { if (chipMo) { chipMo.disconnect(); chipMo = null; } return; }
+        if (!onX()) return;
+        if (Yasia.flags && !Yasia.flags.enabled('replier')) {   // флаг выключили -> подчищаем свои кнопки
+          document.querySelectorAll('[' + CHIP_ATTR + ']').forEach((b) => b.remove());
+          return;
+        }
+        chipStyles();
+        for (const card of document.querySelectorAll(SEL.tweet)) {
+          if (card.querySelector('[' + CHIP_ATTR + ']')) continue;
+          const grp = card.querySelector('[role="group"]');   // экшн-бар твита (ответить/репост/лайк)
+          if (!grp) continue;
+          const b = document.createElement('button');
+          b.setAttribute(CHIP_ATTR, '1'); b.type = 'button'; b.className = 'twtr-rep-chip'; b.textContent = '🐾';
+          b.title = L().chipTitle;
+          b.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); chipClick(card, b); });
+          grp.appendChild(b);
+        }
+      }
+      async function chipClick(card, b) {
+        if (chipBusy) return;
+        chipBusy = true;
+        b.textContent = '⏳'; b.disabled = true;
+        try {
+          const text = extractTweetText(card);
+          if (!text || text.length < 5) { b.textContent = '✗'; return; }
+          if (!(await aiAllowed())) { b.textContent = '🛡'; return; }                       // страж/приватность — как у обхода
+          const res = await aiChat(draftMessages(text));
+          if (!res || !res.ok) { b.textContent = '✗'; b.title = (res && res.noCfg) ? L().stNoAI : ((res && res.error) || 'AI'); return; }
+          const draft = cleanDraft(res.content);
+          if (!draft) { b.textContent = '✗'; return; }
+          await closeComposer();                                                            // чужой открытый composer не должен съесть черновик
+          const opened = await openComposer(card);
+          const box = opened && await waitFor(composerBox, 250, 7000);
+          if (!box) { b.textContent = '✗'; return; }
+          await sleep(300);
+          setComposerText(box, draft);                                                      // дальше — человек: проверил, поправил, отправил
+          b.textContent = '🐾';
+        } finally {
+          chipBusy = false; b.disabled = false;
+          if (b.textContent !== '🐾') setTimeout(() => { b.textContent = '🐾'; b.title = L().chipTitle; }, 2500);   // ✗/🛡 показываем пару секунд
+        }
+      }
+      function startChips() {
+        if (!onX() || chipMo) return;
+        ensureChips();
+        chipMo = new MutationObserver(() => {   // X перерисовывает ленту постоянно -> дебаунс
+          if (chipTick) return;
+          chipTick = setTimeout(() => { chipTick = 0; ensureChips(); }, 700);
+        });
+        try { chipMo.observe(document.body, { childList: true, subtree: true }); } catch (_) {}
       }
 
       // ---------- питомец в деле (всё опционально — работает и без pet API) ----------
@@ -901,6 +966,7 @@
         const q = s && s[QUEUE_KEY];
         if (q && Array.isArray(q.targets)) queue = Object.assign({ active: false, paused: false, targets: [], idx: 0, day: todayKey(), sentToday: 0 }, q);
         updateCounter(); renderList(); syncButtons();
+        startChips();   // кнопки «🐾» на твитах (точечный реплай) — только на X, флаг проверяется на каждом ensure
         const gl = s && s[GOLIST_KEY];   // «перейти на список и собрать»: продолжаем ТОЛЬКО на самом списке и только свежий интент (не хайджек)
         if (gl && gl.url && Date.now() - (gl.ts || 0) < 45000 && location.href.indexOf(gl.url) === 0) {
           try { storage.localSet({ [GOLIST_KEY]: null }); } catch (_) {}
