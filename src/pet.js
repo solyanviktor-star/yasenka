@@ -1754,12 +1754,16 @@
   const renderNotes = () => Yasia.events.emit('notes:render');   // обновить список (no-op, если система выключена/упала)
   const addNote = () => Yasia.events.emit('notes:add');          // добавить из поля ввода
 
+  // навыки, ВРЕМЕННО скрытые в окне Яси до релиза (код остаётся рабочим; вернуть = убрать id отсюда): ИИ-мозг, забота, игры
+  const HIDDEN_SKILLS = ['ai', 'care', 'games'];
   function openDialog() {
     try { window.postMessage({ __yasiaCollect: true }, '*'); } catch (_) {}
     const ask = root.querySelector('#twtr-dlg-ask'); if (ask) ask.value = '';
     const ai = root.querySelector('#twtr-dlg-ai'); if (ai) ai.hidden = true;
     const rw = root.querySelector('#twtr-skill-reply-wrap');   // автореплаер виден только при включённом флаге (по умолчанию выключен)
     if (rw) rw.hidden = !(Yasia.flags && Yasia.flags.enabled('replier') && Yasia.replier);
+    // ВРЕМЕННО скрыты для релиза (код на месте, вернуть = убрать из списка): показываем только скачивание/автореплай/заметки + чат
+    HIDDEN_SKILLS.forEach((id) => { const w = root.querySelector('.twtr-skill[data-skill="' + id + '"]'); if (w) w.hidden = true; });
     closeAllSkills(); renderDlgLang(); renderNotes(); filterCaps('');
     dialog.classList.add('show'); positionDialog();
   }
