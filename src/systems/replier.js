@@ -502,9 +502,8 @@
           const text = extractTweetText(card);
           if (!text || text.length < 5) { b.textContent = '✗'; return; }
           if (!(await aiAllowed())) { b.textContent = '🛡'; return; }                       // страж/приватность — как у обхода
-          petThink();
+          petThink();   // печатает до вставки черновика в composer; снимается в finally
           const res = await aiChat(draftMessages(text));
-          petThinkDone();
           if (!res || !res.ok) { b.textContent = '✗'; b.title = (res && res.noCfg) ? L().stNoAI : ((res && res.error) || 'AI'); return; }
           const draft = cleanDraft(res.content);
           if (!draft) { b.textContent = '✗'; return; }
@@ -516,6 +515,7 @@
           setComposerText(box, draft);                                                      // дальше — человек: проверил, поправил, отправил
           b.textContent = '🐾';
         } finally {
+          petThinkDone();
           chipBusy = false; b.disabled = false;
           if (b.textContent !== '🐾') setTimeout(() => { b.textContent = '🐾'; b.title = L().chipTitle; }, 2500);   // ✗/🛡 показываем пару секунд
         }
@@ -534,7 +534,7 @@
       // пока ИИ пишет черновик — Яся садится и «думает» облачком; снимаем эмоцию, как только ответ пришёл
       function petThink() {
         if (!pet) return;
-        try { pet.emote && pet.emote('typing', 30000); pet.say && pet.say(L().petThink, 15000); } catch (_) {}   // печатает на машинке (у героев без typing кадры сфолбэчатся на idle)
+        try { pet.emote && pet.emote('typing', 60000); pet.say && pet.say(L().petThink, 15000); } catch (_) {}   // печатает на машинке (у героев без typing кадры сфолбэчатся на idle); 60с с запасом — реальное окончание задаёт petThinkDone
       }
       function petThinkDone() {
         if (!pet) return;
@@ -699,20 +699,23 @@
         }
         setStatus(fmt(t.stDraft, { h: tg.handle }));
         const text = tg.text || extractTweetText(card);
-        petThink();
-        const res = await aiChat(draftMessages(text));
-        petThinkDone();
-        if (!res || !res.ok) {
-          if (res && res.noCfg) { finish(t.stNoAI); return; }   // мозг отвалился целиком -> стоп, а не молча скипать всё
-          setStatus(fmt(t.stErr, { e: (res && res.error) || '?' })); markSkip(tg); await sleep(rand(1000, 2000)); return;
-        }
-        const draft = cleanDraft(res.content);
-        if (!draft) { setStatus(fmt(t.stErr, { e: 'empty' })); markSkip(tg); await sleep(rand(1000, 2000)); return; }
-        await closeComposer();   // чужой открытый composer не должен съесть наш черновик
-        const opened = await openComposer(card);
-        const box = opened && await waitFor(composerBox, 250, 7000);
-        if (!box) { setStatus(t.stComposer); markSkip(tg); await sleep(rand(800, 1600)); return; }
-        setComposerText(box, draft);
+        petThink();   // печатает, пока черновик не ВСТАВЛЕН в composer (не только пока думает ИИ) — снимается через petThinkDone на каждом исходе
+        try {
+          const res = await aiChat(draftMessages(text));
+          if (!res || !res.ok) {
+            if (res && res.noCfg) { finish(t.stNoAI); return; }   // мозг отвалился целиком -> стоп, а не молча скипать всё
+            setStatus(fmt(t.stErr, { e: (res && res.error) || '?' })); markSkip(tg); await sleep(rand(1000, 2000)); return;
+          }
+          const draft = cleanDraft(res.content);
+          if (!draft) { setStatus(fmt(t.stErr, { e: 'empty' })); markSkip(tg); await sleep(rand(1000, 2000)); return; }
+          await closeComposer();   // чужой открытый composer не должен съесть наш черновик
+          const opened = await openComposer(card);
+          const box = opened && await waitFor(composerBox, 250, 7000);
+          if (!box) { setStatus(t.stComposer); markSkip(tg); await sleep(rand(800, 1600)); return; }
+          setComposerText(box, draft);
+          var draftOk = draft;   // var: видна ниже за пределами try
+        } finally { petThinkDone(); }
+        const draft = draftOk;
         tg.st = 'draft'; saveQueue(); renderList();
         petDraftDone();
         setStatus(t.stReview); syncButtons();
