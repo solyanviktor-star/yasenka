@@ -149,8 +149,8 @@
         <div class="twtr-dlg-greet" id="twtr-dlg-greet"></div>
         <div class="twtr-dlg-ask">
           <input class="twtr-dlg-askin" id="twtr-dlg-ask" type="text">
-          <button class="twtr-dlg-askshot" id="twtr-dlg-askshot" type="button" title="📸">📸</button>
-          <button class="twtr-dlg-asksend" id="twtr-dlg-asksend" type="button">→</button>
+          <button class="twtr-dlg-askshot" id="twtr-dlg-askshot" type="button"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#536471" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5a2 2 0 0 1 2-2h1.6l1.2-1.8a1.5 1.5 0 0 1 1.25-.7h5.9a1.5 1.5 0 0 1 1.25.7l1.2 1.8H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.4"/></svg></button>
+          <button class="twtr-dlg-asksend" id="twtr-dlg-asksend" type="button"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg></button>
         </div>
         <div class="twtr-dlg-ai" id="twtr-dlg-ai" hidden></div>
         <div class="twtr-dlg-caps" id="twtr-dlg-caps">
@@ -1515,6 +1515,7 @@
     setTxt('#twtr-dlg-lang', t.other);
     if (dlgText) dlgText.placeholder = t.ph;
     const ask = root.querySelector('#twtr-dlg-ask'); if (ask) ask.placeholder = t.askPh;
+    const shotB = root.querySelector('#twtr-dlg-askshot'); if (shotB && t.askShot) shotB.title = t.askShot;
     const ce = root.querySelector('#twtr-dlg-capsempty'); if (ce && !ce.hidden) ce.textContent = t.capsEmpty;
     const aiBody = root.querySelector('#twtr-skill-ai');
     if (aiBody && !aiBody.hidden && Yasia.ai && Yasia.ai.renderPanel) Yasia.ai.renderPanel(root.querySelector('#twtr-dlg-aipanel'));   // панель ИИ открыта -> перерисовать на новом языке

@@ -324,10 +324,10 @@
 .twtr-dlg-ask { display: flex; gap: 7px; margin-top: 12px; }
 .twtr-dlg-askin { flex: 1; min-width: 0; box-sizing: border-box; border: 1.5px solid #ccd6dd; border-radius: 999px; padding: 9px 13px; font: 500 13px system-ui, -apple-system, sans-serif; outline: none; color: #0f1419; background: #fff; }
 .twtr-dlg-askin:focus { border-color: #1d9bf0; }
-.twtr-dlg-asksend { flex: none; width: 38px; height: 38px; border: none; border-radius: 50%; background: #1d9bf0; color: #fff; cursor: pointer; pointer-events: auto; font-size: 16px; line-height: 1; transition: background .12s, transform .08s; }
+.twtr-dlg-asksend { flex: none; width: 38px; height: 38px; border: none; border-radius: 50%; background: #1d9bf0; color: #fff; cursor: pointer; pointer-events: auto; font-size: 16px; line-height: 1; transition: background .12s, transform .08s; display: inline-flex; align-items: center; justify-content: center; }
 .twtr-dlg-asksend:hover { background: #1a8cd8; }
 .twtr-dlg-asksend:active { transform: scale(.94); }
-.twtr-dlg-askshot { flex: none; width: 38px; height: 38px; border: 1.5px solid #ccd6dd; border-radius: 50%; background: #fff; cursor: pointer; pointer-events: auto; font-size: 16px; line-height: 1; transition: background .12s, transform .08s, border-color .12s; }
+.twtr-dlg-askshot { flex: none; width: 38px; height: 38px; border: 1.5px solid #ccd6dd; border-radius: 50%; background: #fff; cursor: pointer; pointer-events: auto; font-size: 16px; line-height: 1; transition: background .12s, transform .08s, border-color .12s; display: inline-flex; align-items: center; justify-content: center; }
 .twtr-dlg-askshot:hover { background: #f2f5f7; border-color: #1d9bf0; }
 .twtr-dlg-askshot:active { transform: scale(.94); }
 
