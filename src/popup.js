@@ -133,7 +133,7 @@ function render() {
 }
 
 // пикер героев строится из реестра CFG.HEROES (единый источник правды) — добавить персонажа = запись в config.js
-const HEROES = (Array.isArray(CFG.HEROES) && CFG.HEROES.length) ? CFG.HEROES : [{ id: 'catgirl', name: 'Yasya' }, { id: 'noema', name: 'Noema' }];
+const HEROES = (Array.isArray(CFG.HEROES) && CFG.HEROES.length) ? CFG.HEROES : [{ id: 'catgirl', name: 'Yasya' }];
 const heroesBox = document.getElementById('heroes');
 if (heroesBox) {
   heroesBox.innerHTML = HEROES.map((h) => `<button class="hero" data-hero="${h.id}"><img alt=""><span>${h.name}</span></button>`).join('');
