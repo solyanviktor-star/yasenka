@@ -23,6 +23,7 @@
     MOOD_BASE, MOOD_BIAS_MAX, MOOD_BIAS_DECAY_MIN, MOOD_HUNGER_K, MOOD_ENERGY_K, MOOD_BOND_K, MOOD_GOOD, MOOD_BAD,
     ACT_FEED, ACT_PET, ACT_PLAY, ACT_CALL, ACT_HELP, ACT_WAKE, ACT_COOLDOWN_MS, GREET_AWAY_MS,
   } = (window.Yasia && window.Yasia.config) || {};
+  const XPB = ((window.Yasia && window.Yasia.config) || {}).XP || { dayCap: 90, needyMul: 2, petPerHour: 3, feedMinHunger: 22, replyXp: 10 };   // экономика опыта
 
   // ---------- состояние ----------
   let enabled = true;
@@ -436,8 +437,9 @@
   }
   function applyAbilities() {
     level = levelFromXp(xp);
-    speedMul = 1 + (level - 1) * 0.12;     // с уровнем — живее
-    sizeMul = 1 + (level - 1) * 0.06;      // и крупнее
+    const ab = Math.min(level, 5);         // физический рост стопорится на 5: дальше уровни открывают ПОВАДКИ (behaviors when.level), а не гиганта
+    speedMul = 1 + (ab - 1) * 0.12;        // с уровнем — живее
+    sizeMul = 1 + (ab - 1) * 0.06;         // и крупнее
     pet.classList.toggle('is-glow', level >= 4);
   }
 
@@ -528,7 +530,7 @@
     nextIdleEmote = t + IDLE_EMOTE.minMs + Math.random() * (IDLE_EMOTE.maxMs - IDLE_EMOTE.minMs);
     if (Math.random() >= (IDLE_EMOTE.chance || 0.2)) return;       // 80% -> дальше ходит/прыгает по странице
     if (HERO_BEHAVIORS.length && Yasia.behavior && Yasia.behavior.pickBehavior) {
-      const st = { hunger: currentHunger(), mood: currentMood(), energy: currentEnergy(), bond: currentBond(), wild: currentWildness() };
+      const st = { hunger: currentHunger(), mood: currentMood(), energy: currentEnergy(), bond: currentBond(), wild: currentWildness(), level };   // level -> манифест может гейтить повадки: when { level: '>=N' }
       // «сидит на краю» требует опоры-полки; у края садится сразу, иначе САМА идёт к ближайшему краю и садится по прибытии (goSitEdge)
       const canSitEdge = !!standLedge && !standLedge.floor && !falling && !jumping && !watching && !gameActive;   // на полу «краёв» нет — только на блоках
       let cands = HERO_BEHAVIORS.filter((b) => !animOff[b.anim || b.id]);   // тумблеры анимаций (попап) гасят поведение целиком
@@ -600,8 +602,25 @@
     if (thrown || falling || jumping) { pendingEmote = { emo, ms }; return; }   // в полёте эмоций нет: физика доиграет, эмоция стрельнёт на земле (блок в tick)
     testKind = 'emo'; testEmo = emo; testUntil = now() + (ms || 2600); setMode('idle'); climbing = false; jumping = false;
   }
-  function doFeed() { applyAct(ACT_FEED); saveCare(); feedEat(); }
-  function doPet() { applyAct(ACT_PET); saveCare(); playEmote('pet_purr', 2200); say(currentBond() >= BOND_FRIEND ? pick(SP('bond')) : tr().sPetMur, 1600); }
+  function doFeed() {
+    const h = currentHunger();
+    if (h < XPB.feedMinHunger) {   // сытая ОТКАЗЫВАЕТСЯ: еда не тратится, XP нет (иначе уровень накручивается спамом кормёжки)
+      playEmote(CAT_SETS.bored ? 'bored' : 'happy', 2200);
+      say(tr().sFull || 'Мур, я сыта!', 2000);
+      return;
+    }
+    const act = Object.assign({}, ACT_FEED);
+    if (h >= HUNGER_HUNGRY) act.xp = (ACT_FEED.xp || 0) * (XPB.needyMul || 2);   // выручил ГОЛОДНУЮ — забота ценится вдвое
+    applyAct(act); saveCare(); feedEat();
+  }
+  let petXpLog = [];   // метки поглаживаний с XP: опыт только за первые XPB.petPerHour в час (ласка дальше — без опыта, но статы качает)
+  function doPet() {
+    const tNow = Date.now();
+    petXpLog = petXpLog.filter((x) => tNow - x < 3600000);
+    const act = Object.assign({}, ACT_PET);
+    if (petXpLog.length >= (XPB.petPerHour || 3)) act.xp = 0; else petXpLog.push(tNow);
+    applyAct(act); saveCare(); playEmote('pet_purr', 2200); say(currentBond() >= BOND_FRIEND ? pick(SP('bond')) : tr().sPetMur, 1600);
+  }
   function doPlay() {
     if (sickAt) { say(tr().sSickCant, 1900); return; }             // болеет — сначала полечи
     if (currentEnergy() < 12) { addMoodBias(-3); saveCare(); say(tr().sPlayTired, 1800); return; }
@@ -888,15 +907,22 @@
   ];
 
   // ---------- опыт ----------
+  let xpDay = { key: '', got: 0 };   // дневной счётчик XP (грузится со стейтом); кап = XPB.dayCap
   function gainXp(amount) {
-    xp += amount;
-    Yasia.storage.localSet({ xp });   // левелап покажет onChanged (единый путь)
+    const key = new Date().toISOString().slice(0, 10);
+    if (xpDay.key !== key) xpDay = { key, got: 0 };                    // новый день — счётчик с нуля
+    const add = Math.max(0, Math.min(amount, (XPB.dayCap || 90) - xpDay.got));   // мягкий дневной потолок: уровень меряет дни заботы, а не клики
+    if (!add) return;
+    xpDay.got += add; xp += add;
+    Yasia.storage.localSet({ xp, xpDay });   // левелап покажет onChanged (единый путь)
   }
   function levelUp() {
     bubble.textContent = '⭐ ' + tr().lvl + level;
     bubble.classList.add('show');
     if (CAT_SETS.levelup) playEmote('levelup', 2400);   // фанфары из манифеста (спрайт есть -> салют звёзд), иначе прежний подпрыг
     else { setMode('happy'); happyUntil = now() + 1200; }
+    const unlock = (tr().lvlUnlock || {})[level];   // уровень открыл новую повадку (behaviors when.level) -> хвастается
+    if (unlock) setTimeout(() => say(unlock, 3200), 2600);
     spawnParticles('#ffd34d', 14);
     Yasia.events.emit('levelup', { level });   // шина событий: подписчики появятся при выносе систем
   }
@@ -2386,11 +2412,12 @@
   try {
     Yasia.storage.syncGet({ enabled: true, paused: false, hero: 'catgirl', scale: 1, roam: true, walkSpeed: 1, throwPower: 1, yasiaWildMul: 1, yasiaAnimOff: {} }, (s) => { enabled = s.enabled; paused = !!s.paused; hero = (s.hero === 'noema') ? 'catgirl' : s.hero; userScale = s.scale || 1; roam = s.roam; userSpeed = s.walkSpeed || 1; throwMul = (typeof s.throwPower === 'number') ? s.throwPower : 1; wildMul = (typeof s.yasiaWildMul === 'number') ? s.yasiaWildMul : 1; animOff = s.yasiaAnimOff || {}; applyEnabled(); applyHero(); applyScale(); applySpeed(); applyInertia(); applyRoam(); applyPaused(); });
     Yasia.storage.localGet({
-      hunger: 0, hungerAt: Date.now(), xp: 0,
+      hunger: 0, hungerAt: Date.now(), xp: 0, xpDay: null,
       energy: ENERGY_START, energyAt: Date.now(), energyResting: false, bond: BOND_START, bondAt: Date.now(), moodBias: 0, moodBiasAt: Date.now(),
       sick: 0, streak: null,
     }, (s) => {
       hungerBase = s.hunger; hungerAt = s.hungerAt; xp = s.xp;
+      if (s.xpDay && s.xpDay.key) xpDay = s.xpDay;   // дневной счётчик XP переживает перезагрузку страницы
       energyBase = s.energy; energyAt = s.energyAt; energyResting = !!s.energyResting; bondBase = s.bond; bondAt = s.bondAt; moodBiasBase = s.moodBias; moodBiasAt = s.moodBiasAt;
       sickAt = s.sick || 0;
       resting = energyResting;   // восстанавливаем флаг покоя -> гистерезис и setEnergyResting примирят знак корректно

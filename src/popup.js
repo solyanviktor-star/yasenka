@@ -5,8 +5,8 @@ const num = (v, d) => (typeof v === 'number' ? v : d);
 const HUNGER_PER_MIN = num(CFG.HUNGER_PER_MIN, 1.4);
 const FEED_AMOUNT = num(CFG.FEED_AMOUNT, 34);
 const FEED_XP = num(CFG.FEED_XP, 12);
-const LEVEL_XP = CFG.LEVEL_XP || [0, 40, 100, 200, 350];
-const MAX_LEVEL = num(CFG.MAX_LEVEL, 5);
+const LEVEL_XP = CFG.LEVEL_XP || [0, 40, 120, 280, 550, 950, 1500, 2200, 3100, 4200];
+const MAX_LEVEL = num(CFG.MAX_LEVEL, 10);
 const ENERGY_REST_MIN = num(CFG.ENERGY_REST_MIN, 0.45), ENERGY_SLEEP_MIN = num(CFG.ENERGY_SLEEP_MIN, 30), BOND_DECAY_MIN = num(CFG.BOND_DECAY_MIN, 0.05);
 const MOOD_BASE = num(CFG.MOOD_BASE, 55), MOOD_BIAS_DECAY_MIN = num(CFG.MOOD_BIAS_DECAY_MIN, 3.5), MOOD_HUNGER_K = num(CFG.MOOD_HUNGER_K, 0.6), MOOD_ENERGY_K = num(CFG.MOOD_ENERGY_K, 0.5), MOOD_BOND_K = num(CFG.MOOD_BOND_K, 0.15), MOOD_BIAS_MAX = num(CFG.MOOD_BIAS_MAX, 45);
 const FEED_ENERGY = num(CFG.ACT_FEED && CFG.ACT_FEED.energy, 5), FEED_BOND = num(CFG.ACT_FEED && CFG.ACT_FEED.bond, 3), FEED_MOOD = num(CFG.ACT_FEED && CFG.ACT_FEED.mood, 10);
@@ -181,8 +181,11 @@ heroBtns.forEach((b) => b.addEventListener('click', () => { chrome.storage.sync.
 
 feedBtn.addEventListener('click', () => {
   const now = Date.now();
-  hunger = clamp(currentHunger() - FEED_AMOUNT, 0, 100); hungerAt = now;
-  xp = xp + FEED_XP;
+  const XPB = CFG.XP || {};
+  const h = currentHunger();
+  if (h < (XPB.feedMinHunger || 22)) { render(); return; }   // сытая отказывается (та же экономика, что в pet.js): еда/XP не начисляются
+  hunger = clamp(h - FEED_AMOUNT, 0, 100); hungerAt = now;
+  xp = xp + (h >= HUNGER_HUNGRY ? FEED_XP * (XPB.needyMul || 2) : FEED_XP);   // выручил голодную — вдвое ценнее
   energy = clamp(currentEnergy() + FEED_ENERGY, 0, 100); energyAt = now;
   bond = clamp(currentBond() + FEED_BOND, 0, 100); bondAt = now;
   moodBias = clamp(currentMoodBias() + FEED_MOOD, -MOOD_BIAS_MAX, MOOD_BIAS_MAX); moodBiasAt = now;

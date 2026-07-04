@@ -513,6 +513,7 @@
           if (!box) { b.textContent = '✗'; return; }
           await sleep(300);
           setComposerText(box, draft);                                                      // дальше — человек: проверил, поправил, отправил
+          replyXpOnce();
           b.textContent = '🐾';
         } finally {
           petThinkDone();
@@ -540,7 +541,17 @@
         if (!pet) return;
         try { pet.emoteStop && pet.emoteStop(); } catch (_) {}
       }
+      // первый черновик за день = осмысленное применение Яси -> XP-бонус (день-гейт, не накручивается)
+      async function replyXpOnce() {
+        if (!pet || !pet.addXp) return;
+        const amount = ((ctx && ctx.config && ctx.config.XP) || {}).replyXp || 10;
+        const day = todayKey();
+        const s = await localGet({ yasiaReplyXpDay: '' });
+        if (s && s.yasiaReplyXpDay === day) return;
+        try { storage.localSet({ yasiaReplyXpDay: day }); pet.addXp(amount); } catch (_) {}
+      }
       function petDraftDone() {
+        replyXpOnce();
         if (!pet) return;
         try {
           pet.say && pet.say(L().petDraft, 3200);
