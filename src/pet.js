@@ -961,6 +961,8 @@
   pet.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     dragging = true; didDrag = false; thrown = false;
+    if (testKind) { testKind = null; testEmo = null; testUntil = 0; running = false; forceRunUntil = 0; }   // подняли за шкирку — активная эмоция/действие обрывается (иначе «сидит» в воздухе, пока не выйдет таймер)
+    pendingEmote = null;                                                                                     // и отложенная эмоция тоже: после броска не должна внезапно сесть в полёте/на приземлении
     dragOffX = mouseX - px; dragOffY = mouseY - py;
     grabPx = px; grabPy = py;
     dragVx = 0; dragVy = 0; peakVx = 0; peakVy = 0; lastDragX = px; lastDragY = py;   // начинаем мерить скорость «кисти»
