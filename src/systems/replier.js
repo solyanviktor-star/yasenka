@@ -153,7 +153,7 @@
       lbHandle: 'Твой @ник', lbCap: 'Лимит/день', lbMin: 'Пауза от, с', lbMax: 'до, с',
       lbPrompt: 'Промпт реплаев (отдельный от Яси — правь как хочешь)',
       stWait: 'ждёт', stDrafted: 'черновик', stSentB: '✓ отправлен', stSkipped: 'пропущен',
-      petDraft: 'Написала черновик — проверь!', petSent: 'Отправил! Мур~ 🐾',
+      petDraft: 'Написала черновик — проверь!', petSent: 'Отправил! Мур~ 🐾', petThink: 'Хм-м… думаю над ответом ✍️',
       hndTitle: 'Цели по @никам', hndList: 'Ники (через запятую)', hndHours: 'Свежесть, часов', hndGo: 'Добавить по никам',
       hndNone: 'Впиши хотя бы один @ник.', hndFetch: 'Смотрю свежее у @{h} ({i}/{n})…', hndDone: 'По никам: добавлено {a}, пропущено {s}.',
       lstTitle: 'Цели из списка X', lbList: 'URL списка (x.com/i/lists/…)', lstGo: 'Перейти и собрать',
@@ -187,7 +187,7 @@
       lbHandle: 'Your @handle', lbCap: 'Daily cap', lbMin: 'Delay from, s', lbMax: 'to, s',
       lbPrompt: 'Reply prompt (standalone — edit freely)',
       stWait: 'waiting', stDrafted: 'draft', stSentB: '✓ sent', stSkipped: 'skipped',
-      petDraft: 'Drafted a reply — check it!', petSent: 'Sent! Purr~ 🐾',
+      petDraft: 'Drafted a reply — check it!', petSent: 'Sent! Purr~ 🐾', petThink: 'Hmm… thinking of a reply ✍️',
       hndTitle: 'Targets by @handles', hndList: 'Handles (comma-separated)', hndHours: 'Freshness, hours', hndGo: 'Add by handles',
       hndNone: 'Enter at least one @handle.', hndFetch: 'Checking @{h} ({i}/{n})…', hndDone: 'By handles: added {a}, skipped {s}.',
       lstTitle: 'Targets from an X List', lbList: 'List URL (x.com/i/lists/…)', lstGo: 'Open & collect',
@@ -502,7 +502,9 @@
           const text = extractTweetText(card);
           if (!text || text.length < 5) { b.textContent = '✗'; return; }
           if (!(await aiAllowed())) { b.textContent = '🛡'; return; }                       // страж/приватность — как у обхода
+          petThink();
           const res = await aiChat(draftMessages(text));
+          petThinkDone();
           if (!res || !res.ok) { b.textContent = '✗'; b.title = (res && res.noCfg) ? L().stNoAI : ((res && res.error) || 'AI'); return; }
           const draft = cleanDraft(res.content);
           if (!draft) { b.textContent = '✗'; return; }
@@ -529,6 +531,15 @@
       }
 
       // ---------- питомец в деле (всё опционально — работает и без pet API) ----------
+      // пока ИИ пишет черновик — Яся садится и «думает» облачком; снимаем эмоцию, как только ответ пришёл
+      function petThink() {
+        if (!pet) return;
+        try { pet.emote && pet.emote('sit', 30000); pet.say && pet.say(L().petThink, 15000); } catch (_) {}
+      }
+      function petThinkDone() {
+        if (!pet) return;
+        try { pet.emoteStop && pet.emoteStop(); } catch (_) {}
+      }
       function petDraftDone() {
         if (!pet) return;
         try {
@@ -688,7 +699,9 @@
         }
         setStatus(fmt(t.stDraft, { h: tg.handle }));
         const text = tg.text || extractTweetText(card);
+        petThink();
         const res = await aiChat(draftMessages(text));
+        petThinkDone();
         if (!res || !res.ok) {
           if (res && res.noCfg) { finish(t.stNoAI); return; }   // мозг отвалился целиком -> стоп, а не молча скипать всё
           setStatus(fmt(t.stErr, { e: (res && res.error) || '?' })); markSkip(tg); await sleep(rand(1000, 2000)); return;

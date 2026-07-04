@@ -2463,6 +2463,7 @@
     face: (d) => { face = d < 0 ? -1 : 1; },
     say: (txt, ms) => say(txt, ms),
     emote: (emo, ms) => playEmote(emo, ms),
+    emoteStop: () => { if (testKind === 'emo') { testKind = null; testEmo = null; testUntil = 0; } pendingEmote = null; },   // снять эмоцию раньше таймера (реплаер: «думала» -> черновик готов)
     happy: (ms) => { setMode('happy'); happyUntil = now() + (ms || 1000); },
     particles: (c, n) => spawnParticles(c, n),
     addXp: (n) => gainXp(n),                                // XP -> onChanged сам покажет левелап
