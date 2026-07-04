@@ -90,10 +90,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const moved = Math.hypot(p2.x - p1.x, p2.y - p1.y) > 3;
     check('питомец двигается сам (roam)', moved, `d=${Math.hypot(p2.x - p1.x, p2.y - p1.y).toFixed(1)}px`);
 
-    // 3) поглаживание мышью: ёрзаем курсором по спрайту туда-сюда -> «мур» (пузырь/is-happy)
-    const b = await petBox();
-    const cy = b.y + b.h * 0.5;
+    // 3) поглаживание мышью: ёрзаем курсором по спрайту туда-сюда -> «мур» (пузырь/is-happy).
+    // ВАЖНО: pet роумит — измеряем box ВНУТРИ цикла, чтобы курсор «следовал» за ним, иначе flake (мышь поверх пустого места).
     for (let pass = 0; pass < 14; pass++) {
+      const b = await petBox();
+      const cy = b.y + b.h * 0.5;
       const x0 = b.x + 4, x1 = b.x + b.w - 4;
       const from = pass % 2 ? x1 : x0, to = pass % 2 ? x0 : x1;
       for (let s = 0; s <= 6; s++) await page.mouse.move(from + (to - from) * (s / 6), cy);
@@ -115,10 +116,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       flagsN: document.querySelectorAll('#flags [data-flag]').length,
       exportBtn: (document.getElementById('exportBtn') || {}).textContent || '',
       importBtn: !!document.getElementById('importBtn'),
+      petCard: !!document.getElementById('petName') && !!document.getElementById('stateBadge'),
+      careBtns: !!document.getElementById('care-pet') && !!document.getElementById('care-play') && !!document.getElementById('care-wake'),
+      wild: !!document.getElementById('wild'),
     }));
     check('попап: чекбокс паузы есть', popupState.paused);
-    check('попап: тумблеры флагов построены (7 шт.)', popupState.flagsN === 7, 'n=' + popupState.flagsN);
+    check('попап: тумблеры флагов построены (8 шт.)', popupState.flagsN === 8, 'n=' + popupState.flagsN);
     check('попап: кнопки экспорта/импорта на месте', !!popupState.exportBtn && popupState.importBtn, popupState.exportBtn);
+    check('попап: карточка питомца (имя+бейдж состояния)', popupState.petCard);
+    check('попап: кнопки заботы (погладить/поиграть/разбудить)', popupState.careBtns);
+    // ползунок вредности пишет sync yasiaWildMul
+    const wildStored = await popup.evaluate(() => new Promise((ok) => {
+      const w = document.getElementById('wild'); if (!w) return ok(null);
+      w.value = '1.5'; w.dispatchEvent(new Event('input')); w.dispatchEvent(new Event('change'));
+      setTimeout(() => chrome.storage.sync.get({ yasiaWildMul: -1 }, (s) => ok(s.yasiaWildMul)), 500);
+    }));
+    check('попап: ползунок вредности пишет yasiaWildMul', wildStored === 1.5, 'v=' + wildStored);
+    await popup.evaluate(() => new Promise((ok) => chrome.storage.sync.set({ yasiaWildMul: 1 }, ok)));
 
     // 5) пауза: включаем из попапа -> питомец замирает на странице.
     // ВАЖНО: tick стоит на скрытой вкладке (document.hidden) — перед замерами возвращаем страницу на передний план.
@@ -146,6 +160,32 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     });
     check('клик по питомцу открывает окно', dlgOpen);
     await popup.evaluate(() => { const c = document.querySelector('#flags [data-flag="games"]'); c.checked = true; c.dispatchEvent(new Event('change')); });
+
+    // 6б) тамагочи и игры в окне: 8 действий заботы (с 💊 лечением), 4 игры, автореплаер скрыт при выключенном флаге
+    const dlgState = await page.evaluate(() => new Promise((ok) => {
+      const care = document.querySelector('#twtr-cap-care'); if (!care) return ok(null);
+      care.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      setTimeout(() => {
+        const acts = document.querySelectorAll('#twtr-dlg-care [data-act]').length;
+        const games = document.querySelector('#twtr-cap-games');
+        games.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        setTimeout(() => {
+          const gameBtns = document.querySelectorAll('#twtr-dlg-games [data-game]').length;
+          const replyHidden = (document.querySelector('#twtr-skill-reply-wrap') || {}).hidden !== false;
+          ok({ acts, gameBtns, replyHidden });
+        }, 500);
+      }, 500);
+    }));
+    check('забота: 8 действий (включая 💊 лечение)', !!dlgState && dlgState.acts === 8, 'n=' + (dlgState && dlgState.acts));
+    check('игры: 4 кнопки мини-игр в окне', !!dlgState && dlgState.gameBtns === 4, 'n=' + (dlgState && dlgState.gameBtns));
+    check('автореплаер скрыт при выключенном флаге', !!dlgState && dlgState.replyHidden);
+    // новые анимации из манифеста дошли до тест-сетки (data-driven: спрайт+манифест = кнопка)
+    const newEmos = await page.evaluate(() => ({
+      sick: !!document.querySelector('[data-test="emo:sick"]'),
+      eat: !!document.querySelector('[data-test="emo:eat"]'),
+      sit: !!document.querySelector('[data-test="emo:sit"]'),
+    }));
+    check('манифест: новые анимации (eat/sick/sit) в тест-сетке', newEmos.sick && newEmos.eat && newEmos.sit, JSON.stringify(newEmos));
 
     // 7) вкладка медиа: кнопка «скачать картинки» есть и реально качает
     const imgsBtn = await page.evaluate(() => new Promise((ok) => {
@@ -183,7 +223,29 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       check('импорт: hunger=42 применился в storage', impOk === 42, 'hunger=' + impOk);
     }
 
-    // 10) ошибки консоли страницы от расширения
+    // 10) Noema скрыта (демо): сохранённый hero='noema' принудительно схлопывается в Ясю (is-noema НЕ применяется)
+    await popup.evaluate(() => new Promise((ok) => chrome.storage.sync.set({ hero: 'noema' }, ok)));
+    await page.bringToFront(); await sleep(500);
+    const noemaCoerced = await page.evaluate(() => { const p = document.querySelector('#twtr-pet'); return !!(p && !p.classList.contains('is-noema')); });
+    check('герой: noema схлопывается в Ясю (Noema скрыта)', noemaCoerced);
+    await popup.evaluate(() => new Promise((ok) => chrome.storage.sync.set({ hero: 'catgirl' }, ok)));
+    await page.bringToFront(); await sleep(300);
+
+    // 12) режим стража: запись calm проходит storage round-trip (Yasia.guard живёт в изолированном мире — проверяем через popup)
+    await popup.evaluate(() => new Promise((ok) => chrome.storage.sync.set({ yasiaMode: 'calm' }, ok)));
+    await sleep(300);
+    const modeStored = await popup.evaluate(() => new Promise((ok) => chrome.storage.sync.get({ yasiaMode: '' }, (s) => ok(s.yasiaMode))));
+    check('страж: режим calm записан в sync', modeStored === 'calm', 'mode=' + modeStored);
+    await popup.evaluate(() => new Promise((ok) => chrome.storage.sync.set({ yasiaMode: 'normal' }, ok)));
+
+    // 13) dev-оверлей полок: включить → на странице появляется .twtr-ledges-dbg
+    await popup.evaluate(() => new Promise((ok) => chrome.storage.sync.set({ devLedges: true }, ok)));
+    await page.bringToFront(); await sleep(800);
+    const ledgeOverlay = await page.evaluate(() => !!document.querySelector('.twtr-ledges-dbg'));
+    check('dev-оверлей полок: появился при включении', ledgeOverlay);
+    await popup.evaluate(() => new Promise((ok) => chrome.storage.sync.set({ devLedges: false }, ok)));
+
+    // 14) ошибки консоли страницы от расширения
     const extErrors = errors.filter((e) => /yasia|twtr|chrome-extension/i.test(e));
     check('консоль без ошибок расширения', extErrors.length === 0, extErrors.slice(0, 2).join(' || '));
 

@@ -93,7 +93,15 @@
 .twtr-pet.is-jump:not(.is-catgirl) .twtr-pet__char { animation: none; transform: scaleY(1.09) scaleX(.93); }
 .twtr-pet.is-jump:not(.is-catgirl) .creeper__leg { animation: none !important; transform: translateY(-2px); }
 
-@media (prefers-reduced-motion: reduce) { .creeper, .creeper__leg { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .creeper, .creeper__leg,
+  .twtr-pet__char, .twtr-pet__bubble,
+  .twtr-game-exit, .twtr-game-nub { animation: none !important; }
+}
+
+/* демо: временно скрытые умения/провайдер — серым и некликабельно */
+.twtr-skill--soon { opacity: .4; filter: grayscale(.5); pointer-events: none; }
+.twtr-ai-prov-b:disabled, .twtr-ai-prov-b[disabled] { opacity: .4; filter: grayscale(.5); cursor: not-allowed; }
 
 /* ---------- табличка с кодом входа (носит над собой; клик — копирует) ---------- */
 .twtr-pet-sign {
@@ -196,13 +204,20 @@
 /* зёрнышко попкорна: вылетает (подлёт), потом падает, лежит, тает (стадии переключаются из JS) */
 .twtr-popcorn-k { position: absolute; width: 22px; height: 22px; pointer-events: none; z-index: 2147482998; opacity: 1; will-change: transform, opacity; transition: transform .3s cubic-bezier(.2,.7,.4,1); image-rendering: auto; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
 
+/* сердечки: рисованный SVG (не эмодзи — рендерится везде); разлёт вбок-вверх и опадание как попкорн (мурлычет/гордится) */
+.twtr-pet-heart { position: absolute; width: 20px; height: 20px; pointer-events: none; z-index: 2147482998; opacity: 0; will-change: transform, opacity; transition: transform .34s cubic-bezier(.2,.7,.4,1), opacity .3s ease; filter: drop-shadow(0 1px 1px rgba(0,0,0,.2)); }
+.twtr-pet-heart svg { display: block; width: 100%; height: 100%; }
+/* обглоданная кость (SVG): вылетает назад из пасти, падает на пол, лежит, тает (после еды) */
+.twtr-pet-bone { position: absolute; width: 26px; height: 16px; pointer-events: none; z-index: 2147482998; opacity: 1; will-change: transform, opacity; transition: transform .34s cubic-bezier(.2,.7,.4,1); filter: drop-shadow(0 1px 1px rgba(0,0,0,.28)); }
+.twtr-pet-bone svg { display: block; width: 100%; height: 100%; }
+.twtr-pet-paper { position: absolute; width: 18px; height: 22px; pointer-events: none; z-index: 2147482998; opacity: 1; will-change: transform, opacity; transition: transform .45s cubic-bezier(.2,.7,.4,1); filter: drop-shadow(0 1px 1px rgba(0,0,0,.22)); }
+.twtr-pet-paper svg { display: block; width: 100%; height: 100%; }
+
 /* ---------- пакость: трещины ---------- */
 .twtr-pet-crack { position: absolute; width: 120px; height: 120px; pointer-events: none; opacity: 0; transform: scale(.3) rotate(-8deg); transition: transform .18s cubic-bezier(.2,1.5,.4,1), opacity .18s; z-index: 2147482999; }
 .twtr-pet-crack.show { opacity: .92; transform: scale(1) rotate(0); }
 .twtr-pet-crack.fade { opacity: 0; transition: opacity .8s ease; }
 
-/* ---------- пакость: украденная буква ---------- */
-.twtr-pet-letter { position: absolute; pointer-events: none; z-index: 2147482999; will-change: transform; transition: transform 1s cubic-bezier(.3,1,.4,1); text-shadow: 0 1px 3px rgba(0,0,0,.35); }
 
 /* ---------- диалоговое окно (клик по Ясе) ---------- */
 .twtr-pet-dialog { position: absolute; inset: 0; display: none; z-index: 2147483005; pointer-events: none; }
@@ -299,6 +314,7 @@
 .twtr-care-stat { grid-column: 1 / -1; margin-top: 2px; padding: 8px 10px; border-radius: 10px; background: #fff6fb; border: 1.5px solid #ffd0e7; color: #b3245e; font: 600 12px/1.35 system-ui, -apple-system, sans-serif; }
 .twtr-dlg-caps { display: flex; flex-direction: column; gap: 9px; }
 .twtr-skill { display: flex; flex-direction: column; }
+.twtr-skill[hidden] { display: none !important; }   /* атрибут hidden обязан побеждать display:flex (скрытые навыки: ai/care/games) */
 .twtr-skill-body { margin-top: 8px; }
 .twtr-cap-arr { transition: transform .15s; }
 .twtr-skill.open .twtr-cap-arr { transform: rotate(90deg); }
@@ -308,10 +324,10 @@
 .twtr-dlg-ask { display: flex; gap: 7px; margin-top: 12px; }
 .twtr-dlg-askin { flex: 1; min-width: 0; box-sizing: border-box; border: 1.5px solid #ccd6dd; border-radius: 999px; padding: 9px 13px; font: 500 13px system-ui, -apple-system, sans-serif; outline: none; color: #0f1419; background: #fff; }
 .twtr-dlg-askin:focus { border-color: #1d9bf0; }
-.twtr-dlg-asksend { flex: none; width: 38px; height: 38px; border: none; border-radius: 50%; background: #1d9bf0; color: #fff; cursor: pointer; pointer-events: auto; font-size: 16px; line-height: 1; transition: background .12s, transform .08s; }
+.twtr-dlg-asksend { flex: none; width: 38px; height: 38px; border: none; border-radius: 50%; background: #1d9bf0; color: #fff; cursor: pointer; pointer-events: auto; font-size: 16px; line-height: 1; transition: background .12s, transform .08s; display: inline-flex; align-items: center; justify-content: center; }
 .twtr-dlg-asksend:hover { background: #1a8cd8; }
 .twtr-dlg-asksend:active { transform: scale(.94); }
-.twtr-dlg-askshot { flex: none; width: 38px; height: 38px; border: 1.5px solid #ccd6dd; border-radius: 50%; background: #fff; cursor: pointer; pointer-events: auto; font-size: 16px; line-height: 1; transition: background .12s, transform .08s, border-color .12s; }
+.twtr-dlg-askshot { flex: none; width: 38px; height: 38px; border: 1.5px solid #ccd6dd; border-radius: 50%; background: #fff; cursor: pointer; pointer-events: auto; font-size: 16px; line-height: 1; transition: background .12s, transform .08s, border-color .12s; display: inline-flex; align-items: center; justify-content: center; }
 .twtr-dlg-askshot:hover { background: #f2f5f7; border-color: #1d9bf0; }
 .twtr-dlg-askshot:active { transform: scale(.94); }
 

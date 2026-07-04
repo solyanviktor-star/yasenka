@@ -3,55 +3,89 @@
 <head>
   <meta charset="utf-8">
   <style>
-    body { width: 280px; margin: 0; padding: 14px; font: 14px/1.4 system-ui, -apple-system, sans-serif; color: #0f1419; }
-    .hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+    /* Тамагочи-first: питомец и забота сверху крупно, настройки внизу мелко в <details>. */
+    body { width: 360px; margin: 0; padding: 12px; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: #0f1419; background: #edf2f6; box-sizing: border-box; overflow-x: hidden; }
+    .hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
     h1 { font-size: 15px; margin: 0; }
-    .lang { border: none; border-radius: 8px; background: #eaeef2; color: #536471; cursor: pointer; font: 700 12px system-ui; padding: 5px 10px; }
-    .lang:hover { background: #dfe6ea; }
-    .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
-    input[type="checkbox"] { width: 18px; height: 18px; accent-color: #5cba47; }
+    .lang { border: none; border-radius: 8px; background: #dfe6ec; color: #536471; cursor: pointer; font: 700 12px system-ui; padding: 5px 10px; }
+    .lang:hover { background: #d2dbe2; }
+    .card { background: #fff; border-radius: 14px; padding: 11px 12px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(15, 20, 25, .07); }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .row + .row { margin-top: 7px; }
+    input[type="checkbox"] { width: 18px; height: 18px; accent-color: #5cba47; flex: none; }
     .label { font-size: 12px; color: #536471; margin-bottom: 6px; }
-    .heroes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
-    .hero { border: 2px solid transparent; border-radius: 10px; padding: 6px; background: #f2f5f7; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; font: 700 12px system-ui; color: #536471; }
-    .hero.active { border-color: #5cba47; background: #eaf6e6; }
-    .hero img, .hero .thumb { width: 44px; height: 52px; object-fit: contain; display: flex; align-items: center; justify-content: center; }
-    .stat { margin-bottom: 12px; }
-    .stat__label { display: flex; justify-content: space-between; font-size: 12px; color: #536471; margin-bottom: 4px; }
-    .bar { height: 12px; border-radius: 6px; background: #e7ecf0; overflow: hidden; }
-    .bar__fill { height: 100%; width: 0; border-radius: 6px; transition: width .3s ease; }
+
+    /* ===== карточка питомца ===== */
+    .pet { background: linear-gradient(180deg, #fffdf6, #fff); }
+    .pet-head { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+    .pet-name { font: 800 16px system-ui; flex: none; }
+    .state { font: 700 11px system-ui; color: #536471; background: #f0f4f7; border-radius: 999px; padding: 3px 9px; flex: 1; text-align: center; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .state[data-st="sleep"] { background: #e8ecff; color: #4a5ac0; }
+    .state[data-st="starving"], .state[data-st="hungry"] { background: #fff0e0; color: #c05f1d; }
+    .state[data-st="grumpy"] { background: #ffe6ea; color: #c02956; }
+    .state[data-st="happy"] { background: #e8f7e2; color: #2f7d22; }
+    .badge { background: #5cba47; color: #fff; border-radius: 8px; padding: 2px 9px; font: 700 13px system-ui; flex: none; }
+    .abilities { font-size: 11px; color: #8a97a3; margin: -4px 0 8px; }
+    .stat { margin-bottom: 9px; }
+    .stat__label { display: flex; justify-content: space-between; font-size: 12px; color: #536471; margin-bottom: 3px; }
+    .bar { height: 10px; border-radius: 5px; background: #e7ecf0; overflow: hidden; }
+    .bar__fill { height: 100%; width: 0; border-radius: 5px; transition: width .3s ease; }
     .bar__fill.hunger { background: linear-gradient(90deg, #ffce4d, #ff8a3d); }
     .bar__fill.xp { background: linear-gradient(90deg, #6cba43, #3f8f33); }
     .bar__fill.mood { background: linear-gradient(90deg, #ffd0e7, #ff5fa2); }
     .bar__fill.energy { background: linear-gradient(90deg, #7fd2ff, #2f8fe0); }
     .bar__fill.bond { background: linear-gradient(90deg, #ff9aa2, #e0245e); }
-    .level { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-weight: 700; }
-    .level .badge { background: #5cba47; color: #fff; border-radius: 8px; padding: 2px 9px; font-size: 13px; }
-    .feed { width: 100%; border: none; border-radius: 12px; background: #5cba47; color: #fff; font: 700 14px system-ui; padding: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform .1s, background .15s; }
-    .feed:hover { background: #4fa53d; }
-    .feed:active { transform: scale(.97); }
-    .feed img { width: 22px; height: 22px; object-fit: contain; }
-    .hint { margin: 12px 0 0; font-size: 12px; color: #536471; }
 
-    /* ===== AI brain (Hermes / GPT) ===== */
-    .ai-box { border: 1.5px solid #e1e8ed; border-radius: 12px; padding: 10px 11px; margin-bottom: 14px; background: #f7f9fa; }
+    /* ряд кнопок заботы */
+    .care { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+    .care button { border: none; border-radius: 12px; padding: 8px 2px 7px; background: #f2f5f7; cursor: pointer; font: 700 11px system-ui; color: #3b4a54; display: flex; flex-direction: column; align-items: center; gap: 3px; transition: transform .1s, background .15s; min-width: 0; }
+    .care button:hover:not(:disabled) { background: #e6efe2; }
+    .care button:active:not(:disabled) { transform: scale(.94); }
+    .care button:disabled { opacity: .4; cursor: not-allowed; }
+    .care .ico { font-size: 18px; line-height: 20px; }
+    .care img.ico { width: 20px; height: 20px; object-fit: contain; }
+    .care span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+    /* ===== поведение: режим + вредность ===== */
+    .tabs { display: flex; gap: 6px; }
+    .tab { flex: 1; border: 1.5px solid #e1e8ed; border-radius: 10px; background: #fff; color: #536471; cursor: pointer; font: 700 12px system-ui; padding: 7px 4px; transition: background .15s; }
+    .tab:hover { background: #f2f5f7; }
+    .tab.on { background: #e8f5fe; border-color: #1d9bf0; color: #1d9bf0; }
+    .wild { display: flex; align-items: center; gap: 8px; }
+    .wild span { font: 600 11px system-ui; color: #536471; flex: none; }
+    .wild input[type="range"] { flex: 1; accent-color: #ff8a3d; min-width: 0; }
+    .wild-val { text-align: center; font: 700 11px system-ui; color: #8a97a3; margin-top: 2px; }
+
+    /* ===== пикер героя ===== */
+    .heroes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .hero { border: 2px solid transparent; border-radius: 10px; padding: 6px; background: #f2f5f7; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; font: 700 12px system-ui; color: #536471; }
+    .hero:hover { background: #e9eef2; }
+    .hero.active { border-color: #5cba47; background: #eaf6e6; }
+    .hero img, .hero .thumb { width: 44px; height: 52px; object-fit: contain; display: flex; align-items: center; justify-content: center; }
+
+    .hint { margin: 8px 0 0; font-size: 11px; color: #8a97a3; }
+    .dev { background: #fff; border-radius: 14px; padding: 9px 12px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(15, 20, 25, .07); }
+    .dev summary { cursor: pointer; font: 700 12px system-ui, -apple-system, sans-serif; color: #536471; list-style-position: inside; }
+    .dev summary:hover { color: #33414c; }
+    .dev .row { margin-top: 8px; }
+    .dev .hint { margin-top: 5px; }
+
+    /* ===== ИИ-мозг (Hermes / GPT) — свёрнут в details, внутренности не менялись ===== */
+    .ai-box { padding-top: 9px; }
     .ai-head { display: flex; align-items: center; gap: 8px; }
     .ai-logo { width: 22px; height: 22px; flex: none; border-radius: 6px; overflow: hidden; display: inline-flex; }
     .ai-logo svg { width: 100%; height: 100%; display: block; }
-    .ai-title { font: 800 13px system-ui; color: #0f1419; flex: 1; }
-    .ai-status { font: 700 11px system-ui; color: #536471; margin: 8px 0 0; }
+    .ai-status { font: 700 11px system-ui; color: #536471; flex: 1; }
     .ai-status.ok { color: #0c7a3e; }
     .ai-toggle { width: 100%; border: none; border-radius: 9px; background: #eaeef2; color: #536471; cursor: pointer; font: 700 12px system-ui; padding: 8px; margin-top: 9px; }
     .ai-toggle:hover { background: #dfe6ea; }
     .ai-cfg { margin-top: 10px; }
     .ai-cfg[hidden] { display: none; }
-    .dev { margin-top: 10px; border: 1.5px solid #e1e8ed; border-radius: 12px; padding: 8px 12px; }
-    .dev summary { cursor: pointer; font: 700 12px system-ui, -apple-system, sans-serif; color: #536471; list-style-position: inside; }
-    .dev .row { margin-top: 6px; }
-    .dev .hint { margin-top: 4px; }
     .ai-prov { display: flex; gap: 6px; margin-bottom: 9px; }
     .ai-prov-b { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1.5px solid #e1e8ed; border-radius: 10px; background: #fff; color: #536471; cursor: pointer; font: 700 12px system-ui; padding: 7px 6px; }
     .ai-prov-b .ai-logo { width: 18px; height: 18px; }
     .ai-prov-b.on { background: #e8f5fe; border-color: #1d9bf0; color: #1d9bf0; }
+    .ai-prov-b:disabled { opacity: .4; filter: grayscale(.5); cursor: not-allowed; }
     .ai-f { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
     .ai-f span { font: 600 11px system-ui; color: #536471; }
     .ai-in { width: 100%; box-sizing: border-box; border: 1.5px solid #e1e8ed; border-radius: 9px; padding: 8px 9px; font: 13px system-ui; color: #0f1419; background: #fff; }
@@ -85,83 +119,117 @@
     <button class="lang" id="lang" type="button">RU</button>
   </div>
 
-  <label class="row">
-    <span id="t-enabled">Pet enabled</span>
-    <input type="checkbox" id="enabled">
-  </label>
+  <div class="card">
+    <label class="row">
+      <span id="t-enabled">Pet enabled</span>
+      <input type="checkbox" id="enabled">
+    </label>
+    <label class="row">
+      <span id="t-paused">Pause (freeze in place)</span>
+      <input type="checkbox" id="paused">
+    </label>
+  </div>
 
-  <label class="row">
-    <span id="t-paused">Pause (freeze in place)</span>
-    <input type="checkbox" id="paused">
-  </label>
-
-  <!-- AI brain (Hermes / GPT) -->
-  <div class="ai-box">
-    <div class="ai-head">
-      <span class="ai-logo" id="ai-logo"></span>
-      <span class="ai-title" id="t-ai">AI brain (Hermes / GPT)</span>
+  <!-- ===== карточка питомца: главное — наверху и крупно ===== -->
+  <div class="card pet">
+    <div class="pet-head">
+      <span class="pet-name" id="petName">Yasya</span>
+      <span class="state" id="stateBadge"></span>
+      <span class="badge" id="level">Lv. 1</span>
     </div>
-    <div class="ai-status" id="ai-status"></div>
-    <button class="ai-toggle" id="ai-toggle" type="button"></button>
-    <div class="ai-cfg" id="ai-cfg" hidden>
-      <div class="ai-prov">
-        <button class="ai-prov-b" id="prov-hermes" data-p="hermes" type="button"><span class="ai-logo"></span><span>Hermes</span></button>
-        <button class="ai-prov-b" id="prov-gpt" data-p="gpt" type="button"><span class="ai-logo"></span><span>GPT</span></button>
-      </div>
-      <div class="ai-prov ai-mode" id="ai-mode" hidden>
-        <button class="ai-prov-b" id="mode-sub" data-am="chatgpt" type="button"></button>
-        <button class="ai-prov-b" id="mode-key" data-am="key" type="button"></button>
-      </div>
-      <label class="ai-f"><span id="t-cfg-model">Model</span><input class="ai-in" id="cfg-model" type="text" list="cfg-models" autocomplete="off"><datalist id="cfg-models"></datalist></label>
-      <div class="ai-signin" id="ai-signin" hidden>
-        <button class="ai-signin-btn" id="signin-btn" type="button"></button>
-        <div class="ai-signin-st" id="signin-st"></div>
-      </div>
-      <div id="ai-keyfields">
-        <label class="ai-f"><span id="t-cfg-url">Address</span><input class="ai-in" id="cfg-url" type="text"></label>
-        <label class="ai-f"><span class="ai-f-row"><span id="t-cfg-key">Key</span><a class="ai-getkey" id="cfg-getkey" target="_blank" rel="noopener"></a></span><input class="ai-in" id="cfg-key" type="password"></label>
-        <div class="ai-row"><button class="ai-test" id="cfg-test" type="button">Test</button></div>
-      </div>
-      <div class="ai-row"><button class="ai-save" id="cfg-save" type="button">Save</button></div>
-      <div class="ai-msg" id="cfg-msg"></div>
-      <div class="ai-hint" id="cfg-hint"></div>
+
+    <div class="stat">
+      <div class="stat__label"><span>⭐ <span id="t-xp">XP</span></span><span id="xpText">0</span></div>
+      <div class="bar"><div class="bar__fill xp" id="xpBar"></div></div>
+    </div>
+    <div class="abilities" id="abilities"></div>
+
+    <!-- голод инвертирован: 100% = очень голодная -->
+    <div class="stat">
+      <div class="stat__label"><span>🍖 <span id="t-hunger">Hunger</span></span><span id="hungerText">0%</span></div>
+      <div class="bar"><div class="bar__fill hunger" id="hungerBar"></div></div>
+    </div>
+    <div class="stat">
+      <div class="stat__label"><span>🙂 <span id="t-mood">Mood</span></span><span id="moodText">0%</span></div>
+      <div class="bar"><div class="bar__fill mood" id="moodBar"></div></div>
+    </div>
+    <div class="stat">
+      <div class="stat__label"><span>⚡ <span id="t-energy">Energy</span></span><span id="energyText">0%</span></div>
+      <div class="bar"><div class="bar__fill energy" id="energyBar"></div></div>
+    </div>
+    <div class="stat">
+      <div class="stat__label"><span>💛 <span id="t-bond">Bond</span></span><span id="bondText">0%</span></div>
+      <div class="bar"><div class="bar__fill bond" id="bondBar"></div></div>
+    </div>
+
+    <!-- забота: кормёжка — старый канал (feedPing), остальное — yasiaCareSignal (см. popup.js) -->
+    <div class="care">
+      <button id="feed" type="button"><img class="ico" src="items/meat.png" alt=""><span id="t-feed">Feed</span></button>
+      <button id="care-pet" type="button"><span class="ico">✋</span><span id="t-care-pet">Pet</span></button>
+      <button id="care-play" type="button"><span class="ico">🎾</span><span id="t-care-play">Play</span></button>
+      <button id="care-wake" type="button"><span class="ico">⏰</span><span id="t-care-wake">Wake</span></button>
     </div>
   </div>
 
-  <div class="label" id="t-hero">Character:</div>
-  <div class="heroes" id="heroes"></div><!-- кнопки строятся из реестра core/config.js HEROES в popup.js -->
-
-  <div class="level">
-    <span class="badge" id="level">Lv. 1</span>
-    <span id="abilities" style="font-weight:400;font-size:12px;color:#536471"></span>
+  <!-- ===== поведение: режим стража (sync yasiaMode) + вредность (sync yasiaWildMul) ===== -->
+  <div class="card">
+    <div class="label" id="t-mode">Mode</div>
+    <div class="tabs">
+      <button class="tab" id="bm-normal" type="button">😺</button>
+      <button class="tab" id="bm-calm" type="button">😌</button>
+    </div>
+    <div class="label" id="t-wild" style="margin-top:10px">Mischief</div>
+    <div class="wild">
+      <span id="wildL">😇</span>
+      <input type="range" id="wild" min="0" max="2" step="0.1" value="1">
+      <span id="wildR">😈</span>
+    </div>
+    <div class="wild-val" id="wildVal">×1.0</div>
   </div>
 
-  <div class="stat">
-    <div class="stat__label"><span id="t-xp">XP</span><span id="xpText">0</span></div>
-    <div class="bar"><div class="bar__fill xp" id="xpBar"></div></div>
+  <div class="card">
+    <div class="label" id="t-hero">Character:</div>
+    <div class="heroes" id="heroes"></div><!-- кнопки строятся из реестра core/config.js HEROES в popup.js -->
   </div>
 
-  <div class="stat">
-    <div class="stat__label"><span id="t-hunger">Hunger</span><span id="hungerText">0%</span></div>
-    <div class="bar"><div class="bar__fill hunger" id="hungerBar"></div></div>
-  </div>
-
-  <div class="stat">
-    <div class="stat__label"><span id="t-mood">Mood</span><span id="moodText">0%</span></div>
-    <div class="bar"><div class="bar__fill mood" id="moodBar"></div></div>
-  </div>
-
-  <div class="stat">
-    <div class="stat__label"><span id="t-energy">Energy</span><span id="energyText">0%</span></div>
-    <div class="bar"><div class="bar__fill energy" id="energyBar"></div></div>
-  </div>
-
-  <div class="stat">
-    <div class="stat__label"><span id="t-bond">Bond</span><span id="bondText">0%</span></div>
-    <div class="bar"><div class="bar__fill bond" id="bondBar"></div></div>
-  </div>
-
-  <button class="feed" id="feed"><img src="items/meat.png" alt=""><span id="t-feed">Feed meat</span></button>
+  <!-- ИИ-мозг: тяжёлый блок настройки уехал вниз, свёрнут по умолчанию; внутренности (device-code вход, провайдеры) не менялись -->
+  <details class="dev">
+    <summary id="t-ai">🤖 AI brain</summary>
+    <div class="ai-box">
+      <div class="ai-head">
+        <span class="ai-logo" id="ai-logo"></span>
+        <div class="ai-status" id="ai-status"></div>
+      </div>
+      <button class="ai-toggle" id="ai-toggle" type="button"></button>
+      <div class="ai-cfg" id="ai-cfg" hidden>
+        <div class="ai-prov">
+          <button class="ai-prov-b" id="prov-gpt" data-p="gpt" type="button"><span class="ai-logo"></span><span>GPT</span></button>
+          <button class="ai-prov-b" id="prov-other" data-p="other" type="button"><span class="ai-logo"></span><span id="t-prov-other">Other</span></button>
+        </div>
+        <div class="ai-prov ai-mode" id="ai-mode" hidden>
+          <button class="ai-prov-b" id="mode-sub" data-am="chatgpt" type="button"></button>
+          <button class="ai-prov-b" id="mode-key" data-am="key" type="button"></button>
+        </div>
+        <label class="ai-f" id="cfg-preset-f" hidden><span id="t-cfg-preset">Provider</span><select class="ai-in" id="cfg-preset"></select></label>
+        <label class="ai-f"><span id="t-cfg-model">Model</span>
+          <input class="ai-in" id="cfg-modelin" list="cfg-modellist" type="text" autocomplete="off">
+          <datalist id="cfg-modellist"></datalist>
+        </label>
+        <div class="ai-signin" id="ai-signin" hidden>
+          <button class="ai-signin-btn" id="signin-btn" type="button"></button>
+          <div class="ai-signin-st" id="signin-st"></div>
+        </div>
+        <div id="ai-keyfields">
+          <label class="ai-f"><span id="t-cfg-url">Address</span><input class="ai-in" id="cfg-url" type="text"></label>
+          <label class="ai-f"><span class="ai-f-row"><span id="t-cfg-key">Key</span><a class="ai-getkey" id="cfg-getkey" target="_blank" rel="noopener"></a></span><input class="ai-in" id="cfg-key" type="password"></label>
+          <div class="ai-row"><button class="ai-test" id="cfg-test" type="button">Test</button></div>
+        </div>
+        <div class="ai-row"><button class="ai-save" id="cfg-save" type="button">Save</button></div>
+        <div class="ai-msg" id="cfg-msg"></div>
+        <div class="ai-hint" id="cfg-hint"></div>
+      </div>
+    </div>
+  </details>
 
   <!-- фиче-флаги: способности можно включать/выключать (core/flags.js, storage.sync yasiaFlags) -->
   <details class="dev">
@@ -190,6 +258,9 @@
       <input type="checkbox" id="devLedges">
     </label>
     <p class="hint" id="t-devledges-hint"></p>
+    <div class="label" id="t-anims" style="margin-top:10px">Animations</div>
+    <div id="anims"></div><!-- тумблеры строятся из манифеста героя (sync yasiaAnimOff) -->
+    <p class="hint" id="t-anims-hint"></p>
   </details>
 
   <p class="hint" id="t-hint"></p>

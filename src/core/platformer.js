@@ -18,7 +18,8 @@
   //      onJumpStart()/onJumpEnd() — CSS-класс прыжка; sayJump()/sayTop() — реплики.
   function createEngine(S, env) {
     let ledges = [];
-    let jumpT = 0, jumpFromX = 0, jumpFromY = 0, jumpToX = 0, jumpToY = 0, jumpPeak = 0, jumpDest = null, jumpDrop = false;
+    let jumpT = 0, jumpFromX = 0, jumpFromY = 0, jumpToX = 0, jumpToY = 0, jumpPeak = 0, jumpDest = null, jumpDrop = false, jumpPounce = false;
+    const POUNCE_UP = 1.9, POUNCE_DX = 1.45;   // НАСКОК дотягивается выше/дальше обычного прыжка (используется, когда обычным не достать)
     const SEL = 'article,[data-testid="tweet"],[data-testid="tweetText"],h1,h2,h3,[role="heading"],img,button,p,li';
 
     function scan() {   // пересобрать полки из DOM (фильтры — physics.ledgeFromRect) + пол внизу
@@ -53,18 +54,26 @@
       S.walkTargetX = S.px;
       S.nextJumpDecide = env.goalClimbing() ? t : (t + 1600 + Math.random() * 2000);   // к цели -> сразу пере-проба; гуляние -> пауза
     }
-    function startJump(L, tgtCenterX, t) {
+    function startJump(L, tgtCenterX, t, opt) {
       const p = env.params();
+      jumpPounce = !!(opt && opt.pounce);                             // наскок: тот же прыжок, но горб выше (долетает до высокой полки) + кадры pounce
       S.jumping = true; S.climbing = false; jumpT = t; jumpDest = L;
       jumpFromX = S.px; jumpFromY = S.py;
       jumpToX = clamp(tgtCenterX - p.W / 2, L.x1, L.x2 - p.W);
       jumpToY = L.y - p.H;
-      jumpDrop = Yasia.physics.isDropJump(jumpFromY, jumpToY, p.up);   // блок заметно ниже -> спуск падением, а не глайд дугой
+      jumpDrop = !jumpPounce && Yasia.physics.isDropJump(jumpFromY, jumpToY, p.up);   // блок заметно ниже -> спуск падением (наскок — всегда дуга вверх)
       if (jumpDrop) S.vy = 0;                                          // чистое падение от текущей высоты
-      jumpPeak = Yasia.physics.jumpPeakFor(jumpFromY, jumpToY);        // дуга всегда выше обеих точек
+      jumpPeak = Yasia.physics.jumpPeakFor(jumpFromY, jumpToY) + (jumpPounce ? 46 : 0);   // дуга всегда выше обеих точек; наскок — ещё выше
       if (jumpToX !== S.px) S.face = jumpToX > S.px ? 1 : -1;
       env.onJumpStart();
       if (Math.random() < 0.35) env.sayJump();
+    }
+    // кандидаты для НАСКОКА: полки СТРОГО выше обычного диапазона прыжка (обычным не достать), но в пределах наскока
+    function pounceCandidates(cx, p) {
+      return Yasia.physics.climbCandidates(ledges, S.standLedge, cx, {
+        W: p.W, dx: p.dx * POUNCE_DX, up: p.up * POUNCE_UP,
+        minY: p.H * Math.max(1, p.scaleK), lastLeftEl: S.lastLeftEl,
+      }).filter((c) => c.L.y < S.standLedge.y - p.up - 4 && c.L.y >= S.standLedge.y - p.up * POUNCE_UP);   // только «недопрыгиваемое обычным», но достижимое наскоком
     }
     function updateJump(t) {
       const p = env.params();
@@ -97,7 +106,13 @@
       const cand = Yasia.physics.climbCandidates(ledges, S.standLedge, cx, {
         W: p.W, dx: p.dx, up: p.up, minY: p.H * Math.max(1, p.scaleK), lastLeftEl: null,   // анти-пинг-понг не мешает ручному прыжку
       }).filter((c) => c.L.y < S.standLedge.y - 4);    // только полки выше текущей
-      if (!cand.length) return false;
+      if (!cand.length) {                                // обычным прыжком не достать -> пробуем НАСКОКОМ до полки выше
+        const pc = pounceCandidates(cx, p);
+        if (!pc.length) return false;
+        let bp = pc[0]; for (const c of pc) if (c.w > bp.w) bp = c;
+        startJump(bp.L, bp.tgtX, t, { pounce: true });
+        return true;
+      }
       let best = cand[0]; for (const c of cand) if (c.w > best.w) best = c;   // самая «удобная» (ближе по горизонтали)
       startJump(best.L, best.tgtX, t);
       return true;
@@ -119,6 +134,15 @@
         S.lastLeftEl = S.standLedge.el || null;       // запоминаем покинутый блок
         startJump(chosen.L, chosen.tgtX, t);
         return;
+      }
+      if (!cand.length && S.standLedge) {             // обычным прыжком некуда -> иногда достаёт высокую полку НАСКОКОМ (если не достаёт допрыгнуть)
+        const pc = pounceCandidates(cx, p);
+        if (pc.length && Math.random() < 0.55) {
+          let bp = pc[0]; for (const c of pc) if (c.w > bp.w) bp = c;
+          S.lastLeftEl = S.standLedge.el || null;
+          startJump(bp.L, bp.tgtX, t, { pounce: true });
+          return;
+        }
       }
       // не прыгает в этот раз -> гуляет по текущему блоку (цель может быть чуть за краем -> шагнёт и упадёт)
       const m = 45;
@@ -156,6 +180,7 @@
       ledges: () => ledges,                                              // текущий снимок полок (для маршрутов к видео/игре в pet.js)
       jumpPhase: (t) => clamp((t - jumpT) / env.params().jumpMs, 0, 1),  // фаза дуги [0..1] — привязка кадра анимации
       isDrop: () => jumpDrop,                                            // спуск-дроп (кадры fall вместо jump)
+      isPounce: () => jumpPounce,                                        // наскок-прыжок (кадры pounce вместо jump)
     };
   }
 
