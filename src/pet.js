@@ -839,6 +839,28 @@
     if (t - lastHeartT > 300) { lastHeartT = t; spawnHeart(); }
   }
   // обглоданная кость: в конце еды Яся выбрасывает её НАЗАД (против взгляда); падает на пол и лежит как попкорн, пока не растает
+  // исписанный листок: вылетает из печатной машинки назад-вверх и порхает на пол (аналог кости/попкорна)
+  const PAPER_SVG = '<svg viewBox="0 0 18 22" width="100%" height="100%"><rect x="1.2" y="1.2" width="15.6" height="19.6" rx="2" fill="#fffdf6" stroke="#9aa0a8" stroke-width="1.4"/><g stroke="#b9c0c9" stroke-width="1.3" stroke-linecap="round"><line x1="4" y1="6" x2="14" y2="6"/><line x1="4" y1="9.5" x2="14" y2="9.5"/><line x1="4" y1="13" x2="14" y2="13"/><line x1="4" y1="16.5" x2="10" y2="16.5"/></g></svg>';
+  const PAPER_EVERY = 1500;
+  let lastPaperT = 0;
+  function spawnPaper() {
+    const p = document.createElement('div'); p.className = 'twtr-pet-paper'; p.innerHTML = PAPER_SVG;
+    const sz = 15 + Math.random() * 6; p.style.width = sz.toFixed(0) + 'px'; p.style.height = (sz * 1.22).toFixed(0) + 'px';
+    const startX = clamp(px + PET_W / 2 - sz / 2, 0, window.innerWidth - sz), startY = py + PET_H * 0.45;   // ~уровень каретки машинки (сидит)
+    p.style.left = startX + 'px'; p.style.top = startY + 'px';
+    root.appendChild(p);
+    const back = -face;                                              // листы летят назад, за спину (как кость)
+    const dx = back * (46 + Math.random() * 60), spin = Math.round(Math.random() * 240 - 120);
+    const floorDY = (py + PET_H - sz * 1.1) - startY;                // ложится у её ног, а не на дно экрана
+    requestAnimationFrame(() => { p.style.transform = `translate(${Math.round(dx * 0.45)}px, -${34 + Math.round(Math.random() * 20)}px) rotate(${Math.round(spin / 2)}deg)`; });   // выброс вверх-назад
+    setTimeout(() => { p.style.transition = 'transform 1.1s cubic-bezier(.45,.05,.55,.95)'; p.style.transform = `translate(${Math.round(dx)}px, ${Math.round(floorDY)}px) rotate(${spin}deg)`; }, 420);   // бумага падает МЕДЛЕННО — порхает
+    setTimeout(() => { p.style.transition = 'opacity .6s ease'; p.style.opacity = '0'; }, 4600);   // полежали стопкой -> тают
+    setTimeout(() => p.remove(), 5300);
+  }
+  function typingTick(t) {   // пока Яся печатает (эмоция typing) — из машинки вылетают исписанные листы
+    if (!(testKind === 'emo' && testEmo === 'typing' && t < testUntil) || document.hidden) return;
+    if (t - lastPaperT > PAPER_EVERY) { lastPaperT = t; spawnPaper(); }
+  }
   function throwBone() {
     const b = document.createElement('div'); b.className = 'twtr-pet-bone'; b.innerHTML = BONE_SVG;
     const sz = 26; b.style.width = sz + 'px'; b.style.height = (sz * 0.6).toFixed(0) + 'px';
@@ -2204,6 +2226,7 @@
       careTick(t, dt);    // статы: затухание/восстановление, амбиент, авто-сохранение, реплики по состоянию
       popcornTick(t);     // пока играет видео — поток зёрнышек попкорна (вылетают, падают, лежат ~2с, тают)
       heartTick(t);       // пока играет ласка/гордость — поток сердечек (всплывают, тают)
+      typingTick(t);      // пока печатает на машинке — вылетают исписанные листы бумаги
     }
 
     // голодный — иногда просит мяса

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Твиттер-Питомец",
-  "version": "3.4.2",
+  "version": "3.4.3",
   "description": "Питомец живёт на ленте X и других сайтах: гуляет по странице, о нём нужно заботиться (кормить, гладить, играть) — он меняется от твоего отношения. Умеет скачивать видео. Никаких авто-действий.",
   "permissions": ["storage", "scripting", "downloads", "declarativeNetRequest", "clipboardRead", "alarms"],
   "host_permissions": ["https://*/*", "http://*/*"],

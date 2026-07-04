@@ -37,7 +37,8 @@
     "levelup":    { "group": "emotions", "icon": "⭐", "label": "Левел-ап",    "fps": 4, "loop": true,  "frames": ["levelup/levelup0.png", "levelup/levelup1.png", "levelup/levelup2.png", "levelup/levelup3.png", "levelup/levelup4.png"] },
     "land":       { "group": "actions", "fps": 6, "loop": false, "frames": ["land/land0.png", "land/land1.png", "land/land2.png", "land/land3.png"] },
     "tumble":     { "group": "actions", "fps": 8, "loop": true,  "frames": ["tumble/tumble0.png", "tumble/tumble1.png", "tumble/tumble2.png", "tumble/tumble3.png"] },
-    "sit_edge":   { "group": "emotions", "icon": "🪑", "label": "На краю",     "fps": 2, "loop": true, "pingpong": true, "frames": ["sit_edge/sit_edge0.png", "sit_edge/sit_edge1.png", "sit_edge/sit_edge2.png", "sit_edge/sit_edge3.png"] }
+    "sit_edge":   { "group": "emotions", "icon": "🪑", "label": "На краю",     "fps": 2, "loop": true, "pingpong": true, "frames": ["sit_edge/sit_edge0.png", "sit_edge/sit_edge1.png", "sit_edge/sit_edge2.png", "sit_edge/sit_edge3.png"] },
+    "typing":     { "group": "emotions", "icon": "⌨️", "label": "Печатает",    "fps": 5, "loop": true,  "frames": ["typing/typing0.png", "typing/typing1.png", "typing/typing2.png", "typing/typing3.png"] }
   },
   "behaviors": {
     "sit_rest":        { "anim": "sit",        "kind": "idle",      "weight": 3, "cooldown": 45, "dur": 6 },

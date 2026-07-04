@@ -534,7 +534,7 @@
       // пока ИИ пишет черновик — Яся садится и «думает» облачком; снимаем эмоцию, как только ответ пришёл
       function petThink() {
         if (!pet) return;
-        try { pet.emote && pet.emote('sit', 30000); pet.say && pet.say(L().petThink, 15000); } catch (_) {}
+        try { pet.emote && pet.emote('typing', 30000); pet.say && pet.say(L().petThink, 15000); } catch (_) {}   // печатает на машинке (у героев без typing кадры сфолбэчатся на idle)
       }
       function petThinkDone() {
         if (!pet) return;
