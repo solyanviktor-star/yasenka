@@ -160,7 +160,7 @@
       lstBad: 'Это не ссылка на список X (нужно x.com/i/lists/…).', lstNav: 'Открываю список…',
       secSources: 'Источники целей', secPrompt: 'Промпт реплаев', secSettings: 'Настройки',
       chipTitle: 'Яся: придумать реплай (промпт реплаера, отправляешь ты)',
-      gdAsk: 'Отправлять тексты постов с {host} в ИИ (Hermes/GPT), чтобы я писала черновики ответов? Отправляешь их всё равно ты сам.',
+      gdAsk: 'Отправлять тексты постов с {host} в подключённый ИИ, чтобы я писала черновики ответов? Спрошу один раз. Отправляешь их всё равно ты сам.',
       gdYes: 'Отправлять', gdNo: 'Отмена', gdSafe: '🛡 ИИ выключен стражем — смени режим в настройках.',
       note: 'Кнопку «Ответить» в X жмёшь только ты. Я никогда не отправляю сама.',
       noteAuto: '⚠️ Автоотправка ВКЛ: после отсчёта жму «Ответить» сама. «Пропустить»/«Пауза»/«Стоп» отменяют отсчёт.',
@@ -194,7 +194,7 @@
       lstBad: 'Not an X List link (expected x.com/i/lists/…).', lstNav: 'Opening the list…',
       secSources: 'Target sources', secPrompt: 'Reply prompt', secSettings: 'Settings',
       chipTitle: 'Yasya: draft a reply (replier prompt, you press Send)',
-      gdAsk: 'Send post texts from {host} to the AI (Hermes/GPT) so I can draft replies? You still send them yourself.',
+      gdAsk: 'Send post texts from {host} to the connected AI so I can draft replies? I will only ask once. You still send them yourself.',
       gdYes: 'Send', gdNo: 'Cancel', gdSafe: '🛡 AI is off by the guard — change the mode in settings.',
       note: 'YOU press X’s real Reply button. I never send for you.',
       noteAuto: '⚠️ Auto-send is ON: after the countdown I press Reply myself. Skip/Pause/Stop cancel the countdown.',
@@ -501,7 +501,7 @@
         try {
           const text = extractTweetText(card);
           if (!text || text.length < 5) { b.textContent = '✗'; return; }
-          if (!(await aiAllowed())) { b.textContent = '🛡'; return; }                       // страж/приватность — как у обхода
+          if (Yasia.guard && !Yasia.guard.allows('ai')) { b.textContent = '🛡'; return; }   // safe-режим уважаем; но клик по лапке = ЯВНОЕ согласие на этот пост, confirm не нужен
           petThink();   // печатает до вставки черновика в composer; снимается в finally
           const res = await aiChat(draftMessages(text));
           if (!res || !res.ok) { b.textContent = '✗'; b.title = (res && res.noCfg) ? L().stNoAI : ((res && res.error) || 'AI'); return; }

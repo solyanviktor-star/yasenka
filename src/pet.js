@@ -809,6 +809,7 @@
   }
   function popcornTick(t) {   // поток зёрнышек, пока Яся смотрит видео
     if (!(watching && watchAnim() && watchArrived) || document.hidden || dialog.classList.contains('show')) return;   // только когда уже села под видео
+    if (testKind === 'emo' && t < testUntil) return;   // эмоция (печатает и т.п.) прерывает кино -> попкорн не сыплется, после эмоции продолжит
     if (t - lastPopcornT > POPCORN_EVERY) { lastPopcornT = t; spawnKernel(); }
   }
   // рисованные значки частиц (SVG — рендерятся одинаково в любом Chrome, не зависят от эмодзи-шрифта, который у части систем пустой/обрезан)
