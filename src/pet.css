@@ -312,6 +312,7 @@
 .twtr-care-stat { grid-column: 1 / -1; margin-top: 2px; padding: 8px 10px; border-radius: 10px; background: #fff6fb; border: 1.5px solid #ffd0e7; color: #b3245e; font: 600 12px/1.35 system-ui, -apple-system, sans-serif; }
 .twtr-dlg-caps { display: flex; flex-direction: column; gap: 9px; }
 .twtr-skill { display: flex; flex-direction: column; }
+.twtr-skill[hidden] { display: none !important; }   /* атрибут hidden обязан побеждать display:flex (скрытые навыки: ai/care/games) */
 .twtr-skill-body { margin-top: 8px; }
 .twtr-cap-arr { transition: transform .15s; }
 .twtr-skill.open .twtr-cap-arr { transform: rotate(90deg); }
