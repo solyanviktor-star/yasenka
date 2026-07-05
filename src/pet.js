@@ -185,6 +185,14 @@
               <div class="twtr-dlg-reply" id="twtr-dlg-reply"></div>
             </div>
           </div>
+          <div class="twtr-skill" data-skill="calc"><!-- калькулятор: чистый парсер core/calc.js (без eval), результат по мере ввода, клик по результату = копировать -->
+            <button class="twtr-dlg-cap" id="twtr-cap-calc" type="button"><span class="twtr-cap-ic">🧮</span><span class="twtr-cap-tx" id="twtr-cap-calc-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-calc" hidden>
+              <input class="twtr-tok-in twtr-calc-in" id="twtr-calc-in" type="text" autocomplete="off" spellcheck="false">
+              <button class="twtr-calc-res" id="twtr-calc-res" type="button" hidden></button>
+              <div class="twtr-calc-hist" id="twtr-calc-hist"></div>
+            </div>
+          </div>
           <div class="twtr-skill" data-skill="music"><!-- музыка под рукой: вкладки с играющим медиа, пауза/пуск и переход из любого места -->
             <button class="twtr-dlg-cap" id="twtr-cap-music" type="button"><span class="twtr-cap-ic">🎵</span><span class="twtr-cap-tx" id="twtr-cap-music-tx"></span><span class="twtr-cap-arr">›</span></button>
             <div class="twtr-skill-body" id="twtr-skill-music" hidden>
@@ -1584,6 +1592,8 @@
     setTxt('#twtr-tabs-park', t.tabsPark);
     setTxt('#twtr-tabs-parkall', t.tabsParkAll);
     setTxt('#twtr-cap-music-tx', t.music);
+    setTxt('#twtr-cap-calc-tx', t.calc);
+    const calcIn = root.querySelector('#twtr-calc-in'); if (calcIn) calcIn.placeholder = t.calcPh;
     setTxt('#twtr-cap-tok-tx', t.tok);
     setTxt('#twtr-tok-add', t.tokAdd);
     setTxt('#twtr-tok-thr-lb', t.tokThr);
@@ -1882,6 +1892,43 @@
   root.querySelector('#twtr-cap-games').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('games'); });
   root.querySelector('#twtr-cap-notes').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('notes'); });
   root.querySelector('#twtr-cap-reply').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('reply'); });
+  // ---------- Калькулятор: считает по мере ввода (core/calc.js, без eval) ----------
+  const calcInEl = root.querySelector('#twtr-calc-in'), calcResEl = root.querySelector('#twtr-calc-res'), calcHistEl = root.querySelector('#twtr-calc-hist');
+  let calcHist = [];   // последние 5 расчётов этой сессии: [{q, a}]
+  function calcRender() {
+    if (!calcHistEl) return;
+    calcHistEl.innerHTML = calcHist.map((h, i) =>
+      '<button class="twtr-calc-h" data-h="' + i + '" type="button"><span>' + escHtml(h.q) + '</span><b>= ' + escHtml(h.a) + '</b></button>').join('');
+  }
+  function calcTick() {
+    const r = (Yasia.calc && Yasia.calc.calcEval) ? Yasia.calc.calcEval(calcInEl.value) : { ok: false, error: 'empty' };
+    if (r.ok) { calcResEl.hidden = false; calcResEl.classList.remove('err'); calcResEl.textContent = '= ' + r.text; }
+    else if (r.error === 'div0') { calcResEl.hidden = false; calcResEl.classList.add('err'); calcResEl.textContent = tr().calcDiv0; }
+    else calcResEl.hidden = true;   // пусто/недописано — молчим, не мигаем ошибкой под руками
+  }
+  root.querySelector('#twtr-cap-calc').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('calc'); setTimeout(() => calcInEl.focus(), 60); });
+  calcInEl.addEventListener('input', calcTick);
+  calcInEl.addEventListener('keydown', (e) => {
+    e.stopPropagation();   // не даём хоткеям страницы съесть цифры
+    if (e.key !== 'Enter') return;
+    const r = Yasia.calc.calcEval(calcInEl.value);
+    if (!r.ok) return;
+    calcHist.unshift({ q: calcInEl.value.trim(), a: r.text });
+    calcHist = calcHist.slice(0, 5);
+    calcInEl.value = r.text; calcTick(); calcRender();   // Enter = зафиксировать: результат становится началом следующего выражения
+  });
+  calcResEl.addEventListener('click', async (e) => {   // клик по результату = скопировать
+    e.stopPropagation();
+    const v = calcResEl.textContent.replace(/^= /, '');
+    try { await navigator.clipboard.writeText(v); calcResEl.textContent = '✓ ' + v; setTimeout(calcTick, 900); } catch (_) {}
+  });
+  calcHistEl.addEventListener('click', (e) => {   // клик по строке истории = подставить её результат в поле
+    e.stopPropagation();
+    const b = e.target.closest('[data-h]');
+    if (!b) return;
+    calcInEl.value = calcHist[+b.getAttribute('data-h')].a; calcTick(); calcInEl.focus();
+  });
+
   // ---------- Музыка под рукой: эта вкладка сообщает фону о своём медиа, секция показывает все вкладки ----------
   let mediaLast = '';   // подпись последнего отчёта — шлём фону только изменения (+heartbeat раз в минуту, чтобы реестр не протух)
   let mediaLastSent = 0;

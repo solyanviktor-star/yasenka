@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Твиттер-Питомец",
-  "version": "3.7.0",
+  "version": "3.7.1",
   "description": "Питомец живёт на ленте X и других сайтах: гуляет по странице, о нём нужно заботиться (кормить, гладить, играть) — он меняется от твоего отношения. Умеет скачивать видео. Никаких авто-действий.",
   "permissions": ["storage", "scripting", "downloads", "declarativeNetRequest", "clipboardRead", "alarms"],
   "host_permissions": ["https://*/*", "http://*/*"],
@@ -31,7 +31,7 @@
   "content_scripts": [
     {
       "matches": ["https://*/*", "http://*/*"],
-      "js": ["src/core/config.js", "src/core/soul.js", "src/core/storage.js", "src/core/events.js", "src/core/flags.js", "src/core/guard.js", "src/core/behavior.js", "src/core/registry.js", "src/core/heroes.js", "src/core/physics.js", "src/core/platformer.js", "src/core/i18n.js", "src/systems/notes.js", "src/systems/games.js", "src/systems/replier.js", "src/systems/skills.js", "src/systems/memory.js", "src/systems/ai.js", "src/pet.js"],
+      "js": ["src/core/config.js", "src/core/soul.js", "src/core/storage.js", "src/core/events.js", "src/core/flags.js", "src/core/guard.js", "src/core/behavior.js", "src/core/registry.js", "src/core/heroes.js", "src/core/physics.js", "src/core/platformer.js", "src/core/calc.js", "src/core/i18n.js", "src/systems/notes.js", "src/systems/games.js", "src/systems/replier.js", "src/systems/skills.js", "src/systems/memory.js", "src/systems/ai.js", "src/pet.js"],
       "css": ["src/pet.css"],
       "run_at": "document_idle"
     },
