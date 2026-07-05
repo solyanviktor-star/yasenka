@@ -155,6 +155,13 @@
         </div>
         <div class="twtr-dlg-ai" id="twtr-dlg-ai" hidden></div>
         <div class="twtr-dlg-caps" id="twtr-dlg-caps">
+          <div class="twtr-skill twtr-skill-catalog" data-skill="catalog"><!-- витрина фич: тумблеры, какие секции показывать в окне -->
+            <button class="twtr-dlg-cap" id="twtr-cap-catalog" type="button"><span class="twtr-cap-ic">✨</span><span class="twtr-cap-tx" id="twtr-cap-catalog-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-catalog" hidden>
+              <div class="twtr-cat-hint" id="twtr-cat-hint"></div>
+              <div class="twtr-cat-list" id="twtr-cat-list"></div>
+            </div>
+          </div>
           <div class="twtr-skill" data-skill="ai">
             <button class="twtr-dlg-cap" id="twtr-cap-ai" type="button"><span class="twtr-cap-ic">🤖</span><span class="twtr-cap-tx" id="twtr-cap-ai-tx"></span><span class="twtr-cap-arr">›</span></button>
             <div class="twtr-skill-body" id="twtr-skill-ai" hidden>
@@ -1610,6 +1617,8 @@
     renderSettingsLang();
     setTxt('.twtr-dlg-title', t.dlgTitle);   // заголовок окна тоже локализуем: «🐱 Яся» / «🐱 Yasya» (был жёстко зашит в HTML)
     setTxt('#twtr-dlg-greet', t.greet);
+    setTxt('#twtr-cap-catalog-tx', t.catalog);
+    setTxt('#twtr-cat-hint', t.catalogHint);
     setTxt('#twtr-cap-ai-tx', t.ai);
     setTxt('#twtr-cap-care-tx', t.care);
     setTxt('#twtr-cap-dl-tx', t.dl);
@@ -1905,6 +1914,31 @@
   // навыки, скрытые в окне Яси для ПРОДАКШЕНА (код рабочий): ИИ-мозг, забота, игры. В режиме разработчика (sync yasiaDevMode) видны все.
   const HIDDEN_SKILLS = ['ai', 'care', 'games'];
   let devMode = false;
+  // витрина: опциональные секции окна, которые пользователь включает/выключает (сохраняется в sync yasiaSections; по умолчанию всё включено)
+  const CATALOG = [
+    { id: 'tldr', ic: '📄' }, { id: 'focus', ic: '🧘' }, { id: 'watch', ic: '🕵' }, { id: 'calc', ic: '🧮' },
+    { id: 'music', ic: '🎵' }, { id: 'tokens', ic: '📈' }, { id: 'tabs', ic: '🗂' }, { id: 'nlm', ic: '📓' },
+    { id: 'dl', ic: '🎬' }, { id: 'notes', ic: '📝' },
+  ];
+  const catLabel = { tokens: 'tok' };   // data-skill -> ключ i18n там, где имя секции отличается от id
+  let sectionsOn = {};   // { id: bool }; пусто = всё включено
+  function applySections() {
+    CATALOG.forEach((c) => {
+      const w = root.querySelector('.twtr-skill[data-skill="' + c.id + '"]');
+      if (w) w.hidden = (c.id in sectionsOn) ? !sectionsOn[c.id] : false;
+    });
+  }
+  function renderCatalog() {
+    const box = root.querySelector('#twtr-cat-list'); if (!box) return;
+    const t = tr();
+    box.innerHTML = CATALOG.map((c) => {
+      const on = (c.id in sectionsOn) ? sectionsOn[c.id] : true;
+      const name = t[catLabel[c.id] || c.id] || c.id;
+      return '<label class="twtr-cat-row"><span class="twtr-cat-ic">' + c.ic + '</span>' +
+        '<span class="twtr-cat-nm">' + escHtml(name) + '</span>' +
+        '<input type="checkbox" class="twtr-cat-cb" data-sec="' + c.id + '"' + (on ? ' checked' : '') + '></label>';
+    }).join('');
+  }
   function openDialog() {
     try { window.postMessage({ __yasiaCollect: true }, '*'); } catch (_) {}
     const ask = root.querySelector('#twtr-dlg-ask'); if (ask) ask.value = '';
@@ -1913,6 +1947,7 @@
     if (rw) rw.hidden = !(Yasia.flags && Yasia.flags.enabled('replier') && Yasia.replier);
     // продакшен: только скачивание/автореплай/заметки + чат; режим разработчика показывает всё
     HIDDEN_SKILLS.forEach((id) => { const w = root.querySelector('.twtr-skill[data-skill="' + id + '"]'); if (w) w.hidden = !devMode; });
+    applySections();   // витрина: спрятать секции, выключенные пользователем
     closeAllSkills(); renderDlgLang(); renderNotes(); filterCaps('');
     dialog.classList.add('show'); positionDialog();
   }
@@ -1927,6 +1962,18 @@
   root.querySelector('#twtr-cap-games').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('games'); });
   root.querySelector('#twtr-cap-notes').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('notes'); });
   root.querySelector('#twtr-cap-reply').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('reply'); });
+  // ---------- Витрина фич: тумблеры видимости секций ----------
+  Yasia.storage.syncGet({ yasiaSections: null }, (s) => { if (s && s.yasiaSections && typeof s.yasiaSections === 'object') sectionsOn = s.yasiaSections; applySections(); });
+  root.querySelector('#twtr-cap-catalog').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('catalog'); renderCatalog(); });
+  root.querySelector('#twtr-cat-list').addEventListener('change', (e) => {
+    const cb = e.target.closest('[data-sec]'); if (!cb) return;
+    e.stopPropagation();
+    sectionsOn[cb.getAttribute('data-sec')] = cb.checked;
+    try { Yasia.storage.syncSet({ yasiaSections: sectionsOn }); } catch (_) {}
+    applySections();
+  });
+  try { Yasia.storage.onChanged((ch, area) => { if (area === 'sync' && ch.yasiaSections) { sectionsOn = ch.yasiaSections.newValue || {}; applySections(); if (!root.querySelector('#twtr-skill-catalog').hidden) renderCatalog(); } }); } catch (_) {}
+
   // ---------- Перескажи страницу: обёртка над ИИ-мозгом ----------
   root.querySelector('#twtr-cap-tldr').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('tldr'); });
   root.querySelector('#twtr-tldr-go').addEventListener('click', (e) => {
