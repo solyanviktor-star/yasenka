@@ -6,8 +6,7 @@
   "permissions": ["storage", "scripting", "downloads", "declarativeNetRequest", "clipboardRead", "alarms"],
   "host_permissions": ["https://*/*", "http://*/*"],
   "background": {
-    "service_worker": "src/background.js",
-    "scripts": ["src/background.js"]
+    "service_worker": "src/background.js"
   },
   "browser_specific_settings": {
     "gecko": { "id": "yasia@twitter-pet", "strict_min_version": "128.0" }
