@@ -1806,16 +1806,17 @@
   const renderNotes = () => Yasia.events.emit('notes:render');   // обновить список (no-op, если система выключена/упала)
   const addNote = () => Yasia.events.emit('notes:add');          // добавить из поля ввода
 
-  // навыки, ВРЕМЕННО скрытые в окне Яси до релиза (код остаётся рабочим; вернуть = убрать id отсюда): ИИ-мозг, забота, игры
+  // навыки, скрытые в окне Яси для ПРОДАКШЕНА (код рабочий): ИИ-мозг, забота, игры. В режиме разработчика (sync yasiaDevMode) видны все.
   const HIDDEN_SKILLS = ['ai', 'care', 'games'];
+  let devMode = false;
   function openDialog() {
     try { window.postMessage({ __yasiaCollect: true }, '*'); } catch (_) {}
     const ask = root.querySelector('#twtr-dlg-ask'); if (ask) ask.value = '';
     const ai = root.querySelector('#twtr-dlg-ai'); if (ai) ai.hidden = true;
     const rw = root.querySelector('#twtr-skill-reply-wrap');   // автореплаер виден только при включённом флаге (по умолчанию выключен)
     if (rw) rw.hidden = !(Yasia.flags && Yasia.flags.enabled('replier') && Yasia.replier);
-    // ВРЕМЕННО скрыты для релиза (код на месте, вернуть = убрать из списка): показываем только скачивание/автореплай/заметки + чат
-    HIDDEN_SKILLS.forEach((id) => { const w = root.querySelector('.twtr-skill[data-skill="' + id + '"]'); if (w) w.hidden = true; });
+    // продакшен: только скачивание/автореплай/заметки + чат; режим разработчика показывает всё
+    HIDDEN_SKILLS.forEach((id) => { const w = root.querySelector('.twtr-skill[data-skill="' + id + '"]'); if (w) w.hidden = !devMode; });
     closeAllSkills(); renderDlgLang(); renderNotes(); filterCaps('');
     dialog.classList.add('show'); positionDialog();
   }
@@ -2410,7 +2411,7 @@
   const isTwitter = (() => { const h = location.hostname; return h === 'x.com' || h.endsWith('.x.com') || h === 'twitter.com' || h.endsWith('.twitter.com'); })();
 
   try {
-    Yasia.storage.syncGet({ enabled: true, paused: false, hero: 'catgirl', scale: 1, roam: true, walkSpeed: 1, throwPower: 1, yasiaWildMul: 1, yasiaAnimOff: {} }, (s) => { enabled = s.enabled; paused = !!s.paused; hero = (s.hero === 'noema') ? 'catgirl' : s.hero; userScale = s.scale || 1; roam = s.roam; userSpeed = s.walkSpeed || 1; throwMul = (typeof s.throwPower === 'number') ? s.throwPower : 1; wildMul = (typeof s.yasiaWildMul === 'number') ? s.yasiaWildMul : 1; animOff = s.yasiaAnimOff || {}; applyEnabled(); applyHero(); applyScale(); applySpeed(); applyInertia(); applyRoam(); applyPaused(); });
+    Yasia.storage.syncGet({ enabled: true, paused: false, hero: 'catgirl', scale: 1, roam: true, walkSpeed: 1, throwPower: 1, yasiaWildMul: 1, yasiaAnimOff: {}, yasiaDevMode: false }, (s) => { enabled = s.enabled; paused = !!s.paused; hero = (s.hero === 'noema') ? 'catgirl' : s.hero; userScale = s.scale || 1; roam = s.roam; userSpeed = s.walkSpeed || 1; throwMul = (typeof s.throwPower === 'number') ? s.throwPower : 1; wildMul = (typeof s.yasiaWildMul === 'number') ? s.yasiaWildMul : 1; animOff = s.yasiaAnimOff || {}; devMode = !!s.yasiaDevMode; applyEnabled(); applyHero(); applyScale(); applySpeed(); applyInertia(); applyRoam(); applyPaused(); });
     Yasia.storage.localGet({
       hunger: 0, hungerAt: Date.now(), xp: 0, xpDay: null,
       energy: ENERGY_START, energyAt: Date.now(), energyResting: false, bond: BOND_START, bondAt: Date.now(), moodBias: 0, moodBiasAt: Date.now(),
@@ -2463,6 +2464,7 @@
       if (ch.sick) { sickAt = ch.sick.newValue || 0; nextAmbient = 0; }   // болезнь/лечение из другой вкладки/попапа
       if (ch.yasiaWildMul) wildMul = (typeof ch.yasiaWildMul.newValue === 'number') ? ch.yasiaWildMul.newValue : 1;   // ползунок вредности (попап)
       if (ch.yasiaAnimOff) animOff = ch.yasiaAnimOff.newValue || {};      // тумблеры анимаций (попап)
+      if (ch.yasiaDevMode) devMode = !!ch.yasiaDevMode.newValue;          // режим разработчика (попап): скрытые навыки применятся при следующем openDialog
       if (ch.feedPing) feedEat();   // покормили из попапа (статы попап уже записал -> придут своими ключами выше)
       if (ch.yasiaCareSignal && ch.yasiaCareSignal.newValue) {            // сигнал заботы из попапа: {act:'pet'|'play'|'wake', ts}
         const sig = ch.yasiaCareSignal.newValue;                          // статы попап УЖЕ записал (придут ключами выше) -> здесь ТОЛЬКО реакция, без повторного ACT_*

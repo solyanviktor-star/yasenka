@@ -251,7 +251,11 @@
   </details>
 
   <!-- режим разработчика: служебные тумблеры (не способности питомца) -->
-  <details class="dev">
+  <label class="row" style="margin:2px 4px 8px; display:flex; justify-content:space-between; align-items:center; font:600 12px system-ui,-apple-system,sans-serif; color:#8a97a1; cursor:pointer">
+    <span id="t-devmode">Developer mode</span>
+    <input type="checkbox" id="devMode">
+  </label>
+  <details class="dev" id="dev-sec" hidden>
     <summary id="t-dev">🛠 Developer</summary>
     <label class="row">
       <span id="t-devledges">Ledge overlay</span>
@@ -261,6 +265,10 @@
     <div class="label" id="t-anims" style="margin-top:10px">Animations</div>
     <div id="anims"></div><!-- тумблеры строятся из манифеста героя (sync yasiaAnimOff) -->
     <p class="hint" id="t-anims-hint"></p>
+    <div class="row" style="margin-top:10px">
+      <button id="dev-reset" style="width:100%; padding:7px 10px; border:1.5px solid #f4b5c8; border-radius:10px; background:#fff6fa; color:#b3245e; font:700 12px system-ui,-apple-system,sans-serif; cursor:pointer">Reset progress (XP)</button>
+    </div>
+    <p class="hint" id="t-devreset-hint"></p>
   </details>
 
   <p class="hint" id="t-hint"></p>
