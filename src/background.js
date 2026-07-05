@@ -432,6 +432,12 @@ async function captureScreen() {
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
 
+// общий доступ к storage.local для вахты/токенов (объявлен ДО первого использования на верхнем уровне)
+const tokStore = {
+  get: (def) => new Promise((res) => chrome.storage.local.get(def, res)),
+  set: (obj) => new Promise((res) => chrome.storage.local.set(obj, res)),
+};
+
 // ---------- Вахта на аккаунты: «скажи, когда @X запостит» (та же синдикация, что у реплаера) ----------
 // yasiaAccWatch = [{handle, lastId, lastTs, lastText, ts}]; новый ОРИГИНАЛЬНЫЙ пост (не реплай/репост) -> сигнал yasiaAccPing.
 const ACC_KEY = 'yasiaAccWatch', ACC_PING = 'yasiaAccPing';
@@ -536,11 +542,7 @@ try { chrome.tabs.onRemoved.addListener(async (tabId) => { const map = await ses
 // ---------- Токен-вотчер: следим за ценой по адресу контракта (DexScreener, без ключа) ----------
 // Хранение: yasiaTokens = [{addr, chain, symbol, name, price, change24h, lastPingPrice, ts}], yasiaTokCfg = {thresholdPct}.
 // Пинг: |цена/lastPingPrice - 1| >= порог -> запись в yasiaTokPing; content (Яся) видит через storage.onChanged и зовёт хозяина.
-const TOK_KEY = 'yasiaTokens', TOK_CFG = 'yasiaTokCfg', TOK_PING = 'yasiaTokPing';
-const tokStore = {
-  get: (def) => new Promise((res) => chrome.storage.local.get(def, res)),
-  set: (obj) => new Promise((res) => chrome.storage.local.set(obj, res)),
-};
+const TOK_KEY = 'yasiaTokens', TOK_CFG = 'yasiaTokCfg', TOK_PING = 'yasiaTokPing';   // tokStore объявлен выше (общий с вахтой)
 function tokBestPair(pairs) {   // у токена много пулов: берём самый ликвидный (его цена репрезентативнее)
   let best = null;
   for (const p of pairs || []) {
