@@ -430,6 +430,37 @@ async function captureScreen() {
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
 
+// ---------- Парковка вкладок: Яся «держит» вкладки, чтобы не висели ----------
+// Список хранит content script (yasiaParkedTabs в storage.local) — фон только оперирует вкладками.
+// Порядок «забрать все»: сначала отдать список content'у (он сохранит), ПОТОМ отдельным вызовом закрыть — если сохранение упало, вкладки не теряются.
+const isParkable = (t) => t && t.url && /^https?:/.test(t.url) && !t.pinned && !t.active;   // системные/закреплённые/текущую не трогаем
+async function tabsCollect() {
+  try {
+    const tabs = await chrome.tabs.query({ currentWindow: true });
+    const list = tabs.filter(isParkable).map((t) => ({ id: t.id, url: t.url, title: t.title || t.url, ts: Date.now() }));
+    return { ok: true, tabs: list };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+async function tabsClose(msg) {
+  try {
+    const ids = (msg.ids || []).filter((i) => typeof i === 'number');
+    if (ids.length) await chrome.tabs.remove(ids);
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+async function tabsCloseSender(sender) {   // спрятать ТЕКУЩУЮ вкладку (запись уже сохранена content'ом)
+  try { if (sender && sender.tab && typeof sender.tab.id === 'number') await chrome.tabs.remove(sender.tab.id); return { ok: true }; }
+  catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+async function tabsOpen(msg) {
+  try {
+    const url = String(msg.url || '');
+    if (!/^https?:/.test(url)) return { ok: false, error: 'bad url' };
+    await chrome.tabs.create({ url, active: msg.active !== false });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
 // ---------- NotebookLM: мост к внутреннему batchexecute-API Google ----------
 // Официального API нет; протокол реверснут (по notebooklm-py). Авторизация = куки залогиненного
 // Google-аккаунта пользователя в ЭТОМ браузере (host_permissions https://*/* уже покрывает домен).
@@ -658,6 +689,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'YASIA_CODEX_LOGIN') { codexLoginBegin().then(sendResponse); return true; }
   if (msg.type === 'YASIA_CODEX_LOGIN_STATUS') { codexLoginStatus().then(sendResponse); return true; }
   if (msg.type === 'YASIA_CAPTURE') { captureScreen().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_TABS_COLLECT') { tabsCollect().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_TABS_CLOSE') { tabsClose(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_TABS_CLOSE_ME') { tabsCloseSender(sender).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_TABS_OPEN') { tabsOpen(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_NLM_LIST') { nlmList().then(sendResponse); return true; }
   if (msg.type === 'YASIA_NLM_ADD') { nlmAddUrl(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_NLM_CREATE') { nlmCreate(msg).then(sendResponse); return true; }

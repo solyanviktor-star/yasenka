@@ -185,6 +185,17 @@
               <div class="twtr-dlg-reply" id="twtr-dlg-reply"></div>
             </div>
           </div>
+          <div class="twtr-skill" data-skill="tabs"><!-- парковка вкладок: Яся «держит» их, чтобы не висели; клик по записи открывает обратно -->
+            <button class="twtr-dlg-cap" id="twtr-cap-tabs" type="button"><span class="twtr-cap-ic">🗂</span><span class="twtr-cap-tx" id="twtr-cap-tabs-tx"></span><span class="twtr-tabs-n" id="twtr-tabs-n" hidden></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-tabs" hidden>
+              <div class="twtr-dlg-actions">
+                <button class="twtr-dlg-save" id="twtr-tabs-park" type="button"></button>
+                <button class="twtr-dlg-save twtr-tabs-all" id="twtr-tabs-parkall" type="button"></button>
+              </div>
+              <div class="twtr-tabs-list" id="twtr-tabs-list"></div>
+              <div class="twtr-nlm-st" id="twtr-tabs-st"></div>
+            </div>
+          </div>
           <div class="twtr-skill" data-skill="nlm"><!-- NotebookLM: страница/тред -> источником в блокнот Google (куки текущего аккаунта) -->
             <button class="twtr-dlg-cap" id="twtr-cap-nlm" type="button"><span class="twtr-cap-ic">📓</span><span class="twtr-cap-tx" id="twtr-cap-nlm-tx"></span><span class="twtr-cap-arr">›</span></button>
             <div class="twtr-skill-body" id="twtr-skill-nlm" hidden>
@@ -1550,6 +1561,9 @@
     setTxt('#twtr-cap-notes-tx', t.notes);
     setTxt('#twtr-cap-nlm-tx', t.nlm);
     setTxt('#twtr-nlm-add', t.nlmAdd);
+    setTxt('#twtr-cap-tabs-tx', t.tabs);
+    setTxt('#twtr-tabs-park', t.tabsPark);
+    setTxt('#twtr-tabs-parkall', t.tabsParkAll);
     setTxt('#twtr-dlg-save', t.save);
     setTxt('#twtr-dlg-lang', t.other);
     if (dlgText) dlgText.placeholder = t.ph;
@@ -1844,6 +1858,68 @@
   root.querySelector('#twtr-cap-games').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('games'); });
   root.querySelector('#twtr-cap-notes').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('notes'); });
   root.querySelector('#twtr-cap-reply').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('reply'); });
+  // ---------- Парковка вкладок: Яся «держит» вкладки ----------
+  const TABS_KEY = 'yasiaParkedTabs';
+  const tabsListEl = root.querySelector('#twtr-tabs-list'), tabsStEl = root.querySelector('#twtr-tabs-st'), tabsNEl = root.querySelector('#twtr-tabs-n');
+  const tabsMsg = (txt, cls) => { if (tabsStEl) { tabsStEl.textContent = txt || ''; tabsStEl.className = 'twtr-nlm-st' + (cls ? ' ' + cls : ''); } };
+  const tabsGet = () => new Promise((res) => Yasia.storage.localGet({ [TABS_KEY]: [] }, (s) => res(Array.isArray(s[TABS_KEY]) ? s[TABS_KEY] : [])));
+  const tabsSave = (list) => { try { Yasia.storage.localSet({ [TABS_KEY]: list.slice(0, 200) }); } catch (_) {} };   // потолок 200 — storage.local не резиновый
+  const escHtml = (s) => String(s || '').replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+  function tabHost(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (_) { return '?'; } }
+  function tabDot(u) {   // «фавиконка» без внешних запросов (CSP сайтов часто режет чужие картинки): цветной кружок с буквой домена
+    const h = tabHost(u); let n = 0; for (let i = 0; i < h.length; i++) n = (n * 31 + h.charCodeAt(i)) >>> 0;
+    return '<span class="twtr-tab-dot" style="background:hsl(' + (n % 360) + ',62%,52%)">' + escHtml(h[0] ? h[0].toUpperCase() : '?') + '</span>';
+  }
+  async function renderTabs() {
+    const list = await tabsGet();
+    if (tabsNEl) { tabsNEl.textContent = String(list.length); tabsNEl.hidden = !list.length; }
+    if (!tabsListEl) return;
+    if (!list.length) { tabsListEl.innerHTML = '<div class="twtr-tabs-empty">' + escHtml(tr().tabsEmpty) + '</div>'; return; }
+    tabsListEl.innerHTML = list.map((p, i) =>
+      '<div class="twtr-tab-row" data-i="' + i + '">' + tabDot(p.url) +
+        '<span class="twtr-tab-t" title="' + escHtml(p.url) + '"><span class="twtr-tab-title">' + escHtml(p.title) + '</span><span class="twtr-tab-host">' + escHtml(tabHost(p.url)) + '</span></span>' +
+        '<button class="twtr-tab-x" data-x="' + i + '" type="button" title="×">×</button>' +
+      '</div>').join('');
+  }
+  root.querySelector('#twtr-cap-tabs').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('tabs'); renderTabs(); });
+  tabsListEl.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const x = e.target.closest('[data-x]'), row = e.target.closest('.twtr-tab-row');
+    const list = await tabsGet();
+    if (x) {   // × — забыть без открытия
+      list.splice(+x.getAttribute('data-x'), 1); tabsSave(list); renderTabs(); return;
+    }
+    if (row) {   // клик по записи — вернуть вкладку и убрать из «лап»
+      const i = +row.getAttribute('data-i'), p = list[i];
+      if (!p) return;
+      const r = await sendBgP({ type: 'YASIA_TABS_OPEN', url: p.url });
+      if (r && r.ok) { list.splice(i, 1); tabsSave(list); renderTabs(); say(tr().tabsGaveBack, 1800); }
+      else tabsMsg(tr().tabsFail, 'err');
+    }
+  });
+  root.querySelector('#twtr-tabs-park').addEventListener('click', async (e) => {   // спрятать ТЕКУЩУЮ вкладку (сначала сохранить, потом закрыть — иначе потеряем)
+    e.stopPropagation();
+    const list = await tabsGet();
+    list.unshift({ url: location.href, title: document.title || location.href, ts: Date.now() });
+    tabsSave(list);
+    setTimeout(() => sendBgP({ type: 'YASIA_TABS_CLOSE_ME' }), 250);   // даём storage записаться; вкладка закроется вместе с диалогом
+  });
+  root.querySelector('#twtr-tabs-parkall').addEventListener('click', async (e) => {   // забрать все ОСТАЛЬНЫЕ вкладки окна (кроме текущей/закреплённых/системных)
+    e.stopPropagation();
+    tabsMsg(tr().tabsCollecting);
+    const r = await sendBgP({ type: 'YASIA_TABS_COLLECT' });
+    if (!r || !r.ok) { tabsMsg(tr().tabsFail, 'err'); return; }
+    if (!r.tabs.length) { tabsMsg(tr().tabsNone); return; }
+    const list = await tabsGet();
+    r.tabs.forEach((t) => list.unshift({ url: t.url, title: t.title, ts: t.ts }));
+    tabsSave(list);
+    await sendBgP({ type: 'YASIA_TABS_CLOSE', ids: r.tabs.map((t) => t.id) });   // закрываем ПОСЛЕ сохранения — потерять вкладки нельзя
+    renderTabs();
+    tabsMsg(fmtN(tr().tabsGot, r.tabs.length), 'ok');
+    say(fmtN(tr().tabsSay, r.tabs.length), 2400); setMode('happy'); happyUntil = now() + 1400;
+  });
+  function fmtN(s, n) { return String(s || '').replace('{n}', n); }
+
   // ---------- NotebookLM: «убрать страницу в блокнот» ----------
   const nlmSel = root.querySelector('#twtr-nlm-sel'), nlmSt = root.querySelector('#twtr-nlm-st');
   let nlmLoaded = false;
