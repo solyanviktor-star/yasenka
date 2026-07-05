@@ -255,6 +255,11 @@
 .twtr-dlg-text:focus { border-color: #1d9bf0; }
 .twtr-dlg-actions { display: flex; gap: 8px; margin-top: 10px; }
 .twtr-dlg-save { flex: 1; border: none; border-radius: 10px; background: #1d9bf0; color: #fff; font: 700 13px system-ui, -apple-system, sans-serif; padding: 10px; cursor: pointer; pointer-events: auto; transition: background .12s, transform .08s; }
+.twtr-nlm-sel { width: 100%; padding: 9px 10px; border: 1.5px solid #ccd6dd; border-radius: 10px; background: #fff; color: #0f1419; font: 500 13px system-ui, -apple-system, sans-serif; }
+.twtr-nlm-open { flex: none; width: 44px; }   /* «открыть блокнот ↗» — маленькая кнопка рядом с основной */
+.twtr-nlm-st { margin-top: 6px; font: 500 12px/1.4 system-ui, -apple-system, sans-serif; color: #536471; min-height: 15px; }
+.twtr-nlm-st.ok { color: #00ba7c; }
+.twtr-nlm-st.err { color: #f4212e; }
 .twtr-dlg-save:hover { background: #1a8cd8; }
 .twtr-dlg-save:active { transform: scale(.97); }
 .twtr-dlg-list { margin-top: 15px; display: flex; flex-direction: column; gap: 8px; }

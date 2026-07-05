@@ -430,6 +430,82 @@ async function captureScreen() {
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
 
+// ---------- NotebookLM: мост к внутреннему batchexecute-API Google ----------
+// Официального API нет; протокол реверснут (по notebooklm-py). Авторизация = куки залогиненного
+// Google-аккаунта пользователя в ЭТОМ браузере (host_permissions https://*/* уже покрывает домен).
+// Может сломаться при изменении RPC у Google — обработчики возвращают {ok:false}, фича гаснет мягко.
+const NLM_BASE = 'https://notebooklm.google.com';
+const NLM_RPC = { list: 'wXbhsf', addSource: 'izAoDd', createNotebook: 'CCqFvf' };
+let nlmTok = null;   // { at (CSRF SNlM0e), sid (FdrFJe), t } — кэш токенов страницы (протухают -> перечитываем)
+async function nlmTokens(force) {
+  if (!force && nlmTok && Date.now() - nlmTok.t < 10 * 60000) return nlmTok;
+  const r = await fetch(NLM_BASE + '/', { credentials: 'include' });
+  if (!r.ok) throw new Error('NotebookLM HTTP ' + r.status);
+  const html = await r.text();
+  const wiz = (k) => { const m = html.match(new RegExp('"' + k + '"\\s*:\\s*"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)"')); return m ? m[1].replace(/\\(.)/g, '$1') : null; };
+  const at = wiz('SNlM0e'), sid = wiz('FdrFJe');
+  if (!at) throw new Error('not signed in');   // без CSRF-токена пользователь не залогинен в Google
+  nlmTok = { at, sid: sid || '', t: Date.now() };
+  return nlmTok;
+}
+async function nlmRpc(rpcId, params, sourcePath) {
+  const tok = await nlmTokens(false);
+  const url = NLM_BASE + '/_/LabsTailwindUi/data/batchexecute?' + new URLSearchParams({
+    rpcids: rpcId, 'source-path': sourcePath || '/', 'f.sid': tok.sid, hl: 'en', rt: 'c',
+  });
+  const body = 'f.req=' + encodeURIComponent(JSON.stringify([[[rpcId, JSON.stringify(params), null, 'generic']]])) + '&at=' + encodeURIComponent(tok.at) + '&';
+  const r = await fetch(url, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+    body,
+  });
+  if (r.status === 401 || r.status === 403) { nlmTok = null; throw new Error('auth ' + r.status); }
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const text = (await r.text()).replace(/^\)\]\}'/, '');
+  // rt=c: чередование «число_байт \n json-чанк»; ищем последний непустой фрейм wrb.fr нашего rpcId
+  let result;
+  for (const line of text.split('\n')) {
+    const s = line.trim();
+    if (!s.startsWith('[')) continue;
+    let chunk; try { chunk = JSON.parse(s); } catch (_) { continue; }
+    for (const fr of chunk) {
+      if (Array.isArray(fr) && fr[0] === 'wrb.fr' && fr[1] === rpcId && fr[2] != null) {
+        try { result = JSON.parse(fr[2]); } catch (_) {}
+      }
+    }
+  }
+  return result;
+}
+async function nlmList() {
+  try {
+    const res = await nlmRpc(NLM_RPC.list, [null, 1, null, [2]], '/');
+    const rows = (res && res[0]) || [];
+    const notebooks = rows.map((r) => ({ id: r && r[2], title: (r && typeof r[0] === 'string' ? r[0] : '').replace('thought\n', '').trim() })).filter((n) => n.id);
+    return { ok: true, notebooks };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+const NLM_TEMPLATE = [2, null, null, [1, null, null, null, null, null, null, null, null, null, [1]]];   // обязательный wrapper (Gemini-3.5 бэкенды отвергают запросы без него)
+async function nlmAddUrl(msg) {
+  try {
+    const url = String(msg.url || ''), nb = String(msg.notebookId || '');
+    if (!url || !nb) return { ok: false, error: 'url/notebookId required' };
+    const yt = /(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(new URL(url).hostname);
+    const spec = yt
+      ? [null, null, null, null, null, null, null, [url], null, null, 1]   // YouTube — отдельный слот источника
+      : [null, null, [url], null, null, null, null, null, null, null, 1];
+    const res = await nlmRpc(NLM_RPC.addSource, [[spec], nb, NLM_TEMPLATE], '/notebook/' + nb);
+    return { ok: true, raw: !!res };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+async function nlmCreate(msg) {
+  try {
+    const title = String(msg.title || 'Yasenka');
+    const res = await nlmRpc(NLM_RPC.createNotebook, [title, null, NLM_TEMPLATE], '/');
+    const id = res && (res[2] || (res[0] && res[0][2]));
+    return { ok: true, id: id || '' };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
 // ---------- ДОЛГАЯ ПАМЯТЬ + ДИНАМИЧЕСКИЕ УМЕНИЯ Hermes: аутентифицированный GET (skills/capabilities) ----------
 async function hermesGet(msg) {
   try {
@@ -582,4 +658,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'YASIA_CODEX_LOGIN') { codexLoginBegin().then(sendResponse); return true; }
   if (msg.type === 'YASIA_CODEX_LOGIN_STATUS') { codexLoginStatus().then(sendResponse); return true; }
   if (msg.type === 'YASIA_CAPTURE') { captureScreen().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_NLM_LIST') { nlmList().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_NLM_ADD') { nlmAddUrl(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_NLM_CREATE') { nlmCreate(msg).then(sendResponse); return true; }
 });

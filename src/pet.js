@@ -185,6 +185,17 @@
               <div class="twtr-dlg-reply" id="twtr-dlg-reply"></div>
             </div>
           </div>
+          <div class="twtr-skill" data-skill="nlm"><!-- NotebookLM: страница/тред -> источником в блокнот Google (куки текущего аккаунта) -->
+            <button class="twtr-dlg-cap" id="twtr-cap-nlm" type="button"><span class="twtr-cap-ic">📓</span><span class="twtr-cap-tx" id="twtr-cap-nlm-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-nlm" hidden>
+              <select class="twtr-nlm-sel" id="twtr-nlm-sel"></select>
+              <div class="twtr-dlg-actions">
+                <button class="twtr-dlg-save" id="twtr-nlm-add" type="button"></button>
+                <button class="twtr-dlg-save twtr-nlm-open" id="twtr-nlm-open" type="button">↗</button>
+              </div>
+              <div class="twtr-nlm-st" id="twtr-nlm-st"></div>
+            </div>
+          </div>
           <div class="twtr-skill" data-skill="notes">
             <button class="twtr-dlg-cap" id="twtr-cap-notes" type="button"><span class="twtr-cap-ic">📝</span><span class="twtr-cap-tx" id="twtr-cap-notes-tx"></span><span class="twtr-cap-arr">›</span></button>
             <div class="twtr-skill-body" id="twtr-skill-notes" hidden>
@@ -1537,6 +1548,8 @@
     setTxt('#twtr-cap-games-tx', t.games);
     setTxt('#twtr-cap-reply-tx', t.replier);
     setTxt('#twtr-cap-notes-tx', t.notes);
+    setTxt('#twtr-cap-nlm-tx', t.nlm);
+    setTxt('#twtr-nlm-add', t.nlmAdd);
     setTxt('#twtr-dlg-save', t.save);
     setTxt('#twtr-dlg-lang', t.other);
     if (dlgText) dlgText.placeholder = t.ph;
@@ -1831,6 +1844,48 @@
   root.querySelector('#twtr-cap-games').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('games'); });
   root.querySelector('#twtr-cap-notes').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('notes'); });
   root.querySelector('#twtr-cap-reply').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('reply'); });
+  // ---------- NotebookLM: «убрать страницу в блокнот» ----------
+  const nlmSel = root.querySelector('#twtr-nlm-sel'), nlmSt = root.querySelector('#twtr-nlm-st');
+  let nlmLoaded = false;
+  const nlmMsg = (txt, cls) => { if (nlmSt) { nlmSt.textContent = txt || ''; nlmSt.className = 'twtr-nlm-st' + (cls ? ' ' + cls : ''); } };
+  const sendBgP = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => { void chrome.runtime.lastError; res(r || null); }); } catch (_) { res(null); } });
+  async function nlmLoadList(force) {
+    if (nlmLoaded && !force) return;
+    nlmMsg(tr().nlmLoading);
+    const r = await sendBgP({ type: 'YASIA_NLM_LIST' });
+    if (!r || !r.ok) { nlmMsg(r && /signed/.test(r.error || '') ? tr().nlmNoAuth : tr().nlmFail, 'err'); return; }
+    nlmLoaded = true;
+    const saved = await new Promise((res) => Yasia.storage.localGet({ yasiaNlmNotebook: '' }, (s) => res(s.yasiaNlmNotebook)));
+    nlmSel.innerHTML = '<option value="__new__">' + tr().nlmNew + '</option>' +
+      r.notebooks.map((n) => '<option value="' + n.id + '"' + (n.id === saved ? ' selected' : '') + '>' + n.title.replace(/</g, '&lt;') + '</option>').join('');
+    nlmMsg('');
+  }
+  root.querySelector('#twtr-cap-nlm').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('nlm'); nlmLoadList(false); });
+  root.querySelector('#twtr-nlm-open').addEventListener('click', (e) => {   // открыть выбранный блокнот в новой вкладке
+    e.stopPropagation();
+    const id = nlmSel.value;
+    window.open('https://notebooklm.google.com/' + (id && id !== '__new__' ? 'notebook/' + id : ''), '_blank');
+  });
+  root.querySelector('#twtr-nlm-add').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    let id = nlmSel.value;
+    nlmMsg(tr().nlmAdding);
+    playEmote(CAT_SETS.typing ? 'typing' : 'sit', 20000);   // «записывает в блокнот» — печатает, пока идёт запрос
+    try {
+      if (!id || id === '__new__') {   // нет блокнота — создаём «Yasenka» и запоминаем
+        const c = await sendBgP({ type: 'YASIA_NLM_CREATE', title: 'Yasenka' });
+        if (!c || !c.ok || !c.id) { nlmMsg(tr().nlmFail, 'err'); return; }
+        id = c.id; nlmLoaded = false;
+      }
+      Yasia.storage.localSet({ yasiaNlmNotebook: id });   // запомнить выбор на будущее
+      const r = await sendBgP({ type: 'YASIA_NLM_ADD', url: location.href, notebookId: id });
+      if (r && r.ok) { nlmMsg(tr().nlmOk, 'ok'); say(tr().nlmSay, 2400); }
+      else nlmMsg((r && /signed/.test(r.error || '')) ? tr().nlmNoAuth : tr().nlmFail, 'err');
+    } finally {
+      if (testKind === 'emo') { testKind = null; testEmo = null; testUntil = 0; }   // дописала — хватит печатать
+      pendingEmote = null;
+    }
+  });
   // «мозг» (ai.js) распознал намерение в поле «спроси» -> открываем нужный навык прямо в окне Яси (маршрутизация запроса к её инструментам)
   try { Yasia.events.on('cap:open', (p) => {
     const which = p && p.which; if (!which) return;
