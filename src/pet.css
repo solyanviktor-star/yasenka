@@ -260,6 +260,19 @@
 .twtr-nlm-st { margin-top: 6px; font: 500 12px/1.4 system-ui, -apple-system, sans-serif; color: #536471; min-height: 15px; }
 .twtr-nlm-st.ok { color: #00ba7c; }
 .twtr-nlm-st.err { color: #f4212e; }
+/* токен-вотчер */
+.twtr-tok-addrow { display: flex; gap: 6px; }
+.twtr-tok-in { flex: 1; min-width: 0; padding: 9px 10px; border: 1.5px solid #ccd6dd; border-radius: 10px; background: #fff; color: #0f1419; font: 500 12px system-ui, -apple-system, sans-serif; }
+.twtr-tok-addbtn { flex: none; width: 44px; }
+.twtr-tok-thr { display: flex; align-items: center; gap: 6px; margin-top: 7px; font: 500 11px system-ui, -apple-system, sans-serif; color: #8a97a1; }
+.twtr-tok-thrin { width: 52px; padding: 4px 6px; border: 1.5px solid #ccd6dd; border-radius: 8px; font: 600 11px system-ui, -apple-system, sans-serif; }
+.twtr-tok-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.twtr-tok-row { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1.5px solid #e6ecf0; border-radius: 10px; background: #fff; }
+.twtr-tok-sym { flex: 1; min-width: 0; display: flex; flex-direction: column; font: 700 12px/1.25 system-ui, -apple-system, sans-serif; color: #0f1419; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.twtr-tok-pr { font: 600 12px system-ui, -apple-system, sans-serif; color: #0f1419; }
+.twtr-tok-ch { flex: none; min-width: 52px; text-align: right; font: 700 12px system-ui, -apple-system, sans-serif; }
+.twtr-tok-ch.up { color: #00ba7c; }
+.twtr-tok-ch.dn { color: #f4212e; }
 /* парковка вкладок */
 .twtr-tabs-n { flex: none; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: #1d9bf0; color: #fff; font: 700 11px/20px system-ui, -apple-system, sans-serif; text-align: center; margin-right: 6px; }
 .twtr-tabs-all { background: #8b5cf6; }

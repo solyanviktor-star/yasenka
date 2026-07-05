@@ -185,6 +185,18 @@
               <div class="twtr-dlg-reply" id="twtr-dlg-reply"></div>
             </div>
           </div>
+          <div class="twtr-skill" data-skill="tokens"><!-- токен-вотчер: адрес контракта -> DexScreener; при движении цены >= порога Яся пингует -->
+            <button class="twtr-dlg-cap" id="twtr-cap-tok" type="button"><span class="twtr-cap-ic">📈</span><span class="twtr-cap-tx" id="twtr-cap-tok-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-tokens" hidden>
+              <div class="twtr-tok-addrow">
+                <input class="twtr-tok-in" id="twtr-tok-in" type="text" autocomplete="off" spellcheck="false">
+                <button class="twtr-dlg-save twtr-tok-addbtn" id="twtr-tok-add" type="button">+</button>
+              </div>
+              <div class="twtr-tok-thr"><span id="twtr-tok-thr-lb"></span><input class="twtr-tok-thrin" id="twtr-tok-thr" type="number" min="0.5" max="50" step="0.5"><span>%</span></div>
+              <div class="twtr-tok-list" id="twtr-tok-list"></div>
+              <div class="twtr-nlm-st" id="twtr-tok-st"></div>
+            </div>
+          </div>
           <div class="twtr-skill" data-skill="tabs"><!-- парковка вкладок: Яся «держит» их, чтобы не висели; клик по записи открывает обратно -->
             <button class="twtr-dlg-cap" id="twtr-cap-tabs" type="button"><span class="twtr-cap-ic">🗂</span><span class="twtr-cap-tx" id="twtr-cap-tabs-tx"></span><span class="twtr-tabs-n" id="twtr-tabs-n" hidden></span><span class="twtr-cap-arr">›</span></button>
             <div class="twtr-skill-body" id="twtr-skill-tabs" hidden>
@@ -1564,6 +1576,10 @@
     setTxt('#twtr-cap-tabs-tx', t.tabs);
     setTxt('#twtr-tabs-park', t.tabsPark);
     setTxt('#twtr-tabs-parkall', t.tabsParkAll);
+    setTxt('#twtr-cap-tok-tx', t.tok);
+    setTxt('#twtr-tok-add', t.tokAdd);
+    setTxt('#twtr-tok-thr-lb', t.tokThr);
+    const tokIn = root.querySelector('#twtr-tok-in'); if (tokIn) tokIn.placeholder = t.tokPh;
     setTxt('#twtr-dlg-save', t.save);
     setTxt('#twtr-dlg-lang', t.other);
     if (dlgText) dlgText.placeholder = t.ph;
@@ -1858,6 +1874,67 @@
   root.querySelector('#twtr-cap-games').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('games'); });
   root.querySelector('#twtr-cap-notes').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('notes'); });
   root.querySelector('#twtr-cap-reply').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('reply'); });
+  // ---------- Токен-вотчер: Яся следит за ценой и пингует при движении ----------
+  const tokListEl = root.querySelector('#twtr-tok-list'), tokStEl = root.querySelector('#twtr-tok-st');
+  const tokInEl = root.querySelector('#twtr-tok-in'), tokThrEl = root.querySelector('#twtr-tok-thr');
+  const tokMsg = (txt, cls) => { if (tokStEl) { tokStEl.textContent = txt || ''; tokStEl.className = 'twtr-nlm-st' + (cls ? ' ' + cls : ''); } };
+  const tokFmtPrice = (p) => {   // мем-токены живут в 0.000000123 — обычный toFixed даст нули
+    if (!p) return '0';
+    if (p >= 1) return p.toFixed(p >= 1000 ? 0 : 2);
+    const s = p.toFixed(12).replace(/0+$/, '');
+    const m = s.match(/^0\.(0*)(\d{1,4})/);
+    return m ? '0.' + m[1] + m[2] : s;
+  };
+  async function renderTokens() {
+    const s = await new Promise((res) => Yasia.storage.localGet({ yasiaTokens: [], yasiaTokCfg: { thresholdPct: 5 } }, res));
+    if (tokThrEl && document.activeElement !== tokThrEl) tokThrEl.value = (s.yasiaTokCfg && s.yasiaTokCfg.thresholdPct) || 5;
+    if (!tokListEl) return;
+    const list = s.yasiaTokens || [];
+    if (!list.length) { tokListEl.innerHTML = '<div class="twtr-tabs-empty">' + escHtml(tr().tokEmpty) + '</div>'; return; }
+    tokListEl.innerHTML = list.map((t) => {
+      const ch = +t.change24h || 0;
+      return '<div class="twtr-tok-row">' +
+        '<span class="twtr-tok-sym" title="' + escHtml(t.name || t.addr) + '">' + escHtml(t.symbol) + '<span class="twtr-tab-host">' + escHtml(t.chain || '') + '</span></span>' +
+        '<span class="twtr-tok-pr">$' + tokFmtPrice(+t.price || 0) + '</span>' +
+        '<span class="twtr-tok-ch ' + (ch >= 0 ? 'up' : 'dn') + '">' + (ch >= 0 ? '+' : '') + ch.toFixed(1) + '%</span>' +
+        '<button class="twtr-tab-x" data-addr="' + escHtml(t.addr) + '" type="button" title="×">×</button>' +
+      '</div>';
+    }).join('');
+  }
+  root.querySelector('#twtr-cap-tok').addEventListener('click', (e) => {
+    e.stopPropagation(); toggleSkill('tokens'); renderTokens();
+    sendBgP({ type: 'YASIA_TOK_TICK' }).then(renderTokens);   // открыл секцию — освежаем цены сразу, не ждём алярма
+  });
+  root.querySelector('#twtr-tok-add').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const addr = (tokInEl.value || '').trim();
+    if (!addr) return;
+    tokMsg(tr().tokAdding);
+    const r = await sendBgP({ type: 'YASIA_TOK_ADD', addr });
+    if (r && r.ok) { tokInEl.value = ''; tokMsg('✓ ' + r.token.symbol + ' — $' + tokFmtPrice(r.token.price), 'ok'); renderTokens(); say(fmtN(tr().tokSay, r.token.symbol), 2200); }
+    else tokMsg(tr().tokFail + (r && r.error ? ' (' + r.error + ')' : ''), 'err');
+  });
+  tokListEl.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const x = e.target.closest('[data-addr]');
+    if (!x) return;
+    await sendBgP({ type: 'YASIA_TOK_REMOVE', addr: x.getAttribute('data-addr') });
+    renderTokens();
+  });
+  if (tokThrEl) tokThrEl.addEventListener('change', () => {   // порог пинга (в %) — общий на все токены
+    const v = Math.min(50, Math.max(0.5, +tokThrEl.value || 5));
+    try { Yasia.storage.localSet({ yasiaTokCfg: { thresholdPct: v } }); } catch (_) {}
+  });
+  // пинг из фона: цена дёрнулась сильнее порога -> Яся зовёт хозяина (без спама: фон шлёт один сигнал на тик)
+  try { Yasia.storage.onChanged((ch, area) => {
+    if (area !== 'local' || !ch.yasiaTokPing || !ch.yasiaTokPing.newValue) return;
+    const p = ch.yasiaTokPing.newValue;
+    if (!p.items || !p.items.length || Date.now() - (p.ts || 0) > 60000) return;   // протухший сигнал (страница лежала в фоне) не озвучиваем
+    const line = p.items.map((i) => i.symbol + ' ' + (i.pct >= 0 ? '+' : '') + i.pct + '%').join(', ');
+    say((p.items.some((i) => i.pct < 0) ? '📉 ' : '📈 ') + line + '!', 4200);
+    playEmote(p.items.every((i) => i.pct >= 0) ? 'happy' : 'surprised', 2600);
+  }); } catch (_) {}
+
   // ---------- Парковка вкладок: Яся «держит» вкладки ----------
   const TABS_KEY = 'yasiaParkedTabs';
   const tabsListEl = root.querySelector('#twtr-tabs-list'), tabsStEl = root.querySelector('#twtr-tabs-st'), tabsNEl = root.querySelector('#twtr-tabs-n');

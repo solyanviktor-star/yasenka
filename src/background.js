@@ -414,6 +414,7 @@ async function codexLoginTick() {
 try { chrome.alarms.onAlarm.addListener((a) => {
   if (!a || !a.name) return;
   if (a.name === 'codexPoll') return void codexLoginTick();
+  if (a.name === 'yasiaTok') return void tokTick();                 // проверка цен токенов
   if (a.name.indexOf('rem_') === 0) return void remFire(a.name);   // сработала напоминалка
 }); } catch (_) {}
 async function codexLoginStatus() { return { ok: true, state: await codexLoginGet() }; }
@@ -429,6 +430,80 @@ async function captureScreen() {
     return { ok: true, dataUrl };
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
+
+// ---------- Токен-вотчер: следим за ценой по адресу контракта (DexScreener, без ключа) ----------
+// Хранение: yasiaTokens = [{addr, chain, symbol, name, price, change24h, lastPingPrice, ts}], yasiaTokCfg = {thresholdPct}.
+// Пинг: |цена/lastPingPrice - 1| >= порог -> запись в yasiaTokPing; content (Яся) видит через storage.onChanged и зовёт хозяина.
+const TOK_KEY = 'yasiaTokens', TOK_CFG = 'yasiaTokCfg', TOK_PING = 'yasiaTokPing';
+const tokStore = {
+  get: (def) => new Promise((res) => chrome.storage.local.get(def, res)),
+  set: (obj) => new Promise((res) => chrome.storage.local.set(obj, res)),
+};
+function tokBestPair(pairs) {   // у токена много пулов: берём самый ликвидный (его цена репрезентативнее)
+  let best = null;
+  for (const p of pairs || []) {
+    if (!p || !p.priceUsd) continue;
+    const liq = (p.liquidity && p.liquidity.usd) || 0;
+    if (!best || liq > ((best.liquidity && best.liquidity.usd) || 0)) best = p;
+  }
+  return best;
+}
+async function tokFetch(addr) {
+  const r = await fetch('https://api.dexscreener.com/latest/dex/tokens/' + encodeURIComponent(addr));
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  const p = tokBestPair(j && j.pairs);
+  if (!p) throw new Error('token not found');
+  return {
+    addr, chain: p.chainId || '', symbol: (p.baseToken && p.baseToken.symbol) || '?', name: (p.baseToken && p.baseToken.name) || '',
+    price: parseFloat(p.priceUsd) || 0, change24h: (p.priceChange && typeof p.priceChange.h24 === 'number') ? p.priceChange.h24 : parseFloat(p.priceChange && p.priceChange.h24) || 0,
+    ts: Date.now(),
+  };
+}
+async function tokAdd(msg) {
+  try {
+    const addr = String(msg.addr || '').trim();
+    if (!addr || addr.length < 6) return { ok: false, error: 'bad address' };
+    const info = await tokFetch(addr);
+    const s = await tokStore.get({ [TOK_KEY]: [] });
+    const list = (s[TOK_KEY] || []).filter((t) => t.addr.toLowerCase() !== addr.toLowerCase());
+    if (list.length >= 12) return { ok: false, error: 'limit 12' };   // 12 токенов хватит всем; больше — дольше тик
+    list.unshift(Object.assign({ lastPingPrice: info.price }, info));
+    await tokStore.set({ [TOK_KEY]: list });
+    tokEnsureAlarm();
+    return { ok: true, token: info };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+async function tokRemove(msg) {
+  try {
+    const s = await tokStore.get({ [TOK_KEY]: [] });
+    await tokStore.set({ [TOK_KEY]: (s[TOK_KEY] || []).filter((t) => t.addr !== msg.addr) });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+async function tokTick() {   // периодическая проверка цен; ошибки одного токена не мешают остальным
+  try {
+    const s = await tokStore.get({ [TOK_KEY]: [], [TOK_CFG]: { thresholdPct: 5 } });
+    const list = s[TOK_KEY] || [];
+    if (!list.length) return;
+    const thr = Math.max(0.5, +((s[TOK_CFG] || {}).thresholdPct) || 5);
+    const pings = [];
+    for (const t of list) {
+      try {
+        const info = await tokFetch(t.addr);
+        t.price = info.price; t.change24h = info.change24h; t.symbol = info.symbol || t.symbol; t.ts = info.ts;
+        const base = t.lastPingPrice || info.price;
+        const move = base > 0 ? ((info.price - base) / base) * 100 : 0;
+        if (Math.abs(move) >= thr) { pings.push({ symbol: t.symbol, pct: Math.round(move * 10) / 10, price: info.price, ts: Date.now() }); t.lastPingPrice = info.price; }
+      } catch (_) {}
+    }
+    const upd = { [TOK_KEY]: list };
+    if (pings.length) upd[TOK_PING] = { items: pings, ts: Date.now() };   // один сигнал на тик (Яся озвучит все движения разом)
+    await tokStore.set(upd);
+  } catch (_) {}
+}
+function tokEnsureAlarm() { try { chrome.alarms.create('yasiaTok', { delayInMinutes: 1, periodInMinutes: 5 }); } catch (_) {} }
+tokStore.get({ [TOK_KEY]: [] }).then((s) => { if ((s[TOK_KEY] || []).length) tokEnsureAlarm(); });   // на старте воркера: есть токены -> следим
 
 // ---------- Парковка вкладок: Яся «держит» вкладки, чтобы не висели ----------
 // Список хранит content script (yasiaParkedTabs в storage.local) — фон только оперирует вкладками.
@@ -689,6 +764,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'YASIA_CODEX_LOGIN') { codexLoginBegin().then(sendResponse); return true; }
   if (msg.type === 'YASIA_CODEX_LOGIN_STATUS') { codexLoginStatus().then(sendResponse); return true; }
   if (msg.type === 'YASIA_CAPTURE') { captureScreen().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_TOK_ADD') { tokAdd(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_TOK_REMOVE') { tokRemove(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_TOK_TICK') { tokTick().then(() => sendResponse({ ok: true })); return true; }
   if (msg.type === 'YASIA_TABS_COLLECT') { tabsCollect().then(sendResponse); return true; }
   if (msg.type === 'YASIA_TABS_CLOSE') { tabsClose(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_TABS_CLOSE_ME') { tabsCloseSender(sender).then(sendResponse); return true; }
