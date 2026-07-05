@@ -185,6 +185,17 @@
               <div class="twtr-dlg-reply" id="twtr-dlg-reply"></div>
             </div>
           </div>
+          <div class="twtr-skill" data-skill="watch"><!-- вахта на аккаунты: «скажи, когда @X запостит» (синдикация, тик раз в 5 минут в фоне) -->
+            <button class="twtr-dlg-cap" id="twtr-cap-watch" type="button"><span class="twtr-cap-ic">🕵</span><span class="twtr-cap-tx" id="twtr-cap-watch-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-watch" hidden>
+              <div class="twtr-tok-addrow">
+                <input class="twtr-tok-in" id="twtr-watch-in" type="text" autocomplete="off" spellcheck="false">
+                <button class="twtr-dlg-save twtr-tok-addbtn" id="twtr-watch-add" type="button">+</button>
+              </div>
+              <div class="twtr-tabs-list" id="twtr-watch-list"></div>
+              <div class="twtr-nlm-st" id="twtr-watch-st"></div>
+            </div>
+          </div>
           <div class="twtr-skill" data-skill="calc"><!-- калькулятор: чистый парсер core/calc.js (без eval), результат по мере ввода, клик по результату = копировать -->
             <button class="twtr-dlg-cap" id="twtr-cap-calc" type="button"><span class="twtr-cap-ic">🧮</span><span class="twtr-cap-tx" id="twtr-cap-calc-tx"></span><span class="twtr-cap-arr">›</span></button>
             <div class="twtr-skill-body" id="twtr-skill-calc" hidden>
@@ -1594,6 +1605,8 @@
     setTxt('#twtr-cap-music-tx', t.music);
     setTxt('#twtr-cap-calc-tx', t.calc);
     const calcIn = root.querySelector('#twtr-calc-in'); if (calcIn) calcIn.placeholder = t.calcPh;
+    setTxt('#twtr-cap-watch-tx', t.watch);
+    const watchIn = root.querySelector('#twtr-watch-in'); if (watchIn) watchIn.placeholder = t.watchPh;
     setTxt('#twtr-cap-tok-tx', t.tok);
     setTxt('#twtr-tok-add', t.tokAdd);
     setTxt('#twtr-tok-thr-lb', t.tokThr);
@@ -1892,6 +1905,53 @@
   root.querySelector('#twtr-cap-games').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('games'); });
   root.querySelector('#twtr-cap-notes').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('notes'); });
   root.querySelector('#twtr-cap-reply').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('reply'); });
+  // ---------- Вахта на аккаунты: пингует, когда @X публикует новый пост ----------
+  const watchInEl = root.querySelector('#twtr-watch-in'), watchListEl = root.querySelector('#twtr-watch-list'), watchStEl = root.querySelector('#twtr-watch-st');
+  const watchMsg = (txt, cls) => { if (watchStEl) { watchStEl.textContent = txt || ''; watchStEl.className = 'twtr-nlm-st' + (cls ? ' ' + cls : ''); } };
+  const watchAgo = (ts) => {   // «сколько назад» по-короткому
+    if (!ts) return '';
+    const m = Math.floor((Date.now() / 1000 - ts) / 60);
+    return m < 1 ? 'now' : m < 60 ? m + 'm' : m < 1440 ? Math.floor(m / 60) + 'h' : Math.floor(m / 1440) + 'd';
+  };
+  async function renderWatch() {
+    const s = await new Promise((res) => Yasia.storage.localGet({ yasiaAccWatch: [] }, res));
+    const list = s.yasiaAccWatch || [];
+    if (!watchListEl) return;
+    if (!list.length) { watchListEl.innerHTML = '<div class="twtr-tabs-empty">' + escHtml(tr().watchEmpty) + '</div>'; return; }
+    watchListEl.innerHTML = list.map((a) =>
+      '<div class="twtr-tab-row" data-h="' + escHtml(a.handle) + '">' + tabDot('https://x.com/' + a.handle) +
+        '<span class="twtr-tab-t"><span class="twtr-tab-title">@' + escHtml(a.handle) + ' <span class="twtr-tab-host">' + watchAgo(a.lastTs) + '</span></span>' +
+        '<span class="twtr-tab-host">' + escHtml(a.lastText || '—') + '</span></span>' +
+        '<button class="twtr-tab-x" data-unw="' + escHtml(a.handle) + '" type="button" title="×">×</button>' +
+      '</div>').join('');
+  }
+  root.querySelector('#twtr-cap-watch').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('watch'); renderWatch(); });
+  root.querySelector('#twtr-watch-add').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const h = (watchInEl.value || '').trim();
+    if (!h) return;
+    watchMsg(tr().watchAdding);
+    const r = await sendBgP({ type: 'YASIA_ACC_ADD', handle: h });
+    if (r && r.ok) { watchInEl.value = ''; watchMsg('✓ @' + r.handle, 'ok'); renderWatch(); say(fmtN(tr().watchSay, '@' + r.handle), 2200); }
+    else watchMsg(tr().watchFail + (r && r.error ? ' (' + r.error + ')' : ''), 'err');
+  });
+  watchListEl.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const x = e.target.closest('[data-unw]');
+    if (x) { await sendBgP({ type: 'YASIA_ACC_REMOVE', handle: x.getAttribute('data-unw') }); renderWatch(); return; }
+    const row = e.target.closest('[data-h]');
+    if (row) sendBgP({ type: 'YASIA_TABS_OPEN', url: 'https://x.com/' + row.getAttribute('data-h') });   // клик по строке — профиль в новой вкладке
+  });
+  // пинг из фона: у подопечного новый пост -> Яся зовёт (сигнал старше минуты — молчим: страница спала)
+  try { Yasia.storage.onChanged((ch, area) => {
+    if (area !== 'local' || !ch.yasiaAccPing || !ch.yasiaAccPing.newValue) return;
+    const p = ch.yasiaAccPing.newValue;
+    if (!p.items || !p.items.length || Date.now() - (p.ts || 0) > 60000) return;
+    const i = p.items[0];
+    say('🕵 @' + i.handle + ': «' + (i.text || '').slice(0, 70) + (i.text && i.text.length > 70 ? '…' : '') + '»', 5200);
+    playEmote('surprised', 2400);
+  }); } catch (_) {}
+
   // ---------- Калькулятор: считает по мере ввода (core/calc.js, без eval) ----------
   const calcInEl = root.querySelector('#twtr-calc-in'), calcResEl = root.querySelector('#twtr-calc-res'), calcHistEl = root.querySelector('#twtr-calc-hist');
   let calcHist = [];   // последние 5 расчётов этой сессии: [{q, a}]

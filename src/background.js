@@ -415,6 +415,7 @@ try { chrome.alarms.onAlarm.addListener((a) => {
   if (!a || !a.name) return;
   if (a.name === 'codexPoll') return void codexLoginTick();
   if (a.name === 'yasiaTok') return void tokTick();                 // проверка цен токенов
+  if (a.name === 'yasiaAcc') return void accTick();                 // вахта на аккаунты
   if (a.name.indexOf('rem_') === 0) return void remFire(a.name);   // сработала напоминалка
 }); } catch (_) {}
 async function codexLoginStatus() { return { ok: true, state: await codexLoginGet() }; }
@@ -430,6 +431,58 @@ async function captureScreen() {
     return { ok: true, dataUrl };
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
+
+// ---------- Вахта на аккаунты: «скажи, когда @X запостит» (та же синдикация, что у реплаера) ----------
+// yasiaAccWatch = [{handle, lastId, lastTs, lastText, ts}]; новый ОРИГИНАЛЬНЫЙ пост (не реплай/репост) -> сигнал yasiaAccPing.
+const ACC_KEY = 'yasiaAccWatch', ACC_PING = 'yasiaAccPing';
+function accFresh(posts) { return (posts || []).find((p) => p && !p.isReply && !p.isRepost) || null; }
+async function accAdd(msg) {
+  try {
+    const handle = String(msg.handle || '').trim().replace(/^@/, '');
+    if (!/^[A-Za-z0-9_]{1,15}$/.test(handle)) return { ok: false, error: 'bad handle' };
+    const r = await syndTimeline({ handle });
+    if (!r.ok) return { ok: false, error: r.error || 'not found' };
+    const s = await tokStore.get({ [ACC_KEY]: [] });
+    const list = (s[ACC_KEY] || []).filter((a) => a.handle.toLowerCase() !== handle.toLowerCase());
+    if (list.length >= 10) return { ok: false, error: 'limit 10' };
+    const top = accFresh(r.posts);   // стартуем с текущего свежего: пингуем только то, что появится ПОСЛЕ добавления
+    list.unshift({ handle, lastId: (top && top.id) || '', lastTs: (top && top.createdTs) || 0, lastText: (top && top.text || '').slice(0, 90), ts: Date.now() });
+    await tokStore.set({ [ACC_KEY]: list });
+    accEnsureAlarm();
+    return { ok: true, handle, last: top ? { text: top.text.slice(0, 90), ts: top.createdTs } : null };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+async function accRemove(msg) {
+  try {
+    const s = await tokStore.get({ [ACC_KEY]: [] });
+    await tokStore.set({ [ACC_KEY]: (s[ACC_KEY] || []).filter((a) => a.handle !== msg.handle) });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+async function accTick() {
+  try {
+    const s = await tokStore.get({ [ACC_KEY]: [] });
+    const list = s[ACC_KEY] || [];
+    if (!list.length) return;
+    const pings = [];
+    for (const a of list) {
+      try {
+        const r = await syndTimeline({ handle: a.handle });
+        if (!r.ok) continue;   // временный сбой синдикации — просто ждём следующего тика
+        const top = accFresh(r.posts);
+        if (top && top.id !== a.lastId && top.createdTs > (a.lastTs || 0)) {
+          pings.push({ handle: a.handle, text: top.text.slice(0, 120), url: top.url, ts: Date.now() });
+          a.lastId = top.id; a.lastTs = top.createdTs; a.lastText = top.text.slice(0, 90);
+        }
+      } catch (_) {}
+    }
+    const upd = { [ACC_KEY]: list };
+    if (pings.length) upd[ACC_PING] = { items: pings, ts: Date.now() };
+    await tokStore.set(upd);
+  } catch (_) {}
+}
+function accEnsureAlarm() { try { chrome.alarms.create('yasiaAcc', { delayInMinutes: 1, periodInMinutes: 5 }); } catch (_) {} }
+tokStore.get({ [ACC_KEY]: [] }).then((s) => { if ((s[ACC_KEY] || []).length) accEnsureAlarm(); });
 
 // ---------- Музыка под рукой: реестр вкладок с играющим медиа + управление ----------
 // Реестр в storage.session (переживает засыпание MV3-воркера, чистится при выходе из браузера).
@@ -813,6 +866,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'YASIA_CODEX_LOGIN') { codexLoginBegin().then(sendResponse); return true; }
   if (msg.type === 'YASIA_CODEX_LOGIN_STATUS') { codexLoginStatus().then(sendResponse); return true; }
   if (msg.type === 'YASIA_CAPTURE') { captureScreen().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_ACC_ADD') { accAdd(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_ACC_REMOVE') { accRemove(msg).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_ACC_TICK') { accTick().then(() => sendResponse({ ok: true })); return true; }
   if (msg.type === 'YASIA_MEDIA_REPORT') { mediaReport(msg, sender).then(sendResponse); return true; }
   if (msg.type === 'YASIA_MEDIA_LIST') { mediaList().then(sendResponse); return true; }
   if (msg.type === 'YASIA_MEDIA_CMD') { mediaCmd(msg).then(sendResponse); return true; }
