@@ -185,6 +185,18 @@
               <div class="twtr-dlg-reply" id="twtr-dlg-reply"></div>
             </div>
           </div>
+          <div class="twtr-skill" data-skill="focus"><!-- фокус-режим: прячет ленту/тренды X на время (анти-думскроллинг); поиск/DM/навигация остаются -->
+            <button class="twtr-dlg-cap" id="twtr-cap-focus" type="button"><span class="twtr-cap-ic">🧘</span><span class="twtr-cap-tx" id="twtr-cap-focus-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-focus" hidden>
+              <div class="twtr-focus-row" id="twtr-focus-presets">
+                <button class="twtr-focus-p" data-min="15" type="button">15м</button>
+                <button class="twtr-focus-p" data-min="30" type="button">30м</button>
+                <button class="twtr-focus-p" data-min="60" type="button">60м</button>
+              </div>
+              <button class="twtr-dlg-save twtr-focus-stop" id="twtr-focus-stop" type="button" hidden></button>
+              <div class="twtr-nlm-st" id="twtr-focus-st"></div>
+            </div>
+          </div>
           <div class="twtr-skill" data-skill="watch"><!-- вахта на аккаунты: «скажи, когда @X запостит» (синдикация, тик раз в 5 минут в фоне) -->
             <button class="twtr-dlg-cap" id="twtr-cap-watch" type="button"><span class="twtr-cap-ic">🕵</span><span class="twtr-cap-tx" id="twtr-cap-watch-tx"></span><span class="twtr-cap-arr">›</span></button>
             <div class="twtr-skill-body" id="twtr-skill-watch" hidden>
@@ -1607,6 +1619,7 @@
     const calcIn = root.querySelector('#twtr-calc-in'); if (calcIn) calcIn.placeholder = t.calcPh;
     setTxt('#twtr-cap-watch-tx', t.watch);
     const watchIn = root.querySelector('#twtr-watch-in'); if (watchIn) watchIn.placeholder = t.watchPh;
+    setTxt('#twtr-cap-focus-tx', t.focus);
     setTxt('#twtr-cap-tok-tx', t.tok);
     setTxt('#twtr-tok-add', t.tokAdd);
     setTxt('#twtr-tok-thr-lb', t.tokThr);
@@ -1905,6 +1918,47 @@
   root.querySelector('#twtr-cap-games').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('games'); });
   root.querySelector('#twtr-cap-notes').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('notes'); });
   root.querySelector('#twtr-cap-reply').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('reply'); });
+  // ---------- Фокус-режим: прячет ленту/тренды X на заданное время ----------
+  const focusPresetsEl = root.querySelector('#twtr-focus-presets'), focusStopEl = root.querySelector('#twtr-focus-stop'), focusStEl = root.querySelector('#twtr-focus-st');
+  let focusStyle = null, focusTimer = 0;
+  function focusApply(on) {
+    if (on && !focusStyle) {
+      focusStyle = document.createElement('style');   // прячем именно скролл-ячейки и тренды; композер/поиск/навигация/DM остаются
+      focusStyle.id = 'twtr-focus-style';
+      focusStyle.textContent =
+        '[data-testid="primaryColumn"] [data-testid="cellInnerDiv"]{display:none!important}' +
+        '[data-testid="sidebarColumn"] [data-testid="trend"]{display:none!important}' +
+        '[data-testid="primaryColumn"]::before{content:"🧘 Фокус-режим — лента спрятана Ясей";display:block;padding:40px 20px;text-align:center;color:#8a97a1;font:600 15px system-ui,sans-serif}';
+      (document.head || document.documentElement).appendChild(focusStyle);
+    } else if (!on && focusStyle) { focusStyle.remove(); focusStyle = null; }
+  }
+  async function focusRefresh() {
+    const s = await new Promise((res) => Yasia.storage.localGet({ yasiaFocusUntil: 0 }, res));
+    const until = s.yasiaFocusUntil || 0;
+    const active = until > Date.now();
+    focusApply(active && isTwitter);   // css-скрытие только на X (на других сайтах ленты нет)
+    if (focusPresetsEl) focusPresetsEl.hidden = active;
+    if (focusStopEl) focusStopEl.hidden = !active;
+    if (active) {
+      const min = Math.ceil((until - Date.now()) / 60000);
+      if (focusStopEl) focusStopEl.textContent = fmtN(tr().focusStop, min);
+      if (focusStEl) { focusStEl.textContent = tr().focusOn; focusStEl.className = 'twtr-nlm-st ok'; }
+    } else if (focusStEl) { focusStEl.textContent = isTwitter ? '' : tr().focusOffX; focusStEl.className = 'twtr-nlm-st'; }
+  }
+  function focusSet(min) {
+    const until = min > 0 ? Date.now() + min * 60000 : 0;
+    try { Yasia.storage.localSet({ yasiaFocusUntil: until }); } catch (_) {}
+    focusRefresh();
+    if (min > 0) { say(fmtN(tr().focusSay, min), 2400); playEmote(CAT_SETS.sit ? 'sit' : 'happy', 2600); }
+  }
+  root.querySelector('#twtr-cap-focus').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('focus'); focusRefresh(); });
+  focusPresetsEl.addEventListener('click', (e) => { e.stopPropagation(); const b = e.target.closest('[data-min]'); if (b) focusSet(+b.getAttribute('data-min')); });
+  focusStopEl.addEventListener('click', (e) => { e.stopPropagation(); focusSet(0); });
+  // применяем состояние при загрузке страницы + тикаем раз в 30с (сам снимется по истечении, синк между вкладками через onChanged)
+  focusRefresh();
+  focusTimer = setInterval(focusRefresh, 30000);
+  try { Yasia.storage.onChanged((ch, area) => { if (area === 'local' && ch.yasiaFocusUntil) focusRefresh(); }); } catch (_) {}
+
   // ---------- Вахта на аккаунты: пингует, когда @X публикует новый пост ----------
   const watchInEl = root.querySelector('#twtr-watch-in'), watchListEl = root.querySelector('#twtr-watch-list'), watchStEl = root.querySelector('#twtr-watch-st');
   const watchMsg = (txt, cls) => { if (watchStEl) { watchStEl.textContent = txt || ''; watchStEl.className = 'twtr-nlm-st' + (cls ? ' ' + cls : ''); } };

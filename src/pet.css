@@ -260,6 +260,12 @@
 .twtr-nlm-st { margin-top: 6px; font: 500 12px/1.4 system-ui, -apple-system, sans-serif; color: #536471; min-height: 15px; }
 .twtr-nlm-st.ok { color: #00ba7c; }
 .twtr-nlm-st.err { color: #f4212e; }
+/* фокус-режим */
+.twtr-focus-row { display: flex; gap: 6px; }
+.twtr-focus-p { flex: 1; padding: 10px; border: 1.5px solid #ccd6dd; border-radius: 10px; background: #fff; color: #0f1419; font: 700 13px system-ui, -apple-system, sans-serif; cursor: pointer; transition: border-color .12s, background .12s; }
+.twtr-focus-p:hover { border-color: #8b5cf6; background: #f7f3ff; color: #6d28d9; }
+.twtr-focus-stop { background: #8b5cf6; }
+.twtr-focus-stop:hover { background: #7c4ee8; }
 /* калькулятор */
 .twtr-calc-in { width: 100%; font: 600 14px/1.3 ui-monospace, Consolas, monospace; }
 .twtr-calc-res { display: block; width: 100%; margin-top: 7px; padding: 9px 10px; border: none; border-radius: 10px; background: #eefaf3; color: #067a52; font: 700 16px/1.2 ui-monospace, Consolas, monospace; text-align: right; cursor: copy; }
