@@ -185,6 +185,13 @@
               <div class="twtr-dlg-reply" id="twtr-dlg-reply"></div>
             </div>
           </div>
+          <div class="twtr-skill" data-skill="music"><!-- музыка под рукой: вкладки с играющим медиа, пауза/пуск и переход из любого места -->
+            <button class="twtr-dlg-cap" id="twtr-cap-music" type="button"><span class="twtr-cap-ic">🎵</span><span class="twtr-cap-tx" id="twtr-cap-music-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-music" hidden>
+              <div class="twtr-tabs-list" id="twtr-music-list"></div>
+              <div class="twtr-nlm-st" id="twtr-music-st"></div>
+            </div>
+          </div>
           <div class="twtr-skill" data-skill="tokens"><!-- токен-вотчер: адрес контракта -> DexScreener; при движении цены >= порога Яся пингует -->
             <button class="twtr-dlg-cap" id="twtr-cap-tok" type="button"><span class="twtr-cap-ic">📈</span><span class="twtr-cap-tx" id="twtr-cap-tok-tx"></span><span class="twtr-cap-arr">›</span></button>
             <div class="twtr-skill-body" id="twtr-skill-tokens" hidden>
@@ -1576,6 +1583,7 @@
     setTxt('#twtr-cap-tabs-tx', t.tabs);
     setTxt('#twtr-tabs-park', t.tabsPark);
     setTxt('#twtr-tabs-parkall', t.tabsParkAll);
+    setTxt('#twtr-cap-music-tx', t.music);
     setTxt('#twtr-cap-tok-tx', t.tok);
     setTxt('#twtr-tok-add', t.tokAdd);
     setTxt('#twtr-tok-thr-lb', t.tokThr);
@@ -1874,6 +1882,50 @@
   root.querySelector('#twtr-cap-games').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('games'); });
   root.querySelector('#twtr-cap-notes').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('notes'); });
   root.querySelector('#twtr-cap-reply').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('reply'); });
+  // ---------- Музыка под рукой: эта вкладка сообщает фону о своём медиа, секция показывает все вкладки ----------
+  let mediaLast = '';   // подпись последнего отчёта — шлём фону только изменения (+heartbeat раз в минуту, чтобы реестр не протух)
+  let mediaLastSent = 0;
+  function mediaTick() {
+    let playing = false, paused = false;
+    try {
+      for (const m of document.querySelectorAll('video,audio')) {
+        if (m.ended || !m.duration) continue;
+        if (!m.paused) { playing = true; break; }
+        if (m.currentTime > 0) paused = true;   // начатое, но поставленное на паузу — тоже «музыка под рукой»
+      }
+    } catch (_) {}
+    const sig = (playing ? 'p' : paused ? 's' : '-') + '|' + document.title;
+    const tNow = Date.now();
+    if (sig === mediaLast && tNow - mediaLastSent < 60000) return;
+    mediaLast = sig; mediaLastSent = tNow;
+    try { chrome.runtime.sendMessage({ type: 'YASIA_MEDIA_REPORT', playing, paused, title: document.title }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+  }
+  setInterval(mediaTick, 4000);
+  const musicListEl = root.querySelector('#twtr-music-list'), musicStEl = root.querySelector('#twtr-music-st');
+  async function renderMusic() {
+    if (!musicListEl) return;
+    const r = await sendBgP({ type: 'YASIA_MEDIA_LIST' });
+    const items = (r && r.ok && r.items) || [];
+    if (!items.length) { musicListEl.innerHTML = '<div class="twtr-tabs-empty">' + escHtml(tr().musicEmpty) + '</div>'; return; }
+    musicListEl.innerHTML = items.map((i) =>
+      '<div class="twtr-tab-row twtr-music-row" data-tab="' + i.tabId + '">' +
+        '<span class="twtr-music-eq' + (i.playing ? ' on' : '') + '"><i></i><i></i><i></i></span>' +
+        '<span class="twtr-tab-t"><span class="twtr-tab-title">' + escHtml(i.title || '…') + '</span></span>' +
+        '<button class="twtr-music-btn" data-cmd="toggle" type="button">' + (i.playing ? '⏸' : '▶') + '</button>' +
+        '<button class="twtr-music-btn" data-cmd="focus" type="button">↗</button>' +
+      '</div>').join('');
+  }
+  root.querySelector('#twtr-cap-music').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('music'); mediaTick(); setTimeout(renderMusic, 150); });
+  musicListEl.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const btn = e.target.closest('[data-cmd]'), row = e.target.closest('[data-tab]');
+    if (!btn || !row) return;
+    const r = await sendBgP({ type: 'YASIA_MEDIA_CMD', tabId: +row.getAttribute('data-tab'), cmd: btn.getAttribute('data-cmd') });
+    if (!r || !r.ok) { if (musicStEl) { musicStEl.textContent = tr().musicGone; musicStEl.className = 'twtr-nlm-st err'; } }
+    else if (musicStEl) musicStEl.textContent = '';
+    setTimeout(renderMusic, 400);   // состояние сменилось — перерисовать ⏸/▶
+  });
+
   // ---------- Токен-вотчер: Яся следит за ценой и пингует при движении ----------
   const tokListEl = root.querySelector('#twtr-tok-list'), tokStEl = root.querySelector('#twtr-tok-st');
   const tokInEl = root.querySelector('#twtr-tok-in'), tokThrEl = root.querySelector('#twtr-tok-thr');

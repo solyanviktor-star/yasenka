@@ -431,6 +431,55 @@ async function captureScreen() {
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
 
+// ---------- Музыка под рукой: реестр вкладок с играющим медиа + управление ----------
+// Реестр в storage.session (переживает засыпание MV3-воркера, чистится при выходе из браузера).
+const MEDIA_KEY = 'yasiaMediaTabs';
+const sess = {
+  get: () => new Promise((res) => { try { chrome.storage.session.get({ [MEDIA_KEY]: {} }, (s) => res((s && s[MEDIA_KEY]) || {})); } catch (_) { res({}); } }),
+  set: (map) => { try { chrome.storage.session.set({ [MEDIA_KEY]: map }); } catch (_) {} },
+};
+async function mediaReport(msg, sender) {
+  const id = sender && sender.tab && sender.tab.id;
+  if (typeof id !== 'number') return { ok: false };
+  const map = await sess.get();
+  if (msg.playing || msg.paused) map[id] = { title: String(msg.title || '').slice(0, 120), playing: !!msg.playing, ts: Date.now() };
+  else delete map[id];   // медиа пропало со страницы — забываем вкладку
+  sess.set(map);
+  return { ok: true };
+}
+async function mediaList() {
+  const map = await sess.get();
+  const items = Object.keys(map)
+    .map((k) => ({ tabId: +k, title: map[k].title, playing: map[k].playing, ts: map[k].ts }))
+    .filter((i) => Date.now() - i.ts < 3 * 60000)   // 3 мин без heartbeat = вкладка умерла/выгрузилась
+    .sort((a, b) => (b.playing - a.playing) || (b.ts - a.ts));
+  return { ok: true, items };
+}
+async function mediaCmd(msg) {
+  try {
+    const tabId = +msg.tabId;
+    if (msg.cmd === 'focus') {
+      const t = await chrome.tabs.update(tabId, { active: true });
+      if (t && typeof t.windowId === 'number') { try { await chrome.windows.update(t.windowId, { focused: true }); } catch (_) {} }
+      return { ok: true };
+    }
+    // toggle: пауза/пуск медиа прямо в той вкладке (isolated world видит DOM — этого достаточно)
+    const r = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const els = Array.from(document.querySelectorAll('video,audio'));
+        const playing = els.filter((m) => !m.paused && !m.ended);
+        if (playing.length) { playing.forEach((m) => m.pause()); return 'paused'; }
+        const cand = els.find((m) => m.currentTime > 0 && !m.ended) || els[0];
+        if (cand) { cand.play(); return 'playing'; }
+        return 'none';
+      },
+    });
+    return { ok: true, state: r && r[0] && r[0].result };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+try { chrome.tabs.onRemoved.addListener(async (tabId) => { const map = await sess.get(); if (map[tabId]) { delete map[tabId]; sess.set(map); } }); } catch (_) {}
+
 // ---------- Токен-вотчер: следим за ценой по адресу контракта (DexScreener, без ключа) ----------
 // Хранение: yasiaTokens = [{addr, chain, symbol, name, price, change24h, lastPingPrice, ts}], yasiaTokCfg = {thresholdPct}.
 // Пинг: |цена/lastPingPrice - 1| >= порог -> запись в yasiaTokPing; content (Яся) видит через storage.onChanged и зовёт хозяина.
@@ -764,6 +813,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'YASIA_CODEX_LOGIN') { codexLoginBegin().then(sendResponse); return true; }
   if (msg.type === 'YASIA_CODEX_LOGIN_STATUS') { codexLoginStatus().then(sendResponse); return true; }
   if (msg.type === 'YASIA_CAPTURE') { captureScreen().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_MEDIA_REPORT') { mediaReport(msg, sender).then(sendResponse); return true; }
+  if (msg.type === 'YASIA_MEDIA_LIST') { mediaList().then(sendResponse); return true; }
+  if (msg.type === 'YASIA_MEDIA_CMD') { mediaCmd(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_TOK_ADD') { tokAdd(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_TOK_REMOVE') { tokRemove(msg).then(sendResponse); return true; }
   if (msg.type === 'YASIA_TOK_TICK') { tokTick().then(() => sendResponse({ ok: true })); return true; }

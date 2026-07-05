@@ -260,6 +260,15 @@
 .twtr-nlm-st { margin-top: 6px; font: 500 12px/1.4 system-ui, -apple-system, sans-serif; color: #536471; min-height: 15px; }
 .twtr-nlm-st.ok { color: #00ba7c; }
 .twtr-nlm-st.err { color: #f4212e; }
+/* музыка под рукой */
+.twtr-music-eq { flex: none; display: inline-flex; align-items: flex-end; gap: 2px; width: 18px; height: 16px; }
+.twtr-music-eq i { width: 3px; height: 5px; border-radius: 2px; background: #ccd6dd; }
+.twtr-music-eq.on i { background: #1d9bf0; animation: twtr-eq .9s ease-in-out infinite; }
+.twtr-music-eq.on i:nth-child(2) { animation-delay: .25s; }
+.twtr-music-eq.on i:nth-child(3) { animation-delay: .5s; }
+@keyframes twtr-eq { 0%, 100% { height: 5px; } 50% { height: 14px; } }
+.twtr-music-btn { flex: none; width: 28px; height: 26px; border: 1.5px solid #ccd6dd; border-radius: 8px; background: #fff; color: #0f1419; font: 600 12px/1 system-ui, -apple-system, sans-serif; cursor: pointer; }
+.twtr-music-btn:hover { border-color: #1d9bf0; color: #1d9bf0; }
 /* токен-вотчер */
 .twtr-tok-addrow { display: flex; gap: 6px; }
 .twtr-tok-in { flex: 1; min-width: 0; padding: 9px 10px; border: 1.5px solid #ccd6dd; border-radius: 10px; background: #fff; color: #0f1419; font: 500 12px system-ui, -apple-system, sans-serif; }
