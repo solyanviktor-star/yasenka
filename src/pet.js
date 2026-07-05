@@ -1916,23 +1916,27 @@
   let devMode = false;
   // витрина: опциональные секции окна, которые пользователь включает/выключает (сохраняется в sync yasiaSections; по умолчанию всё включено)
   const CATALOG = [
+    { id: 'reply', ic: '✍️', flag: 'replier' },   // автореплаер — гейтится флагом replier (не просто видимостью): тумблер живьём стартует/гасит систему
     { id: 'tldr', ic: '📄' }, { id: 'focus', ic: '🧘' }, { id: 'watch', ic: '🕵' }, { id: 'calc', ic: '🧮' },
     { id: 'music', ic: '🎵' }, { id: 'tokens', ic: '📈' }, { id: 'tabs', ic: '🗂' }, { id: 'nlm', ic: '📓' },
     { id: 'dl', ic: '🎬' }, { id: 'notes', ic: '📝' },
   ];
-  const catLabel = { tokens: 'tok' };   // data-skill -> ключ i18n там, где имя секции отличается от id
+  const catLabel = { tokens: 'tok', reply: 'replier' };   // data-skill -> ключ i18n там, где имя секции отличается от id
   let sectionsOn = {};   // { id: bool }; пусто = всё включено
+  const catOn = (c) => c.flag ? !!(Yasia.flags && Yasia.flags.enabled(c.flag)) : ((c.id in sectionsOn) ? sectionsOn[c.id] : true);
   function applySections() {
     CATALOG.forEach((c) => {
       const w = root.querySelector('.twtr-skill[data-skill="' + c.id + '"]');
-      if (w) w.hidden = (c.id in sectionsOn) ? !sectionsOn[c.id] : false;
+      if (!w) return;
+      if (c.flag) w.hidden = !(catOn(c) && (c.id !== 'reply' || Yasia.replier));   // флаг-фича: видна только когда система реально поднялась
+      else w.hidden = !catOn(c);
     });
   }
   function renderCatalog() {
     const box = root.querySelector('#twtr-cat-list'); if (!box) return;
     const t = tr();
     box.innerHTML = CATALOG.map((c) => {
-      const on = (c.id in sectionsOn) ? sectionsOn[c.id] : true;
+      const on = catOn(c);
       const name = t[catLabel[c.id] || c.id] || c.id;
       return '<label class="twtr-cat-row"><span class="twtr-cat-ic">' + c.ic + '</span>' +
         '<span class="twtr-cat-nm">' + escHtml(name) + '</span>' +
@@ -1968,9 +1972,16 @@
   root.querySelector('#twtr-cat-list').addEventListener('change', (e) => {
     const cb = e.target.closest('[data-sec]'); if (!cb) return;
     e.stopPropagation();
-    sectionsOn[cb.getAttribute('data-sec')] = cb.checked;
-    try { Yasia.storage.syncSet({ yasiaSections: sectionsOn }); } catch (_) {}
-    applySections();
+    const id = cb.getAttribute('data-sec');
+    const c = CATALOG.find((x) => x.id === id);
+    if (c && c.flag) {   // автореплаер: тумблер живьём включает/гасит систему через флаг (реестр стартует по flags:changed)
+      if (Yasia.flags) Yasia.flags.set(c.flag, cb.checked);
+      setTimeout(applySections, 60);   // даём реестру поднять систему -> Yasia.replier появится -> секция покажется
+    } else {
+      sectionsOn[id] = cb.checked;
+      try { Yasia.storage.syncSet({ yasiaSections: sectionsOn }); } catch (_) {}
+      applySections();
+    }
   });
   try { Yasia.storage.onChanged((ch, area) => { if (area === 'sync' && ch.yasiaSections) { sectionsOn = ch.yasiaSections.newValue || {}; applySections(); if (!root.querySelector('#twtr-skill-catalog').hidden) renderCatalog(); } }); } catch (_) {}
 
