@@ -425,7 +425,13 @@ function collectAi() {
 }
 
 injectLogos();
-chrome.storage.local.get({ yasiaAI: null }, (s) => {
+function saveDraft() {
+  aiCfg[aiProv] = Object.assign({}, aiCfg[aiProv], collectAi());
+  aiCfg.provider = aiProv;
+  if (aiProv === 'gpt') aiCfg.gpt.authMode = aiMode;
+  try { chrome.storage.local.set({ yasiaAIDraft: aiCfg }); } catch (_) {}
+}
+chrome.storage.local.get({ yasiaAI: null, yasiaAIDraft: null }, (s) => {
   const v = s && s.yasiaAI;
   if (v && typeof v === 'object') {
     if (v.provider === 'gpt' || v.provider === 'hermes' || v.provider === 'other') aiCfg.provider = v.provider;
@@ -434,7 +440,19 @@ chrome.storage.local.get({ yasiaAI: null }, (s) => {
     if (v.gpt && typeof v.gpt === 'object') aiCfg.gpt = Object.assign(aiCfg.gpt, v.gpt);
     if (v.other && typeof v.other === 'object') aiCfg.other = Object.assign(aiCfg.other, v.other);
   }
+  const draft = s && s.yasiaAIDraft;
+  if (draft && typeof draft === 'object') {
+    if (draft.provider === 'gpt' || draft.provider === 'hermes' || draft.provider === 'other') aiCfg.provider = draft.provider;
+    if (draft.hermes && typeof draft.hermes === 'object') aiCfg.hermes = Object.assign(aiCfg.hermes, draft.hermes);
+    if (draft.gpt && typeof draft.gpt === 'object') aiCfg.gpt = Object.assign(aiCfg.gpt, draft.gpt);
+    if (draft.other && typeof draft.other === 'object') aiCfg.other = Object.assign(aiCfg.other, draft.other);
+  }
   aiProv = aiCfg.provider === 'hermes' ? 'gpt' : aiCfg.provider; aiMode = aiCfg.gpt.authMode || 'chatgpt'; fillAi(); updateAiStatus();
+  // Навешиваем слушатели на поля ввода для автосохранения черновика
+  ['cfg-url', 'cfg-key', 'cfg-modelin'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', saveDraft);
+  });
 });
 
 document.getElementById('ai-toggle').addEventListener('click', () => {
@@ -442,7 +460,7 @@ document.getElementById('ai-toggle').addEventListener('click', () => {
 });
 [['prov-gpt', 'gpt'], ['prov-other', 'other']].forEach(([id, p]) => {
   const b = document.getElementById(id);
-  if (b) b.addEventListener('click', () => { aiCfg[aiProv] = Object.assign({}, aiCfg[aiProv], collectAi()); aiProv = p; fillAi(); });
+  if (b) b.addEventListener('click', () => { aiCfg[aiProv] = Object.assign({}, aiCfg[aiProv], collectAi()); aiProv = p; fillAi(); saveDraft(); });
 });
 // пресет провайдера (вкладка «Другой») -> подставить адрес/модели/ссылку
 const preSelEl = document.getElementById('cfg-preset');
@@ -452,10 +470,11 @@ if (preSelEl) preSelEl.addEventListener('change', () => {
   const pr = PROVIDERS.find((x) => x.id === preSelEl.value);
   if (pr) { if (pr.baseUrl) aiCfg.other.baseUrl = pr.baseUrl; if ((pr.models || []).indexOf(aiCfg.other.model) < 0) aiCfg.other.model = ''; }
   fillAi();
+  saveDraft();
 });
 [['mode-sub', 'chatgpt'], ['mode-key', 'key']].forEach(([id, m]) => {
   const b = document.getElementById(id);
-  if (b) b.addEventListener('click', () => { aiCfg.gpt = Object.assign({}, aiCfg.gpt, collectAi()); aiMode = m; aiCfg.gpt.authMode = m; fillAi(); });
+  if (b) b.addEventListener('click', () => { aiCfg.gpt = Object.assign({}, aiCfg.gpt, collectAi()); aiMode = m; aiCfg.gpt.authMode = m; fillAi(); saveDraft(); });
 });
 // вход через ChatGPT (device-code) — опрос идёт в ФОНЕ; popup лишь стартует и показывает статус
 const stopSignin = () => { if (signinTimer) { clearInterval(signinTimer); signinTimer = 0; } };
@@ -506,7 +525,10 @@ if (keyInEl) keyInEl.addEventListener('blur', () => { if ((keyInEl.value || '').
 document.getElementById('cfg-save').addEventListener('click', () => {
   aiCfg[aiProv] = Object.assign({}, aiCfg[aiProv], collectAi()); aiCfg.provider = aiProv;
   if (aiProv === 'gpt') aiCfg.gpt.authMode = aiMode;   // сохранить выбранный режим (подписка/ключ)
-  try { chrome.storage.local.set({ yasiaAI: aiCfg }); } catch (_) {}
+  try {
+    chrome.storage.local.set({ yasiaAI: aiCfg });
+    chrome.storage.local.remove('yasiaAIDraft');
+  } catch (_) {}
   const msg = document.getElementById('cfg-msg'); msg.className = 'ai-msg ok'; msg.textContent = L2().saved;
   updateAiStatus();
 });
