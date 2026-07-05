@@ -185,6 +185,13 @@
               <div class="twtr-dlg-reply" id="twtr-dlg-reply"></div>
             </div>
           </div>
+          <div class="twtr-skill" data-skill="tldr"><!-- перескажи страницу: обёртка над ИИ-мозгом (Yasia.ai.run summarizePage) -->
+            <button class="twtr-dlg-cap" id="twtr-cap-tldr" type="button"><span class="twtr-cap-ic">📄</span><span class="twtr-cap-tx" id="twtr-cap-tldr-tx"></span><span class="twtr-cap-arr">›</span></button>
+            <div class="twtr-skill-body" id="twtr-skill-tldr" hidden>
+              <button class="twtr-dlg-save" id="twtr-tldr-go" type="button"></button>
+              <div class="twtr-dlg-ai" id="twtr-tldr-out" hidden></div>
+            </div>
+          </div>
           <div class="twtr-skill" data-skill="focus"><!-- фокус-режим: прячет ленту/тренды X на время (анти-думскроллинг); поиск/DM/навигация остаются -->
             <button class="twtr-dlg-cap" id="twtr-cap-focus" type="button"><span class="twtr-cap-ic">🧘</span><span class="twtr-cap-tx" id="twtr-cap-focus-tx"></span><span class="twtr-cap-arr">›</span></button>
             <div class="twtr-skill-body" id="twtr-skill-focus" hidden>
@@ -1620,6 +1627,8 @@
     setTxt('#twtr-cap-watch-tx', t.watch);
     const watchIn = root.querySelector('#twtr-watch-in'); if (watchIn) watchIn.placeholder = t.watchPh;
     setTxt('#twtr-cap-focus-tx', t.focus);
+    setTxt('#twtr-cap-tldr-tx', t.tldr);
+    setTxt('#twtr-tldr-go', t.tldrGo);
     setTxt('#twtr-cap-tok-tx', t.tok);
     setTxt('#twtr-tok-add', t.tokAdd);
     setTxt('#twtr-tok-thr-lb', t.tokThr);
@@ -1918,6 +1927,16 @@
   root.querySelector('#twtr-cap-games').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('games'); });
   root.querySelector('#twtr-cap-notes').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('notes'); });
   root.querySelector('#twtr-cap-reply').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('reply'); });
+  // ---------- Перескажи страницу: обёртка над ИИ-мозгом ----------
+  root.querySelector('#twtr-cap-tldr').addEventListener('click', (e) => { e.stopPropagation(); toggleSkill('tldr'); });
+  root.querySelector('#twtr-tldr-go').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const out = root.querySelector('#twtr-tldr-out'); if (!out) return;
+    out.hidden = false;
+    if (Yasia.ai && Yasia.ai.run) Yasia.ai.run('summarizePage', 'page', out);   // мозг сам сходит в провайдера и отрисует выжимку
+    else out.textContent = tr().aiStub;                                          // ИИ не настроен -> подсказка подключить
+  });
+
   // ---------- Фокус-режим: прячет ленту/тренды X на заданное время ----------
   const focusPresetsEl = root.querySelector('#twtr-focus-presets'), focusStopEl = root.querySelector('#twtr-focus-stop'), focusStEl = root.querySelector('#twtr-focus-st');
   let focusStyle = null, focusTimer = 0;

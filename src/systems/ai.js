@@ -29,12 +29,13 @@
   const AL = {
     ru: {
       act: { explain: 'Объяснить', translate: 'Перевести', compress: 'Сжать', reply: 'Ответ', advice: 'Совет', save: 'Сохранить' },
-      title: { explain: '💡 Объясняю', translate: '🌐 Перевод', summarizePost: '✂️ Выжимка', summarizeThread: '🧵 Выжимка треда', reply: '💬 Варианты ответа', comment: '💬 Варианты комментария', advice: '🧭 Совет', find: '🔎 Поиск', ask: '🐱 Яся думает', explainPage: '📄 О странице' },
+      title: { explain: '💡 Объясняю', translate: '🌐 Перевод', summarizePost: '✂️ Выжимка', summarizeThread: '🧵 Выжимка треда', summarizePage: '📄 Пересказ страницы', reply: '💬 Варианты ответа', comment: '💬 Варианты комментария', advice: '🧭 Совет', find: '🔎 Поиск', ask: '🐱 Яся думает', explainPage: '📄 О странице' },
       think: {
         explain: ['Щас разложу по полочкам…', 'Так, что тут у нас…'],
         translate: ['Перевожу, мур…', 'Ща переведу…'],
         summarizePost: ['Сжимаю до сути…', 'Выжимаю главное…'],
         summarizeThread: ['Читаю весь тред, погоди…', 'Собираю суть треда…'],
+        summarizePage: ['Читаю страницу, погоди…', 'Пересказываю в двух словах…'],
         reply: ['Ща придумаю что-нибудь острое, но не кринжовое…', 'Сейчас выдам пару дерзких вариантов…'],
         comment: ['Думаю над комментом…', 'Ща будет умно и живо…'],
         advice: ['Дам совет, мур…', 'Сейчас подскажу…'],
@@ -71,12 +72,13 @@
     },
     en: {
       act: { explain: 'Explain', translate: 'Translate', compress: 'Compress', reply: 'Reply', advice: 'Advice', save: 'Save' },
-      title: { explain: '💡 Explaining', translate: '🌐 Translation', summarizePost: '✂️ Summary', summarizeThread: '🧵 Thread summary', reply: '💬 Reply options', comment: '💬 Comment options', advice: '🧭 Advice', find: '🔎 Search', ask: '🐱 Yasya thinking', explainPage: '📄 About page' },
+      title: { explain: '💡 Explaining', translate: '🌐 Translation', summarizePost: '✂️ Summary', summarizeThread: '🧵 Thread summary', summarizePage: '📄 Page summary', reply: '💬 Reply options', comment: '💬 Comment options', advice: '🧭 Advice', find: '🔎 Search', ask: '🐱 Yasya thinking', explainPage: '📄 About page' },
       think: {
         explain: ['Let me break it down…', "Okay, what's going on here…"],
         translate: ['Translating, mrr…', 'One sec, translating…'],
         summarizePost: ['Boiling it down…', 'Getting the gist…'],
         summarizeThread: ['Reading the whole thread…', 'Collecting the thread…'],
+        summarizePage: ['Reading the page, one sec…', 'Boiling it down to a couple lines…'],
         reply: ['Cooking up something sharp but not cringe…', 'Here come a couple of bold takes…'],
         comment: ['Thinking up a comment…', "Gonna be smart and lively…"],
         advice: ['Some advice coming up…', 'Let me think…'],
@@ -126,6 +128,7 @@
   const TASKS = {
     explain: { ru: 'Объясни простыми словами, о чём этот текст и что важно понять. Кратко.', en: 'Explain in simple words what this text is about and what matters. Be brief.' },
     explainPage: { ru: 'Кратко объясни, о чём эта страница, по тексту ниже.', en: 'Briefly explain what this page is about, based on the text below.' },
+    summarizePage: { ru: 'Перескажи эту страницу в 2–4 коротких предложениях: только суть, без воды. По тексту ниже.', en: 'Summarize this page in 2–4 short sentences: the gist only, no fluff. Based on the text below.' },
     summarizePost: { ru: 'Сделай краткую выжимку этого поста: 1–3 предложения.', en: 'Summarize this post in 1–3 sentences.' },
     summarizeThread: { ru: 'Сделай выжимку треда: главные тезисы списком (3–6 пунктов).', en: 'Summarize this thread: key points as a short list (3–6 bullets).' },
     translate: { ru: 'Переведи текст на русский. Если он уже на русском — переведи на английский. Выдай ТОЛЬКО перевод, без пояснений.', en: 'Translate the text to English. If it is already in English — translate it to Russian. Output ONLY the translation, no notes.' },
