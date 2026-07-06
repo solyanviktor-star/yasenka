@@ -201,7 +201,7 @@ async function syndTimeline(msg) {
 // освобождён от CORS и mixed-content (https-страница X -> http://localhost Hermes — ок). Ключи приходят из настроек расширения.
 async function aiChat(msg) {
   try {
-    const base = String(msg.baseUrl || '').replace(/\/+$/, '');
+    const base = String(msg.baseUrl || '').replace(/\/+$/, '').replace(/\/v1$/, '');   // снимаем и хвостовой /v1: юзер вставляет .../v1, а path уже /v1/chat/... (иначе /v1/v1)
     if (!base) return { ok: false, error: 'no server address' };
     const url = base + (msg.path || '/v1/chat/completions');
     const headers = { 'Content-Type': 'application/json' };
@@ -234,7 +234,7 @@ async function aiChat(msg) {
 // проверка связи: GET /v1/models с ключом (есть и у Hermes, и у OpenAI)
 async function aiPing(msg) {
   try {
-    const base = String(msg.baseUrl || '').replace(/\/+$/, '');
+    const base = String(msg.baseUrl || '').replace(/\/+$/, '').replace(/\/v1$/, '');   // снимаем и хвостовой /v1: юзер вставляет .../v1, а path уже /v1/chat/... (иначе /v1/v1)
     if (!base) return { ok: false, error: 'no address' };
     const headers = {}; if (msg.apiKey) headers['Authorization'] = 'Bearer ' + msg.apiKey;
     const ctrl = new AbortController();
@@ -719,7 +719,7 @@ async function nlmCreate(msg) {
 // ---------- ДОЛГАЯ ПАМЯТЬ + ДИНАМИЧЕСКИЕ УМЕНИЯ Hermes: аутентифицированный GET (skills/capabilities) ----------
 async function hermesGet(msg) {
   try {
-    const base = String(msg.baseUrl || '').replace(/\/+$/, '');
+    const base = String(msg.baseUrl || '').replace(/\/+$/, '').replace(/\/v1$/, '');   // снимаем и хвостовой /v1: юзер вставляет .../v1, а path уже /v1/chat/... (иначе /v1/v1)
     if (!base) return { ok: false, error: 'no address' };
     const headers = {}; if (msg.apiKey) headers['Authorization'] = 'Bearer ' + msg.apiKey;
     const ctrl = new AbortController();
@@ -747,7 +747,7 @@ async function aiChatStream(msg, port) {
   port.onDisconnect.addListener(() => { aborted = true; try { ctrl.abort(); } catch (_) {} });
   const safePost = (m) => { if (!aborted) try { port.postMessage(m); } catch (_) {} };
   try {
-    const base = String(msg.baseUrl || '').replace(/\/+$/, '');
+    const base = String(msg.baseUrl || '').replace(/\/+$/, '').replace(/\/v1$/, '');   // снимаем и хвостовой /v1: юзер вставляет .../v1, а path уже /v1/chat/... (иначе /v1/v1)
     if (!base) { safePost({ t: 'error', error: 'no server address' }); return; }
     const url = base + (msg.path || '/v1/chat/completions');
     const headers = { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' };
