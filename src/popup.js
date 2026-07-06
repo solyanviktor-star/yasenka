@@ -435,16 +435,26 @@ function collectAi() {
 }
 
 injectLogos();
-chrome.storage.local.get({ yasiaAI: null }, (s) => {
-  const v = s && s.yasiaAI;
-  if (v && typeof v === 'object') {
-    if (v.provider === 'gpt' || v.provider === 'hermes' || v.provider === 'other') aiCfg.provider = v.provider;
-    if (v.sessionKey) aiCfg.sessionKey = v.sessionKey;
-    if (v.hermes && typeof v.hermes === 'object') aiCfg.hermes = Object.assign(aiCfg.hermes, v.hermes);
-    if (v.gpt && typeof v.gpt === 'object') aiCfg.gpt = Object.assign(aiCfg.gpt, v.gpt);
-    if (v.other && typeof v.other === 'object') aiCfg.other = Object.assign(aiCfg.other, v.other);
-  }
+// черновик настроек ИИ: пишем введённое сразу (yasiaAIDraft), чтобы закрытие попапа посреди правки не теряло данные; «Сохранить» чистит черновик
+function saveDraft() {
+  aiCfg[aiProv] = Object.assign({}, aiCfg[aiProv], collectAi());
+  aiCfg.provider = aiProv;
+  if (aiProv === 'gpt') aiCfg.gpt.authMode = aiMode;
+  try { chrome.storage.local.set({ yasiaAIDraft: aiCfg }); } catch (_) {}
+}
+function applyAiCfg(v) {   // накатить сохранённый конфиг ИЛИ черновик поверх текущего aiCfg
+  if (!v || typeof v !== 'object') return;
+  if (v.provider === 'gpt' || v.provider === 'hermes' || v.provider === 'other') aiCfg.provider = v.provider;
+  if (v.sessionKey) aiCfg.sessionKey = v.sessionKey;
+  if (v.hermes && typeof v.hermes === 'object') aiCfg.hermes = Object.assign(aiCfg.hermes, v.hermes);
+  if (v.gpt && typeof v.gpt === 'object') aiCfg.gpt = Object.assign(aiCfg.gpt, v.gpt);
+  if (v.other && typeof v.other === 'object') aiCfg.other = Object.assign(aiCfg.other, v.other);
+}
+chrome.storage.local.get({ yasiaAI: null, yasiaAIDraft: null }, (s) => {
+  applyAiCfg(s && s.yasiaAI);
+  applyAiCfg(s && s.yasiaAIDraft);   // черновик поверх сохранённого: незавершённая правка важнее
   aiProv = aiCfg.provider === 'hermes' ? 'gpt' : aiCfg.provider; aiMode = aiCfg.gpt.authMode || 'chatgpt'; fillAi(); updateAiStatus();
+  ['cfg-url', 'cfg-key', 'cfg-modelin'].forEach((id) => { const el = document.getElementById(id); if (el) el.addEventListener('input', saveDraft); });   // автосохранение по вводу
 });
 
 document.getElementById('ai-toggle').addEventListener('click', () => {
@@ -452,7 +462,7 @@ document.getElementById('ai-toggle').addEventListener('click', () => {
 });
 [['prov-gpt', 'gpt'], ['prov-other', 'other']].forEach(([id, p]) => {
   const b = document.getElementById(id);
-  if (b) b.addEventListener('click', () => { aiCfg[aiProv] = Object.assign({}, aiCfg[aiProv], collectAi()); aiProv = p; fillAi(); });
+  if (b) b.addEventListener('click', () => { aiCfg[aiProv] = Object.assign({}, aiCfg[aiProv], collectAi()); aiProv = p; fillAi(); saveDraft(); });
 });
 // пресет провайдера (вкладка «Другой») -> подставить адрес/модели/ссылку
 const preSelEl = document.getElementById('cfg-preset');
@@ -462,10 +472,11 @@ if (preSelEl) preSelEl.addEventListener('change', () => {
   const pr = PROVIDERS.find((x) => x.id === preSelEl.value);
   if (pr) { if (pr.baseUrl) aiCfg.other.baseUrl = pr.baseUrl; if ((pr.models || []).indexOf(aiCfg.other.model) < 0) aiCfg.other.model = ''; }
   fillAi();
+  saveDraft();
 });
 [['mode-sub', 'chatgpt'], ['mode-key', 'key']].forEach(([id, m]) => {
   const b = document.getElementById(id);
-  if (b) b.addEventListener('click', () => { aiCfg.gpt = Object.assign({}, aiCfg.gpt, collectAi()); aiMode = m; aiCfg.gpt.authMode = m; fillAi(); });
+  if (b) b.addEventListener('click', () => { aiCfg.gpt = Object.assign({}, aiCfg.gpt, collectAi()); aiMode = m; aiCfg.gpt.authMode = m; fillAi(); saveDraft(); });
 });
 // вход через ChatGPT (device-code) — опрос идёт в ФОНЕ; popup лишь стартует и показывает статус
 const stopSignin = () => { if (signinTimer) { clearInterval(signinTimer); signinTimer = 0; } };
@@ -516,7 +527,7 @@ if (keyInEl) keyInEl.addEventListener('blur', () => { if ((keyInEl.value || '').
 document.getElementById('cfg-save').addEventListener('click', () => {
   aiCfg[aiProv] = Object.assign({}, aiCfg[aiProv], collectAi()); aiCfg.provider = aiProv;
   if (aiProv === 'gpt') aiCfg.gpt.authMode = aiMode;   // сохранить выбранный режим (подписка/ключ)
-  try { chrome.storage.local.set({ yasiaAI: aiCfg }); } catch (_) {}
+  try { chrome.storage.local.set({ yasiaAI: aiCfg }); chrome.storage.local.remove('yasiaAIDraft'); } catch (_) {}   // сохранили насовсем -> черновик больше не нужен
   const msg = document.getElementById('cfg-msg'); msg.className = 'ai-msg ok'; msg.textContent = L2().saved;
   updateAiStatus();
 });
