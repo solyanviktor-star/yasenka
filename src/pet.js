@@ -1843,12 +1843,15 @@
     try { sendResponse({ ok }); } catch (_) {}   // подтверждение доставки: фон удалит напоминалку только после него
   }); } catch (_) {}
   // при загрузке страницы забираем пропущенные напоминалки (браузер был закрыт/не было вкладок) — показываем по очереди
-  try { setTimeout(() => {
-    chrome.runtime.sendMessage({ type: 'YASIA_REMIND_PULL' }, (r) => {
-      if (chrome.runtime.lastError || !r || !r.ok || !Array.isArray(r.due)) return;
-      r.due.slice(0, 5).forEach((d, i) => setTimeout(() => showReminder(d.text), i * 7500));
-    });
-  }, 4000); } catch (_) {}
+  setTimeout(() => {
+    try {
+      if (!chrome.runtime || !chrome.runtime.sendMessage) return;
+      chrome.runtime.sendMessage({ type: 'YASIA_REMIND_PULL' }, (r) => {
+        if (chrome.runtime.lastError || !r || !r.ok || !Array.isArray(r.due)) return;
+        r.due.slice(0, 5).forEach((d, i) => setTimeout(() => showReminder(d.text), i * 7500));
+      });
+    } catch (_) {}
+  }, 4000);
   const askEl = root.querySelector('#twtr-dlg-ask');
   if (askEl) {
     askEl.addEventListener('input', (e) => { e.stopPropagation(); filterCaps(askEl.value); });           // печатаешь -> фильтр возможностей сверху
@@ -2513,5 +2516,24 @@
   pickWanderTarget();
   nextMischief = now() + 9000 + Math.random() * 8000;
   if (document.visibilityState === 'visible') { pet.style.opacity = '0'; restoreState(arrive); }
+
+  // Адаптивное поднятие кнопок расширения над нативными плавающими виджетами Твиттера (Grok, Сообщения, Compose)
+  setInterval(() => {
+    try {
+      const els = document.querySelectorAll('[data-testid="GrokDrawerHeader"], [data-testid="chat-drawer-main"], [data-testid="DMDrawerHeader"], [data-testid="SideNav_NewTweet_Button"], [aria-label="New post"]');
+      let minTop = window.innerHeight;
+      let found = false;
+      for (const el of els) {
+        const r = el.getBoundingClientRect();
+        // Учитываем только видимые элементы в правой части экрана (отсекаем левое боковое меню)
+        if (r.width > 0 && r.height > 0 && r.left > window.innerWidth / 2) {
+          if (r.top < minTop) minTop = r.top;
+          found = true;
+        }
+      }
+      const offset = found ? Math.max(0, window.innerHeight - minTop) : 0;
+      root.style.setProperty('--pet-btn-offset', offset + 'px');
+    } catch (_) {}
+  }, 500);
   requestAnimationFrame(tick);
 })();

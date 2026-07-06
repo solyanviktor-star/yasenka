@@ -143,10 +143,10 @@
 
 /* ---------- кнопка показать/спрятать ---------- */
 .twtr-pet-toggle {
-  position: absolute; right: 18px; bottom: 18px; width: 46px; height: 46px; padding: 0;
+  position: absolute; right: 18px; bottom: calc(18px + var(--pet-btn-offset, 0px)); width: 46px; height: 46px; padding: 0;
   border: none; border-radius: 50%; background: #5cba47; color: #fff;
   font-size: 22px; line-height: 46px; text-align: center; cursor: pointer; pointer-events: auto;
-  box-shadow: 0 3px 12px rgba(0,0,0,.35); transition: transform .15s, background .15s, opacity .15s; z-index: 2147483002;
+  box-shadow: 0 3px 12px rgba(0,0,0,.35); transition: transform .15s, background .15s, opacity .15s, bottom .2s ease-out; z-index: 2147483002;
 }
 .twtr-pet-toggle:hover { transform: scale(1.08); }
 .twtr-pet-toggle:active { transform: scale(.93); }
@@ -155,23 +155,24 @@
 
 /* ---------- кнопка настроек (шестерёнка) ---------- */
 .twtr-pet-settings-btn {
-  position: absolute; right: 18px; bottom: 72px; width: 46px; height: 46px; padding: 0;
+  position: absolute; right: 18px; bottom: calc(72px + var(--pet-btn-offset, 0px)); width: 46px; height: 46px; padding: 0;
   border: none; border-radius: 50%; background: #2b3a4a; color: #fff;
   font-size: 21px; line-height: 46px; text-align: center; cursor: pointer; pointer-events: auto;
-  box-shadow: 0 3px 12px rgba(0,0,0,.35); transition: transform .2s, background .15s; z-index: 2147483002;
+  box-shadow: 0 3px 12px rgba(0,0,0,.35); transition: transform .2s, background .15s, bottom .2s ease-out; z-index: 2147483002;
 }
 .twtr-pet-settings-btn:hover { transform: rotate(60deg) scale(1.08); background: #344a5e; }
 .twtr-pet-settings-btn:active { transform: scale(.93); }
 
 /* ---------- панель настроек ---------- */
 .twtr-pet-settings {
-  position: absolute; right: 18px; bottom: 126px; width: 190px;
+  position: absolute; right: 18px; bottom: calc(126px + var(--pet-btn-offset, 0px)); width: 280px;
   background: #fff; color: #0f1419; border-radius: 14px; padding: 12px 14px;
+  box-sizing: border-box;
   box-shadow: 0 8px 28px rgba(0,0,0,.32); pointer-events: auto; z-index: 2147483002;
   opacity: 0; visibility: hidden; transform: translateY(10px) scale(.96); transform-origin: bottom right;
-  transition: opacity .16s ease, transform .16s ease;
+  transition: opacity .16s ease, transform .16s ease, visibility .16s, bottom .2s ease-out;
   font: 600 13px/1.2 system-ui, -apple-system, sans-serif;
-  max-height: 76vh; overflow: auto;
+  max-height: calc(100vh - 146px - var(--pet-btn-offset, 0px)); overflow-x: hidden; overflow-y: auto;
 }
 .twtr-pet-settings.show { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
 .twtr-set-title { font-size: 12px; font-weight: 700; color: #536471; margin-bottom: 10px; }
@@ -189,10 +190,10 @@
 .twtr-set-mini:hover { background: #1d9bf0; color: #fff; }
 .twtr-set-mini:active { transform: scale(.9); }
 .twtr-set-val { min-width: 46px; text-align: center; font-weight: 700; }
-.twtr-set-range { width: 84px; accent-color: #1d9bf0; cursor: pointer; pointer-events: auto; }
+.twtr-set-range { width: 90px; accent-color: #1d9bf0; cursor: pointer; pointer-events: auto; }
 .twtr-set-sub { margin-top: 14px; margin-bottom: 2px; font-size: 12px; color: #536471; font-weight: 700; }
-.twtr-test-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
-.twtr-test-btn { padding: 8px 6px; border: none; border-radius: 9px; background: #eaeef2; color: #0f1419; font: 600 12px system-ui, -apple-system, sans-serif; cursor: pointer; pointer-events: auto; transition: background .12s, color .12s, transform .08s; }
+.twtr-test-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px; }
+.twtr-test-btn { padding: 8px 6px; border: none; border-radius: 9px; background: #eaeef2; color: #0f1419; font: 600 12px system-ui, -apple-system, sans-serif; cursor: pointer; pointer-events: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .12s, color .12s, transform .08s; }
 .twtr-test-btn:hover { background: #1d9bf0; color: #fff; }
 .twtr-test-btn:active { transform: scale(.94); }
 
@@ -226,7 +227,7 @@
 .twtr-dlg-card {
   position: absolute; left: 0; top: 0;                         /* координаты ставит JS — облачко над Ясей */
   width: 300px; max-width: 92vw; box-sizing: border-box; overflow: visible;
-  background: #fff; color: #0f1419; border-radius: 16px; padding: 14px 15px 16px;
+  background: #fff; color: #0f1419; border-radius: 16px; padding: 14px 3px 16px 15px;
   box-shadow: 0 14px 40px rgba(0,0,0,.34); pointer-events: auto;
   font: 600 13px/1.35 system-ui, -apple-system, sans-serif;
   transform-origin: var(--tailx, 50%) 100%;
@@ -238,13 +239,14 @@
 .twtr-dlg-card.below { transform-origin: var(--tailx, 50%) 0; }
 .twtr-dlg-card.below::after { bottom: auto; top: calc(-1 * var(--tailh, 10px)); border-top: 0; border-bottom: var(--tailh, 10px) solid #fff; }
 .twtr-dlg-scroll { overflow-y: auto; overflow-x: hidden; }   /* высоту задаёт JS = место над/под Ясей, чтобы окно не налезало на неё */
-.twtr-dlg-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.twtr-dlg-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; margin-right: 12px; }
 .twtr-dlg-title { font-size: 16px; font-weight: 800; }
 .twtr-dlg-x { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: none; border: none; border-radius: 8px; background: #eaeef2; color: #536471; cursor: pointer; pointer-events: auto; font-size: 13px; transition: background .12s, color .12s; }
 .twtr-dlg-x:hover { background: #e0245e; color: #fff; }
 .twtr-dlg-video { background: #f0fbf4; border: 1.5px solid #b6e6c6; border-radius: 12px; padding: 11px 12px; margin-bottom: 13px; }
 .twtr-dlg-video .twtr-dlg-plat { display: block; font-weight: 700; color: #0c7a3e; margin-bottom: 8px; font-size: 13px; }
 .twtr-dlg-dl { width: 100%; border: none; border-radius: 10px; background: #0f9d58; color: #fff; font: 700 13px system-ui, -apple-system, sans-serif; padding: 10px; cursor: pointer; pointer-events: auto; transition: background .12s, transform .08s; }
+.twtr-dlg-dl + .twtr-dlg-dl { margin-top: 8px; }
 .twtr-dlg-dl:hover { background: #0c8a4d; }
 .twtr-dlg-dl:active { transform: scale(.97); }
 .twtr-dlg-dl[disabled] { background: #a8c5b3; cursor: default; }
@@ -312,7 +314,7 @@
 .twtr-care-btn:active { transform: scale(.96); }
 .twtr-care-ic { font-size: 17px; line-height: 1; flex: none; }
 .twtr-care-stat { grid-column: 1 / -1; margin-top: 2px; padding: 8px 10px; border-radius: 10px; background: #fff6fb; border: 1.5px solid #ffd0e7; color: #b3245e; font: 600 12px/1.35 system-ui, -apple-system, sans-serif; }
-.twtr-dlg-caps { display: flex; flex-direction: column; gap: 9px; }
+.twtr-dlg-caps { display: flex; flex-direction: column; gap: 9px; margin-top: 11px; }
 .twtr-skill { display: flex; flex-direction: column; }
 .twtr-skill[hidden] { display: none !important; }   /* атрибут hidden обязан побеждать display:flex (скрытые навыки: ai/care/games) */
 .twtr-skill-body { margin-top: 8px; }
@@ -419,7 +421,7 @@
 
 /* режимы поведения (страж): ряд кнопок в настройках */
 .twtr-mode-row { display: flex; gap: 6px; margin-bottom: 10px; }
-.twtr-mode-btn { flex: 1; border: 1.5px solid #e1e8ed; border-radius: 10px; background: #f7f9fa; cursor: pointer; pointer-events: auto; font: 400 16px system-ui, sans-serif; padding: 6px 0; transition: background .12s, border-color .12s; }
+.twtr-mode-btn { flex: 1; border: 1.5px solid #e1e8ed; border-radius: 10px; background: #f7f9fa; cursor: pointer; pointer-events: auto; font: 400 24px system-ui, sans-serif; padding: 6px 0; text-align: center; line-height: 1; transition: background .12s, border-color .12s; }
 .twtr-mode-btn:hover { background: #eef3f6; }
 .twtr-mode-btn.on { background: #e8f5fe; border-color: #1d9bf0; }
 
@@ -462,3 +464,13 @@
 .twtr-ai-setup span { color: #536471; font-weight: 600; }
 .twtr-ai-setup-btn { align-self: flex-start; border: none; border-radius: 10px; background: #1d9bf0; color: #fff; cursor: pointer; pointer-events: auto; font: 700 12px system-ui, -apple-system, sans-serif; padding: 8px 14px; transition: background .12s; }
 .twtr-ai-setup-btn:hover { background: #1a8cd8; }
+
+/* Кастомный скроллбар (стандартные свойства — не расширяется при наведении) */
+.twtr-dlg-scroll,
+.twtr-pet-settings,
+.twtr-ai-card-body,
+.twtr-rep-list {
+  scrollbar-width: thin !important;
+  scrollbar-color: #ccd6dd transparent !important;
+  padding-right: 12px !important;
+}
